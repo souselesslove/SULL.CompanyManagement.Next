@@ -1,0 +1,24 @@
+/*
+ *代码由框架生成,任何更改都可能导致被代码生成器覆盖
+ *如果数据库字段发生变化，请在代码生器重新生成此Model
+ */
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using VOL.Entity.SystemModels;
+
+namespace VOL.Entity.DomainModels
+{
+    
+    public partial class TodoList
+    {
+        //此处配置字段(字段配置见此model的另一个partial),如果表中没有此字段请加上 [NotMapped]属性，否则会异常
+        // Category: 10=效期；20=库存；30=异常；40=其他
+        // RelatedId: 比如提醒交接班，那么关联的就是交接班单的编号
+        // FinalStatus: 0=未完成；200=完成；210=取消；220=忽略
+    }
+}

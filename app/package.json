@@ -1,0 +1,15 @@
+{
+  "devDependencies": {
+    "html2canvas": "^1.4.1"
+  },
+  "dependencies": {
+    "@climblee/uv-ui": "^1.1.20",
+    "dayjs": "^1.11.11",
+    "js-base64": "^3.7.7",
+    "js-md5": "^0.8.3",
+    "js-sha256": "^0.11.0",
+    "uni-ui": "^1.0.0",
+    "vue-i18n": "^11.1.1",
+    "xlsx": "^0.18.5"
+  }
+}

@@ -1,0 +1,379 @@
+{
+  "handoverConfig": [
+    {
+      "id": "q1",
+      "title": "检查效期登记本，是否有需要处理的近效期物品？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "no"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "备注信息",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q2",
+      "title": "检查抢救车封条是否完整？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "封条日期",
+        "inputType": "date",
+        "required": false
+      }
+    },
+    {
+      "id": "q3",
+      "title": "检查一次性锁是否完整？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "备注信息",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q4",
+      "title": "一次性锁的编号与上一班的是否一致？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "一次性锁编号",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q5",
+      "title": "检查抢救车上除颤仪是否正常？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "试纸数值",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q6",
+      "title": "检查抢救车上氧气筒压力是否正常？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "压力数值",
+        "inputType": "number",
+        "required": false
+      }
+    },
+    {
+      "id": "q7",
+      "title": "检查抢救车上利器盒是否存在？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "备注信息",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q8",
+      "title": "检查抢救车上垃圾桶是否存在？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "备注信息",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q9",
+      "title": "检查抢救车上心脏复苏板是否存在？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "备注信息",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q10",
+      "title": "检查抢救车上插线板是否存在？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "备注信息",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q11",
+      "title": "检查抢救车上 是否存在？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "备注信息",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q12",
+      "title": "检查是否定点放置？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "备注信息",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q13",
+      "title": "检查抢救车是否刹车？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "yes"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "备注信息",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q14",
+      "title": "检查抢救车上的目视化标识标签是否脏污破损？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "no"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "备注信息",
+        "inputType": "text",
+        "required": false
+      }
+    },
+    {
+      "id": "q15",
+      "title": "检查抢救车是否存在脏污？",
+      "isActive": true,
+      "componentType": "RadioGroup",
+      "props": {
+        "options": [
+          {
+            "label": "是",
+            "value": "yes"
+          },
+          {
+            "label": "否",
+            "value": "no"
+          }
+        ],
+        "defaultValue": "no"
+      },
+      "extraInput": {
+        "show": true,
+        "label": "备注信息",
+        "inputType": "text",
+        "required": false
+      }
+    }
+  ]
+}

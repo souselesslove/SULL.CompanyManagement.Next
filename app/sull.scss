@@ -1,0 +1,215 @@
+/* 
+ * SULL Design System
+ * Based on provided design specifications
+ */
+
+/* ==========================================================================
+   Fonts
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+$font-family-main: 'Plus Jakarta Sans', sans-serif;
+
+/* ==========================================================================
+   Colors
+   ========================================================================== */
+
+/* Main Colors */
+$sull-color-primary: #95CAFF;
+$sull-color-secondary: #F0CAAD; /* Pinkish secondary */
+$sull-color-secondary-light: #FFF5F5; /* Very light secondary, approx based on image */
+
+/* Alerts */
+$sull-color-success: #4CD964;
+$sull-color-error: #FF5252;
+$sull-color-warning: #FFCD1A;
+
+/* Additional Colors */
+$sull-color-white: #FFFFFF;
+$sull-color-background: #F6F6F6;
+$sull-color-line: #E9E9ED;
+
+/* Grayscale */
+$sull-gray-10: #FDFDFD;
+$sull-gray-20: #ECF1F6;
+$sull-gray-30: #E3E9ED;
+$sull-gray-40: #D1D8DD;
+$sull-gray-50: #BFC6CC;
+$sull-gray-60: #9CA4AB;
+$sull-gray-70: #78828A;
+$sull-gray-80: #66707A;
+$sull-gray-90: #434E58;
+$sull-gray-100: #171725;
+
+/* Text Colors Mapped */
+$sull-text-main: $sull-gray-100;
+$sull-text-secondary: $sull-gray-70;
+$sull-text-placeholder: $sull-gray-50;
+$sull-text-disabled: $sull-gray-40;
+
+/* ==========================================================================
+   Typography
+   ========================================================================== */
+
+/* Font Weights */
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+
+/* Headings Sizes */
+$font-size-h1: 48px;
+$font-size-h2: 40px;
+$font-size-h3: 32px;
+$font-size-h4: 24px;
+$font-size-h5: 20px;
+$font-size-h6: 18px;
+
+/* Body Sizes */
+$font-size-body-xl: 18px;
+$font-size-body-lg: 16px;
+$font-size-body-md: 14px;
+$font-size-body-sm: 12px;
+$font-size-body-xs: 10px;
+
+/* Mixins for Typography */
+@mixin text-style($size, $weight, $line-height: 1.5) {
+  font-family: $font-family-main;
+  font-size: $size;
+  font-weight: $weight;
+  line-height: $line-height;
+  color: $sull-text-main;
+}
+
+/* ==========================================================================
+   Border Radius
+   ========================================================================== */
+$radius-sm: 8px;
+$radius-md: 12px;
+$radius-lg: 16px;
+$radius-pill: 9999px;
+$radius-circle: 50%;
+
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
+
+/* Typography Utilities */
+.text-h1 { @include text-style($font-size-h1, $font-weight-bold, 1.2); }
+.text-h2 { @include text-style($font-size-h2, $font-weight-bold, 1.25); }
+.text-h3 { @include text-style($font-size-h3, $font-weight-bold, 1.3); }
+.text-h4 { @include text-style($font-size-h4, $font-weight-bold, 1.35); }
+.text-h5 { @include text-style($font-size-h5, $font-weight-bold, 1.4); }
+.text-h6 { @include text-style($font-size-h6, $font-weight-bold, 1.45); }
+
+/* Weight Variations for Headings (if needed, though design shows specific weights per heading usually, but lists variations) */
+.fw-bold { font-weight: $font-weight-bold !important; }
+.fw-semibold { font-weight: $font-weight-semibold !important; }
+.fw-medium { font-weight: $font-weight-medium !important; }
+
+/* Body Text Utilities */
+.text-xl { font-size: $font-size-body-xl; }
+.text-lg { font-size: $font-size-body-lg; }
+.text-md { font-size: $font-size-body-md; }
+.text-sm { font-size: $font-size-body-sm; }
+.text-xs { font-size: $font-size-body-xs; }
+
+/* Color Utilities */
+.text-primary { color: $sull-color-primary !important; }
+.text-secondary { color: $sull-color-secondary !important; }
+.text-success { color: $sull-color-success !important; }
+.text-error { color: $sull-color-error !important; }
+.text-warning { color: $sull-color-warning !important; }
+.text-gray { color: $sull-text-secondary !important; }
+
+.bg-primary { background-color: $sull-color-primary !important; }
+.bg-secondary { background-color: $sull-color-secondary !important; }
+.bg-white { background-color: $sull-color-white !important; }
+.bg-background { background-color: $sull-color-background !important; }
+
+/* ==========================================================================
+   Component Base Styles
+   ========================================================================== */
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  border-radius: $radius-pill;
+  font-family: $font-family-main;
+  font-weight: $font-weight-semibold;
+  font-size: $font-size-body-md;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+  
+  &.btn-sm {
+    padding: 8px 16px;
+    font-size: $font-size-body-sm;
+  }
+  
+  &.btn-lg {
+    padding: 16px 32px;
+    font-size: $font-size-body-lg;
+  }
+}
+
+.btn-primary {
+  background-color: $sull-color-primary;
+  color: $sull-color-white;
+  &:active { opacity: 0.9; }
+}
+
+.btn-secondary {
+  background-color: $sull-color-secondary;
+  color: $sull-color-white;
+}
+
+.btn-outline {
+  background-color: transparent;
+  border: 1px solid $sull-color-line;
+  color: $sull-text-main;
+}
+
+.btn-disabled {
+  background-color: $sull-gray-20;
+  color: $sull-text-disabled;
+  cursor: not-allowed;
+}
+
+/* Inputs */
+.input-field {
+  background-color: $sull-gray-10; /* Very light gray/white */
+  border: 1px solid transparent;
+  border-radius: $radius-md;
+  padding: 12px 16px;
+  font-family: $font-family-main;
+  font-size: $font-size-body-md;
+  color: $sull-text-main;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.3s;
+
+  &::placeholder {
+    color: $sull-text-placeholder;
+  }
+
+  &:focus {
+    border-color: $sull-color-primary;
+    outline: none;
+  }
+}
+
+.input-filled {
+  background-color: $sull-gray-20;
+}
+
+/* Labels */
+.label {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: $radius-sm;
+  font-size: $font-size-body-sm;
+  font-weight: $font-weight-medium;
+}
