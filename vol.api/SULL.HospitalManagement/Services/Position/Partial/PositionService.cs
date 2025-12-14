@@ -191,70 +191,119 @@ namespace SULL.HospitalManagement.Services
         }
         public override PageGridData<Position> GetPageData(PageDataOptions options)
         {
-            // IsDeleted 默认需要添加条件IsDeleted!=1
-            // 解析查询条件
-            if (!string.IsNullOrEmpty(options.Wheres))
+            // 解析所有查询条件
+            List<SearchParameters> wheres = new List<SearchParameters>();
+            if (options.Filter != null)
+            {
+                wheres.AddRange(options.Filter);
+            }
+            if (!string.IsNullOrEmpty(options.Wheres) && (options.Filter == null || options.Filter.Count == 0))
             {
                 try
                 {
-                    var wheres = JsonConvert.DeserializeObject<List<SearchParameters>>(options.Wheres);
-                    long orgId = 0;
-                    long deptId = 0;
-
-                    if (wheres != null)
-                    {
-                        var orgParam = wheres.FirstOrDefault(x => x.Name == "OrganizationId");
-                        if (orgParam != null && long.TryParse(orgParam.Value?.ToString(), out long oid)) orgId = oid;
-
-                        var deptParam = wheres.FirstOrDefault(x => x.Name == "DepartmentId");
-                        if (deptParam != null && long.TryParse(deptParam.Value?.ToString(), out long did)) deptId = did;
-                    }
-
-                    // 如果条件里缺少OrganizationId和DepartmentId，且均需要大于零
-                    if (orgId <= 0 || deptId <= 0)
-                    {
-                        return new PageGridData<Position> { rows = new List<Position>(), total = 0 };
-                    }
-
-                    // 异常检测: 使用缓存记录用户编号及查询的OrganizationId
-                    var userId = UserContext.Current.UserId;
-                    string cacheKey = $"PositionQuery_Org_{userId}";
-                    
-                    var queriedOrgs = _cache.Get<HashSet<long>>(cacheKey);
-
-                    if (queriedOrgs == null)
-                    {
-                        queriedOrgs = new HashSet<long>();
-                    }
-
-                    if (!queriedOrgs.Contains(orgId))
-                    {
-                        queriedOrgs.Add(orgId);
-                        // Cache for reasonable time (e.g. 1 hour = 3600 seconds)
-                        _cache.AddObject(cacheKey, queriedOrgs, 3600);
-
-                        // 如果同一个用户编号查询了三个不同的OrganizationId
-                        if (queriedOrgs.Count == 3)
-                        {
-                            // 向管理员发布一条异常消息（TodoList的Category=30）
-                            var todo = new SaveModel
-                            {
-                                MainData = new Dictionary<string, object>
-                                {
-                                    { "Category", 30 },
-                                    { "Description", $"异常查询：用户[{UserContext.Current.UserTrueName}]查询了超过3个不同组织机构的位置数据" },
-                                    { "Remark", $"OrgIds: {string.Join(",", queriedOrgs)}" }
-                                }
-                            };
-                            _messageProducer.PublishAsync(todo, Define.ExchangeName, Define.TodoQueue);
-                        }
-                    }
+                    var w = JsonConvert.DeserializeObject<List<SearchParameters>>(options.Wheres);
+                    if (w != null) wheres.AddRange(w);
                 }
-                catch { }
+                catch
+                {
+                    
+                }
             }
+
+            // 1. 检查是否存在主键Id (如果存在Id，直接放行)
+            if (wheres.Any(x => x.Name == "Id" && !string.IsNullOrEmpty(x.Value)))
+            {
+                options.Filter = wheres;
+                options.Wheres = null;
+                return base.GetPageData(options);
+            }
+
+            // 2. 检查是否存在Category和ParentId
+            var catParam = wheres.FirstOrDefault(x => x.Name == "Category" && !string.IsNullOrEmpty(x.Value));
+            var parentParam = wheres.FirstOrDefault(x => x.Name == "ParentId" && !string.IsNullOrEmpty(x.Value));
+
+            // 3. 处理Category存在的特殊情况
+            // 当Category存在时，允许不传ParentId，但必须有OrganizationId和DepartmentId
+            bool isWarehouseQuery = catParam != null && !string.IsNullOrEmpty(catParam.Value);
+            if (isWarehouseQuery)
+            {
+                var orgParam = wheres.FirstOrDefault(x => x.Name == "OrganizationId" && !string.IsNullOrEmpty(x.Value));
+                var deptParam = wheres.FirstOrDefault(x => x.Name == "DepartmentId" && !string.IsNullOrEmpty(x.Value));
+                if (orgParam == null || deptParam == null)
+                {
+                    isWarehouseQuery = false;
+                }
+            }
+
+            // 查询条件必须要有主键Id或Category和ParentId(查询仓库除外)
+            if (catParam == null || (parentParam == null && !isWarehouseQuery))
+            {
+                return new PageGridData<Position> { rows = new List<Position>(), total = 0 };
+            }
+
+            // 4. 根据Category转换ParentId的含义
+            int category = catParam.Value.GetInt();
+            if (parentParam != null && category == 100)
+            {
+                // 当Category为100时，表示查询的是行，那么ParentId就是WarehouseId
+                parentParam.Name = "WarehouseId";
+            }
+            else if (parentParam != null && category == 110)
+            {
+                // 当Category为110，表示查询的是分隔，那么ParentId就是FloorId的集合
+                parentParam.Name = "FloorId";
+            }
+
+            // 4. 重置查询选项，确保使用修改后的条件
+            options.Filter = wheres;
+            options.Wheres = null;
 
             return base.GetPageData(options);
         }
         
+        public object GetPositionStatistics(long warehouseId)
+        {
+            var db = _repository.DbContext;
+
+            // 1. 获取该车上所有绑定的物品ID
+            var itemIds = _repository.Find(x => x.WarehouseId == warehouseId 
+                                            && x.IsDeleted != true 
+                                            && x.ItemId != null)
+                                     .Select(x => x.ItemId)
+                                     .Distinct()
+                                     .ToList();
+
+            if (itemIds.Count == 0)
+            {
+                 return new { ItemCounter = 0, PriceCounter = 0, AbnormalStock = 0, AbnormalExpiry = 0 };
+            }
+
+            // 2. 查询物品信息统计
+            var items = db.Set<Item>().Where(x => itemIds.Contains(x.Id)).Select(x => new 
+            {
+               Price = x.Price ?? 0,
+               Stock = x.AvailableStock ?? 0,
+               Cardinality = x.Cardinality,
+               ExpirationDate = x.LatestExpirationDate
+            }).ToList();
+
+            // 3. 计算统计指标
+            var now = DateTime.Now;
+            var expiryThreshold = now.AddDays(30);
+
+            var itemCounter = items.Count;
+            // 总价格 = SUM(单价 * 库存) (注意：这里假设Price是单价，AvailableStock是总库存)
+            var priceCounter = items.Sum(x => (long)x.Price * x.Stock); 
+            var abnormalStock = items.Count(x => x.Stock < x.Cardinality);
+            var abnormalExpiry = items.Count(x => x.ExpirationDate != null && x.ExpirationDate <= expiryThreshold);
+
+            return new 
+            {
+                ItemCounter = itemCounter,
+                PriceCounter = priceCounter,
+                AbnormalStock = abnormalStock,
+                AbnormalExpiry = abnormalExpiry
+            };
+        }
   }
 }

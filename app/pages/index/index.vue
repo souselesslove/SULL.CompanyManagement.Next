@@ -24,9 +24,9 @@
 					<view class="icon-btn search-btn" @click="onSearch">
 						<text class="icon">🔍</text>
 					</view>
-					<view class="icon-btn notification-btn" v-if="todoTotal > 0">
+					<view class="icon-btn notification-btn" @click="navToTodoList">
 						<text class="icon">🔔</text>
-						<view class="badge">{{ todoTotal }}</view>
+						<view class="badge" v-if="todoTotal > 0">{{ todoTotal }}</view>
 					</view>
 				</view>
 			</view>
@@ -59,21 +59,36 @@
 						</view>
 						<view class="stats-row">
 							<view class="stat-item">
-								<text class="stat-num">128</text>
+								<view class="stat-value-box">
+									<text class="stat-num">{{ dashboardStats.ItemCounter }}</text>
+									<text class="stat-unit">{{ $t('index.unit.type') }}</text>
+								</view>
 								<text class="stat-label">{{ $t('index.itemTypes') }}</text>
 							</view>
 							<view class="stat-item">
-								<text class="stat-num warning">2</text>
-								<text class="stat-label">{{ $t('index.stockAbnormal') }}</text>
+								<view class="stat-value-box">
+									<text class="stat-num">{{ dashboardStats.PriceCounter }}</text>
+									<text class="stat-unit">{{ $t('index.unit.tenThousand') }}</text>
+								</view>
+								<text class="stat-label">{{ $t('index.itemValue') }}</text>
 							</view>
 							<view class="stat-item">
-								<text class="stat-num danger">5</text>
-								<text class="stat-label">{{ $t('index.expiryWarning') }}</text>
+								<view class="stat-value-box">
+									<text class="stat-num warning">{{ dashboardStats.AbnormalStock }}</text>
+									<text class="stat-unit warning">{{ $t('index.unit.type') }}</text>
+								</view>
+								<text class="stat-label" @click="handleStatClick('AbnormalStock')">{{
+									$t('index.stockAbnormal') }}</text>
 							</view>
 							<view class="stat-item">
-								<text class="stat-num danger">1</text>
-								<text class="stat-label">{{ $t('index.handoverOverdue') }}</text>
+								<view class="stat-value-box">
+									<text class="stat-num danger">{{ dashboardStats.AbnormalExpiry }}</text>
+									<text class="stat-unit danger">{{ $t('index.unit.type') }}</text>
+								</view>
+								<text class="stat-label" @click="handleStatClick('AbnormalExpiry')">{{
+									$t('index.expiryWarning') }}</text>
 							</view>
+
 						</view>
 					</template>
 					<view v-else class="guide-state">
@@ -105,7 +120,7 @@
 				<!-- Critical Reminders (Message Reminders) -->
 				<view class="section-header">
 					<text class="section-title">{{ $t('index.pendingTasks') }}</text>
-					<text class="see-all">{{ $t('index.viewAll') }}</text>
+					<text class="see-all" @click="navToTodoList">{{ $t('index.viewAll') }}</text>
 				</view>
 
 				<!-- Todo Tabs -->
@@ -117,7 +132,8 @@
 				</view>
 
 				<view class="alert-list">
-					<view class="alert-card" v-for="(alert, index) in filteredAlerts" :key="index">
+					<view class="alert-card" v-for="(alert, index) in filteredAlerts" :key="index"
+						@click="showTaskTimeline(alert)">
 						<view class="alert-left">
 							<view class="alert-type-tag" :class="getParamsClass(alert.Category)">
 								<text class="alert-type-text">{{ getCategoryText(alert.Category) }}</text>
@@ -128,7 +144,7 @@
 							}}</text>
 							<text class="alert-time">{{ alert.CreationTime }}</text>
 						</view>
-						<view class="alert-action">
+						<view class="alert-action" v-if="alert.LatestAssignUserId == userOrgInfo.User.UserId">
 							<view class="icon-action-btn process-btn" @click.stop="handleProcess(alert)">
 								<view class="action-icon-svg icon-process"></view>
 							</view>
@@ -169,6 +185,52 @@
 					<button class="btn btn-secondary btn-sm" @click="closeAddRescueCar">取消</button>
 					<button class="btn btn-primary btn-sm" @click="submitRescueCar">确定</button>
 				</view>
+			</view>
+		</view>
+
+		<!-- Timeline Modal -->
+		<view class="modal-mask" v-if="showTimelineModal" @click="closeTimelineModal">
+			<view class="modal-content timeline-modal" @click.stop>
+				<view class="modal-header">
+					<text class="modal-title">处理详情</text>
+					<text class="close-btn" @click="closeTimelineModal">×</text>
+				</view>
+				<scroll-view scroll-y class="modal-body timeline-body">
+					<view v-if="timelineLoading" class="loading-state">
+						<text>加载中...</text>
+					</view>
+					<view v-else-if="timelineData.length === 0" class="empty-state-simple">
+						<text class="empty-text-simple">暂无处理记录</text>
+					</view>
+					<view v-else class="timeline-list">
+						<view class="timeline-item" v-for="(item, index) in timelineData" :key="index">
+							<view class="timeline-node" :class="{
+								'is-start': index === 0 && !(index === timelineData.length - 1 && currentTimelineTask.IsFinished),
+								'is-end': index === timelineData.length - 1 && currentTimelineTask.IsFinished
+							}">
+								<view v-if="index === timelineData.length - 1 && currentTimelineTask.IsFinished"
+									class="node-icon icon-end"></view>
+								<view v-else-if="index === 0" class="node-icon icon-start"></view>
+								<view v-else class="timeline-dot"></view>
+							</view>
+							<view class="timeline-line" v-if="index < timelineData.length - 1"></view>
+							<view class="timeline-content">
+								<view class="timeline-header">
+									<text class="timeline-time">{{ formatTime(item.CreationTime) }}</text>
+									<text class="timeline-creator">{{ item.Creator || '未知' }}</text>
+								</view>
+								<view class="timeline-desc">{{ item.Description }}</view>
+								<view class="timeline-footer">
+									<text class="timeline-status" v-if="item.Status">状态: {{ getStatusText(item.Status)
+									}}</text>
+									<text class="timeline-assign" v-if="item.AssignUser">处理人: {{ item.AssignUser
+									}}</text>
+									<text class="timeline-remark" v-if="item.Remark">备注: {{ item.Remark }}</text>
+								</view>
+							</view>
+						</view>
+					</view>
+				</scroll-view>
 			</view>
 		</view>
 	</view>
@@ -237,7 +299,12 @@ export default {
 			addCarForm: {
 				Name: '',
 				Floor: ''
-			}
+			},
+			showTimelineModal: false,
+			timelineLoading: false,
+			timelineData: [],
+			currentTimelineTask: {},
+			dashboardStats: {},
 		}
 	},
 	onShow() {
@@ -309,6 +376,11 @@ export default {
 			this.scrollTopValue = this.scrollTop; // Sync first
 			this.$nextTick(() => {
 				this.scrollTopValue = 0; // Then scroll to 0
+			});
+		},
+		navToTodoList() {
+			uni.navigateTo({
+				url: '/pages/todo-list/todo-list'
 			});
 		},
 		navToBigScreen() {
@@ -400,18 +472,19 @@ export default {
 				this.rescueCars = res.rows || [];
 				if (this.rescueCars.length > 0) {
 					this.currentRescueCarIndex = 0;
-					// Select first one logic if needed
+					// Fetch stats
+					this.fetchDashboardStats();
 				} else {
 					// Guide mode handled in template
 				}
 			}).catch(e => console.error(e));
 		},
-
 		onRescueCarChange(e) {
 			this.currentRescueCarIndex = e.detail.value;
-			// Fetch info for selected car implies refreshing dashboard stats
-			// For now just switching display
+			this.fetchDashboardStats();
 		},
+
+
 
 		openAddRescueCar() {
 			uni.navigateTo({
@@ -499,6 +572,97 @@ export default {
 					}
 				}
 			});
+		},
+		showTaskTimeline(alert) {
+			this.currentTimelineTask = alert;
+			this.showTimelineModal = true;
+			this.timelineLoading = true;
+			this.timelineData = [];
+
+			const wheres = [
+				{ name: 'TodoListId', value: alert.Id, displayType: 'numeric' }
+			];
+
+			request.post('api/ssbh/TodoListDetail/GetPageData', {
+				page: 1,
+				rows: 100,
+				wheres: JSON.stringify(wheres),
+				sort: 'CreationTime',
+				order: 'asc'
+			}).then(res => {
+				this.timelineLoading = false;
+				if (res.status === 0) {
+					this.timelineData = res.rows || [];
+				} else {
+					uni.showToast({ title: 'Fetch Timeline Failed', icon: 'none' });
+				}
+			}).catch(err => {
+				console.error(err);
+				this.timelineLoading = false;
+				uni.showToast({ title: 'Error fetching timeline', icon: 'none' });
+			});
+		},
+		fetchDashboardStats() {
+			if (this.rescueCars.length === 0) return;
+			const currentCar = this.rescueCars[this.currentRescueCarIndex];
+			if (!currentCar) return;
+			request.get(`api/ssbh/Position/Statistic?warehouseId=${currentCar.Id}`)
+				.then(res => {
+					if (res) {
+						let price = (res.PriceCounter || 0) / 10000 / 100; // Cent to Yuan (100), then to 10k (10000) => / 1000000? 
+						// Request: "单位为分，需要转化为万元，保留两位小数"
+						// 1 元 = 100 分
+						// 1 万元 = 10000 元 = 1000000 分
+						price = (res.PriceCounter || 0) / 1000000;
+						this.dashboardStats = {
+							ItemCounter: res.ItemCounter || 0,
+							PriceCounter: price.toFixed(2),
+							AbnormalStock: res.AbnormalStock || 0,
+							AbnormalExpiry: res.AbnormalExpiry || 0
+						};
+					}
+				})
+				.catch(err => {
+					console.error('Fetch Dashboard Stats Failed', err);
+				});
+		},
+		handleStatClick(type) {
+			if (type === 'AbnormalStock') {
+				if (this.dashboardStats.AbnormalStock > 0) {
+					uni.navigateTo({
+						url: '/pages/position-manage/position-manage?filter=AbnormalStock'
+					});
+				}
+			} else if (type === 'AbnormalExpiry') {
+				if (this.dashboardStats.AbnormalExpiry > 0) {
+					uni.navigateTo({
+						url: '/pages/position-manage/position-manage?filter=AbnormalExpiry'
+					});
+				}
+			}
+		},
+		closeTimelineModal() {
+			this.showTimelineModal = false;
+		},
+		formatTime(timeStr) {
+			if (!timeStr) return '';
+			// Assuming ISO format or similar, you might need 'formatDate' util
+			const date = new Date(timeStr);
+			if (isNaN(date.getTime())) return timeStr;
+			// Simple format: YYYY-MM-DD HH:mm
+			const Y = date.getFullYear();
+			const M = (date.getMonth() + 1).toString().padStart(2, '0');
+			const D = date.getDate().toString().padStart(2, '0');
+			const h = date.getHours().toString().padStart(2, '0');
+			const m = date.getMinutes().toString().padStart(2, '0');
+			return `${Y}-${M}-${D} ${h}:${m}`;
+		},
+		getStatusText(status) {
+			// Reuse NotifyStatus if applicable, or generic mapping
+			if (status == 200) return '已完成';
+			if (status == 210) return '已取消';
+			if (status == 220) return '已忽略';
+			return status;
 		}
 	}
 }
@@ -682,8 +846,30 @@ page {
 .stat-num {
 	font-size: $font-size-h4;
 	font-weight: $font-weight-bold;
-	margin-bottom: 4px;
 	color: $sull-text-main;
+	line-height: 1;
+}
+
+.stat-value-box {
+	display: flex;
+	align-items: baseline;
+	justify-content: center;
+	gap: 2px;
+	margin-bottom: 4px;
+}
+
+.stat-unit {
+	font-size: 12px;
+	color: $sull-text-secondary;
+	font-weight: normal;
+
+	&.warning {
+		color: #E6A23C;
+	}
+
+	&.danger {
+		color: #F56C6C;
+	}
 }
 
 /* Updated for light background contrast */
@@ -954,6 +1140,7 @@ page {
 	text-overflow: ellipsis;
 	display: -webkit-box;
 	-webkit-line-clamp: 2;
+	line-clamp: 2;
 	-webkit-box-orient: vertical;
 }
 
@@ -1120,6 +1307,141 @@ page {
 .btn-secondary {
 	background: #F4F4F5;
 	color: #909399;
+}
+
+/* Timeline Styles */
+.timeline-modal {
+	height: 60vh;
+	display: flex;
+	flex-direction: column;
+}
+
+.timeline-body {
+	flex: 1;
+	padding: 20px;
+	box-sizing: border-box;
+}
+
+.timeline-list {
+	padding-left: 10px;
+}
+
+.timeline-item {
+	position: relative;
+	padding-left: 20px;
+	padding-bottom: 24px;
+}
+
+.timeline-item:last-child {
+	padding-bottom: 0;
+}
+
+.timeline-node {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 20px;
+	height: 100%;
+	display: flex;
+	justify-content: center;
+}
+
+.timeline-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background-color: $sull-color-primary;
+	margin-top: 16px;
+	/* Align with content top approx */
+	z-index: 1;
+}
+
+.node-icon {
+	width: 16px;
+	height: 16px;
+	margin-top: 12px;
+	z-index: 1;
+	background-color: $sull-color-primary;
+	-webkit-mask-size: contain;
+	mask-size: contain;
+	-webkit-mask-repeat: no-repeat;
+	mask-repeat: no-repeat;
+	-webkit-mask-position: center;
+	mask-position: center;
+}
+
+/* Play/Start Icon */
+.icon-start {
+	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M8 5v14l11-7z'/%3E%3C/svg%3E");
+	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M8 5v14l11-7z'/%3E%3C/svg%3E");
+}
+
+/* Check/End Icon */
+.icon-end {
+	background-color: $sull-color-success;
+	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/%3E%3C/svg%3E");
+	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/%3E%3C/svg%3E");
+}
+
+.timeline-line {
+	position: absolute;
+	left: 9px;
+	top: 24px;
+	/* Start below first node/dot */
+	bottom: -10px;
+	/* Extend to next */
+	width: 2px;
+	background-color: #E4E7ED;
+}
+
+.timeline-item:last-child .timeline-line {
+	display: none;
+}
+
+/* Adjust line for start/end icons which are larger */
+.timeline-node.is-start~.timeline-line {
+	top: 28px;
+}
+
+/* If end node is present, the previous line needs to connect to it. 
+   css logic for 'previous line' is hard in pure css without complex selectors if height varies.
+   But strictly, the line belongs to the item. 
+   So item N's line goes to item N+1.
+*/
+
+.timeline-content {
+	background: #F8F9FB;
+	padding: 12px;
+	border-radius: 8px;
+	margin-left: 10px;
+	/* Space from dot layout */
+}
+
+.timeline-header {
+	display: flex;
+	justify-content: space-between;
+	margin-bottom: 6px;
+	font-size: 12px;
+	color: #909399;
+}
+
+.timeline-desc {
+	font-size: 14px;
+	color: #303133;
+	margin-bottom: 6px;
+	line-height: 1.4;
+}
+
+.timeline-footer {
+	font-size: 12px;
+	color: #606266;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.timeline-status {
+	color: $sull-color-primary;
 }
 
 /* Footer styles removed - moved to component */
@@ -1343,7 +1665,7 @@ page {
 }
 
 .todo-tab-item.active {
-	background: #95CAFF;
+	background: $sull-color-primary;
 	color: #fff;
 	font-weight: 600;
 	box-shadow: 0 2px 6px rgba(149, 202, 255, 0.4);

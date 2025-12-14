@@ -9,5 +9,6 @@ namespace SULL.HospitalManagement.IServices
 {
     public partial interface ITodoListService
     {
+        object GetTodoListStatistics();
     }
  }

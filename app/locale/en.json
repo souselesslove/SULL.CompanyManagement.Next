@@ -6,7 +6,8 @@
         "delete": "Delete",
         "edit": "Edit",
         "success": "Success",
-        "fail": "Failed"
+        "fail": "Failed",
+        "search": "Search"
     },
     "index": {
         "home": "Rescue Car Management",
@@ -18,9 +19,10 @@
         "warning": "Warning",
         "top": "Top",
         "itemTypes": "Item Types",
+        "itemValue": "Item Value",
         "stockAbnormal": "Stock Abnormal",
         "expiryWarning": "Expiry Warning",
-        "handoverOverdue": "Handover Overdue",
+        "handoverOverdue": "Abnormal Alert",
         "quickActions": "Quick Actions",
         "pendingTasks": "Pending Tasks",
         "viewAll": "View All",
@@ -45,6 +47,10 @@
             "30m": "30m ago",
             "1h": "1h ago",
             "2h": "2h ago"
+        },
+        "unit": {
+            "type": "Types",
+            "tenThousand": "Million"
         },
         "locations": {
             "icu": "ICU-1",
@@ -76,6 +82,33 @@
         "pullToRefresh": "Pull to Update",
         "refreshed": "Refreshed",
         "noMoreData": "No more data",
+        "noTasks": "No tasks pending",
+        "noTasksDesc": "All tasks completed, keep it up!",
+        "todo": {
+            "all": "All",
+            "expiry": "Expiry",
+            "stock": "Stock",
+            "abnormal": "Abnormal",
+            "other": "Other",
+            "processed": "Processed",
+            "ignored": "Ignored",
+            "pending": "Pending"
+        },
+        "timeline": {
+            "title": "Timeline Details",
+            "ignoreTitle": "Ignore Alert",
+            "ignoreContent": "Are you sure to ignore this alert?",
+            "ignoreSuccess": "Ignored",
+            "fail": "Operation Failed",
+            "loading": "Loading...",
+            "empty": "No timeline records",
+            "unknown": "Unknown",
+            "status": "Status",
+            "assignUser": "Handler",
+            "remark": "Remark",
+            "completed": "Completed",
+            "canceled": "Canceled"
+        },
         "copyright": "Copyright © {year} {company}. All rights reserved."
     },
     "handover": {
@@ -347,6 +380,30 @@
             "title": "Language",
             "en": "English",
             "zh-Hans": "简体中文"
+        }
+    },
+    "bigScreen": {
+        "rescueCar": {
+            "title": "Smart Rescue Car Dashboard",
+            "manager": "Manager",
+            "itemTypes": "Items",
+            "stockWarning": "Stock Warn",
+            "expiryWarning": "Expiry Warn",
+            "abnormal": "Abnormal",
+            "itemValue": "Item Value",
+            "handover": "Handover",
+            "cleaning": "Cleaning",
+            "check": "Check",
+            "sealing": "Sealing",
+            "statusNormal": "Normal",
+            "statusOverdue": "Overdue",
+            "statusOpen": "Open",
+            "lastTime": "Last:",
+            "nextTime": "Next:",
+            "handoverRate": "Handover Rate",
+            "expiryIssueRate": "Expiry Issue Rate",
+            "cleaningRate": "Cleaning Rate",
+            "abnormalRate": "Abnormal Rate"
         }
     }
 }

@@ -29,5 +29,10 @@ namespace SULL.HospitalManagement.Controllers
             _service = service;
             _httpContextAccessor = httpContextAccessor;
         }
+        [HttpGet, Route("Statistic")]
+        public IActionResult GetStatistic(long warehouseId)
+        {
+             return JsonNormal(_service.GetPositionStatistics(warehouseId));
+        }
     }
 }

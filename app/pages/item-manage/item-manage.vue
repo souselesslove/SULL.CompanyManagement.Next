@@ -1,12 +1,13 @@
 <template>
     <view class="container">
         <!-- Navigation Bar -->
-        <view class="custom-nav" :style="{ paddingTop: statusBarHeight + 'px' }">
-            <view class="nav-content">
+        <!-- Navigation Bar -->
+        <view class="header-section" :style="{ paddingTop: statusBarHeight + 'px' }">
+            <view class="header-content">
                 <view class="nav-left">
-                    <BackButton class="nav-back-btn" @click="goBack" />
+                    <BackButton class="header-back-btn" @click="goBack" />
                 </view>
-                <text class="nav-title">{{ $t('itemManage.title') }}</text>
+                <text class="page-title">{{ $t('itemManage.title') }}</text>
                 <view class="nav-right"></view>
             </view>
         </view>
@@ -28,60 +29,65 @@
             </view>
 
             <!-- Search Bar -->
-            <view class="search-section">
-                <view class="search-box">
-                    <text class="search-icon">🔍</text>
-                    <input class="search-input" type="text" v-model="searchText"
-                        :placeholder="$t('itemOutbound.search_placeholder')" confirm-type="search"
-                        @confirm="onSearch" />
-                    <view class="icon-btn" v-if="searchText" @click="clearSearch">
-                        <text class="clear-icon">✕</text>
+            <view class="content">
+                <!-- Search Bar -->
+                <view class="search-section">
+                    <view class="search-box">
+                        <text class="search-icon">🔍</text>
+                        <input class="search-input" type="text" v-model="searchText"
+                            :placeholder="$t('itemOutbound.search_placeholder')" confirm-type="search"
+                            @confirm="onSearch" />
+                        <view class="icon-btn" v-if="searchText" @click="clearSearch">
+                            <text class="clear-icon">✕</text>
+                        </view>
                     </view>
                 </view>
-            </view>
-            <view class="category-tabs">
-                <view v-for="(cat, index) in categories" :key="index" class="tab-item"
-                    :class="{ active: currentCategory === cat.value }" @click="selectCategory(cat.value)">
-                    <text>{{ cat.label }}</text>
+                <view class="category-tabs">
+                    <view v-for="(cat, index) in categories" :key="index" class="tab-item"
+                        :class="{ active: currentCategory === cat.value }" @click="selectCategory(cat.value)">
+                        <text>{{ cat.label }}</text>
+                    </view>
                 </view>
-            </view>
-            <view class="list-content" :class="{ 'with-footer': selectMode }">
-                <view class="item-card" v-for="(item, index) in itemList" :key="index" @click="handleItemClick(item)"
-                    :class="{ 'selected': selectMode && selectedItem && selectedItem.Id === item.Id }">
-                    <view class="card-row top-row">
-                        <view class="name-section">
-                            <text class="item-name">{{ item.Name }}</text>
-                            <text class="item-code text-gray" v-if="item.InterfaceCode">({{ item.InterfaceCode
-                            }})</text>
+                <view class="list-content" :class="{ 'with-footer': selectMode }">
+                    <view class="item-card" v-for="(item, index) in itemList" :key="index"
+                        @click="handleItemClick(item)"
+                        :class="{ 'selected': selectMode && selectedItem && selectedItem.Id === item.Id }">
+                        <view class="card-row top-row">
+                            <view class="name-section">
+                                <text class="item-name">{{ item.Name }}</text>
+                                <text class="item-code text-gray" v-if="item.InterfaceCode">({{ item.InterfaceCode
+                                }})</text>
+                            </view>
+                            <view class="status-tag" :class="getExpiryStatus(item.ExpiryDate).class"
+                                v-if="item.ExpiryDate && getExpiryStatus(item.ExpiryDate)">
+                                <text>{{ getExpiryStatus(item.ExpiryDate).text }}</text>
+                            </view>
                         </view>
-                        <view class="status-tag" :class="getExpiryStatus(item.ExpiryDate).class"
-                            v-if="item.ExpiryDate && getExpiryStatus(item.ExpiryDate)">
-                            <text>{{ getExpiryStatus(item.ExpiryDate).text }}</text>
+
+                        <view class="card-row mid-row">
+                            <text class="spec-text" v-if="item.Specification">{{ item.Specification }}</text>
+                            <text class="info-divider" v-if="item.Specification">|</text>
+                            <text class="factory-text">{{ item.Factory || '-' }}</text>
+                        </view>
+
+                        <view class="card-row bot-row">
+                            <view class="stock-box">
+                                <text class="label">库存</text>
+                                <text class="stock-val">{{ item.AvailableStock || 0 }}</text>
+                                <text class="unit" v-if="item.Unit">{{ item.Unit }}</text>
+                            </view>
+                            <text class="expiry-date">过期日期: {{ item.ExpiryDate ? formatDate(item.ExpiryDate) : '-'
+                            }}</text>
                         </view>
                     </view>
 
-                    <view class="card-row mid-row">
-                        <text class="spec-text" v-if="item.Specification">{{ item.Specification }}</text>
-                        <text class="info-divider" v-if="item.Specification">|</text>
-                        <text class="factory-text">{{ item.Factory || '-' }}</text>
-                    </view>
-
-                    <view class="card-row bot-row">
-                        <view class="stock-box">
-                            <text class="label">库存</text>
-                            <text class="stock-val">{{ item.AvailableStock || 0 }}</text>
-                            <text class="unit">{{ item.Unit }}</text>
+                    <view v-if="itemList.length === 0 && !loading" class="empty-state">
+                        <view class="empty-icon-bg">
+                            <text class="empty-icon">📦</text>
                         </view>
-                        <text class="expiry-date">过期日期: {{ item.ExpiryDate ? formatDate(item.ExpiryDate) : '-' }}</text>
+                        <text class="empty-title">{{ $t('handover.empty') }}</text>
+                        <text class="empty-desc">{{ $t('itemManage.empty_desc') || '暂无物品，请点击右下角添加' }}</text>
                     </view>
-                </view>
-
-                <view v-if="itemList.length === 0 && !loading" class="empty-state">
-                    <view class="empty-icon-bg">
-                        <text class="empty-icon">📦</text>
-                    </view>
-                    <text class="empty-title">{{ $t('handover.empty') }}</text>
-                    <text class="empty-desc">{{ $t('itemManage.empty_desc') || '暂无物品，请点击右下角添加' }}</text>
                 </view>
             </view>
             <view class="bottom-spacer"></view>
@@ -338,7 +344,7 @@ export default {
     flex-direction: column;
 }
 
-.custom-nav {
+.header-section {
     background-color: $sull-color-white;
     position: fixed;
     top: 0;
@@ -347,7 +353,7 @@ export default {
     z-index: 999;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
 
-    .nav-content {
+    .header-content {
         height: 44px;
         display: flex;
         align-items: center;
@@ -358,7 +364,7 @@ export default {
             width: 40px;
         }
 
-        .nav-title {
+        .page-title {
             font-size: $font-size-h6;
             font-weight: $font-weight-semibold;
             color: $sull-text-main;
@@ -372,43 +378,43 @@ export default {
 
 .search-section {
     padding: 10px 16px;
-    background: $sull-color-white;
+    background: #fff;
+    border-radius: 12px;
 }
 
 .search-box {
     background: $sull-color-background;
-    border-radius: $radius-pill;
+    border-radius: 999px;
     height: 36px;
     display: flex;
     align-items: center;
     padding: 0 12px;
+}
 
-    .search-icon {
-        font-size: 14px;
-        margin-right: 8px;
-        color: $sull-text-secondary;
-    }
+.search-icon {
+    font-size: 14px;
+    margin-right: 8px;
+    color: $sull-text-secondary;
+}
 
-    .search-input {
-        flex: 1;
-        font-size: 14px;
-    }
+.search-input {
+    flex: 1;
+    font-size: 14px;
+}
 
-    .clear-icon {
-        color: $sull-text-secondary;
-        font-size: 12px;
-    }
+.clear-icon {
+    color: $sull-text-secondary;
+    font-size: 12px;
 }
 
 .category-tabs {
     display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    margin-top: 12px;
-    margin-left: 16px;
-    gap: 12px;
-    overflow-x: auto;
-    white-space: nowrap;
+    background: #fff;
+    border-radius: 25px;
+    padding: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+    margin: 0;
+    overflow: visible;
 
     /* Hide scrollbar */
     &::-webkit-scrollbar {
@@ -416,18 +422,38 @@ export default {
     }
 
     .tab-item {
-        font-size: 13px;
+        flex: 1;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
         color: $sull-text-secondary;
-        padding: 4px 12px;
-        border-radius: 14px;
-        background: $sull-gray-10;
+        font-weight: 500;
+        border-radius: 16px;
+        transition: all 0.3s;
+
+        // Reset previous card styles
+        background: transparent;
+        border: none;
+        padding: 0;
+        box-shadow: none;
 
         &.active {
-            color: #fff;
             background: $sull-color-primary;
-            font-weight: 500;
+            color: #fff;
+            font-weight: 600;
+            box-shadow: 0 2px 6px rgba(0, 154, 151, 0.3);
+            border: none;
         }
     }
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 16px;
 }
 
 .main-scroll {
@@ -436,10 +462,11 @@ export default {
 }
 
 .list-content {
-    padding: 16px;
+    /* Padding removed as .content already handles it */
     min-height: 300px;
     display: flex;
     flex-direction: column;
+    gap: 12px;
 }
 
 .item-card {
@@ -581,8 +608,9 @@ export default {
 
 .stock-box .unit {
     font-size: 12px;
-    color: #999;
+    color: #606266;
     margin-left: 2px;
+    font-weight: normal;
 }
 
 .expiry-date {

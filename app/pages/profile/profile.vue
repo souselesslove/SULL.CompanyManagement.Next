@@ -618,7 +618,7 @@ export default {
 
 .login-header {
 	padding: 60px 24px 40px;
-	background: linear-gradient(180deg, #95CAFF 0%, #BFE0FF 100%);
+	background: linear-gradient(180deg, $sull-color-primary 0%, $sull-color-secondary-light 100%);
 	display: flex;
 	flex-direction: column;
 }
@@ -819,7 +819,7 @@ export default {
 .btn-signin {
 	width: 100%;
 	height: 54px;
-	background: #95CAFF;
+	background: $sull-color-primary;
 	border-radius: 27px;
 	display: flex;
 	align-items: center;
@@ -844,7 +844,7 @@ export default {
 
 .signup-text {
 	font-size: 14px;
-	color: #95CAFF;
+	color: $sull-color-primary;
 	font-weight: 600;
 }
 

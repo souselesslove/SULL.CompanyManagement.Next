@@ -45,20 +45,19 @@ namespace SULL.HospitalManagement.Services
 
         public override PageGridData<TodoList> GetPageData(PageDataOptions options)
         {
-            if (options.Filter == null)
+            var userId = UserContext.Current.UserId;
+            var db = _repository.DbContext;
+
+            // 使用QueryRelativeExpression来注入自定义查询逻辑
+            // 只要他参与过的都算它的消息，TolistDetail中AssignUserId有它的都算
+            QueryRelativeExpression = (query) =>
             {
-                options.Filter = new List<SearchParameters>();
-            }
-            options.Filter.Add(new SearchParameters()
-            {
-                Name = "LatestAssignUserId",
-                Value = UserContext.Current.UserId.ToString(),
-            });
-            options.Filter.Add(new SearchParameters()
-            {
-                Name = "IsFinished",
-                Value = "0",
-            });
+                return query.Where(x => (x.IsDeleted ?? false) == false &&
+                                     db.Set<TodoListDetail>().Any(d => d.TodoListId == x.Id &&
+                                                                       d.AssignUserId == userId &&
+                                                                       d.IsDeleted != true));
+            };
+            
             return base.GetPageData(options);
         }
 
@@ -92,6 +91,31 @@ namespace SULL.HospitalManagement.Services
             };
 
             return base.Add(saveDataModel);
+        }
+        public object GetTodoListStatistics()
+        {
+            var userId = UserContext.Current.UserId;
+            var db = _repository.DbContext;
+
+            // 优化：
+            // 1. 使用一次查询获取所有统计结果，减少数据库交互次数 (提高效率)
+            // 2. 使用Any子查询，即使Detail表中有同一个用户多条记录，主表TodoList也只会被筛选出一次 (自动过滤重复记录)
+            var result = db.Set<TodoList>()
+                .Where(x => (x.IsDeleted ?? false) == false &&
+                            db.Set<TodoListDetail>().Any(d => d.TodoListId == x.Id && 
+                                                              d.AssignUserId == userId && 
+                                                              d.IsDeleted != true))
+                .GroupBy(o => 1)
+                .Select(g => new
+                {
+                    AllCount = g.Count(),
+                    PendingCount = g.Sum(x => x.IsFinished != true ? 1 : 0),
+                    IgnoredCount = g.Sum(x => x.IsFinished == true && x.FinalStatus == 220 ? 1 : 0),
+                    ProcessedCount = g.Sum(x => x.IsFinished == true ? 1 : 0)
+                })
+                .FirstOrDefault();
+
+            return result ?? new { AllCount = 0, PendingCount = 0, IgnoredCount = 0, ProcessedCount = 0 };
         }
     }
 }

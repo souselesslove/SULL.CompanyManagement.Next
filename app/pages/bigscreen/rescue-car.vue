@@ -11,11 +11,11 @@
 					<view class="card-header">
 						<view class="header-left">
 							<view class="header-icon">🏥</view>
-							<text class="header-title">骨伤一科</text>
+							<text class="header-title">{{ rescueCar.DisplayName || rescueCar.Name || '骨伤一科' }}</text>
 						</view>
 						<view class="header-right">
 							<text class="manager-label">{{ $t('bigScreen.rescueCar.manager') }}:</text>
-							<text class="manager-value">李秋水</text>
+							<text class="manager-value">{{ rescueCar.Manager || '李秋水' }}</text>
 						</view>
 					</view>
 					<!-- Info Carousel -->
@@ -28,28 +28,40 @@
 									<view class="item-icon">💊</view>
 									<view class="item-content">
 										<text class="item-label">{{ $t('bigScreen.rescueCar.itemTypes') }}</text>
-										<text class="item-value">48</text>
+										<view class="value-unit-row">
+											<text class="item-value">{{ stats.itemTypes }}</text>
+											<text class="item-unit">{{ $t('index.unit.type') }}</text>
+										</view>
+									</view>
+								</view>
+								<view class="info-item">
+									<view class="item-icon">💰</view>
+									<view class="item-content">
+										<text class="item-label">{{ $t('bigScreen.rescueCar.itemValue') }}</text>
+										<view class="value-unit-row">
+											<text class="item-value">{{ stats.itemValue }}</text>
+											<text class="item-unit">{{ $t('index.unit.tenThousand') }}</text>
+										</view>
 									</view>
 								</view>
 								<view class="info-item warning">
 									<view class="item-icon">⚠️</view>
 									<view class="item-content">
 										<text class="item-label">{{ $t('bigScreen.rescueCar.stockWarning') }}</text>
-										<text class="item-value warning-text">2</text>
+										<view class="value-unit-row">
+											<text class="item-value warning-text">{{ stats.stockWarning }}</text>
+											<text class="item-unit warning-text">{{ $t('index.unit.type') }}</text>
+										</view>
 									</view>
 								</view>
 								<view class="info-item warning">
 									<view class="item-icon">⏰</view>
 									<view class="item-content">
 										<text class="item-label">{{ $t('bigScreen.rescueCar.expiryWarning') }}</text>
-										<text class="item-value warning-text">1</text>
-									</view>
-								</view>
-								<view class="info-item">
-									<view class="item-icon">🔔</view>
-									<view class="item-content">
-										<text class="item-label">{{ $t('bigScreen.rescueCar.abnormal') }}</text>
-										<text class="item-value">0</text>
+										<view class="value-unit-row">
+											<text class="item-value warning-text">{{ stats.expiryWarning }}</text>
+											<text class="item-unit warning-text">{{ $t('index.unit.type') }}</text>
+										</view>
 									</view>
 								</view>
 							</view>
@@ -63,7 +75,7 @@
 										<view class="task-icon-small">🔄</view>
 										<text class="task-label-inline">{{ $t('bigScreen.rescueCar.handover') }}</text>
 										<text class="task-status normal">{{ $t('bigScreen.rescueCar.statusNormal')
-											}}</text>
+										}}</text>
 									</view>
 									<view class="task-times">
 										<text class="time-row"><text class="time-label">{{
@@ -79,7 +91,7 @@
 										<view class="task-icon-small">✨</view>
 										<text class="task-label-inline">{{ $t('bigScreen.rescueCar.cleaning') }}</text>
 										<text class="task-status overdue">{{ $t('bigScreen.rescueCar.statusOverdue')
-											}}</text>
+										}}</text>
 									</view>
 									<view class="task-times">
 										<text class="time-row"><text class="time-label">{{
@@ -95,7 +107,7 @@
 										<view class="task-icon-small">📝</view>
 										<text class="task-label-inline">{{ $t('bigScreen.rescueCar.check') }}</text>
 										<text class="task-status normal">{{ $t('bigScreen.rescueCar.statusNormal')
-											}}</text>
+										}}</text>
 									</view>
 									<view class="task-times">
 										<text class="time-row"><text class="time-label">{{
@@ -203,11 +215,6 @@
 							<view class="layer-header" @click="toggleLayer(index)">
 								<text class="layer-title">{{ layer.name }}</text>
 								<view class="layer-info">
-									<view class="info-badge" @click.stop="setFilter(index, 'all')"
-										:class="{ 'active': !layer.filterType || layer.filterType === 'all' }">
-										<text class="info-icon">📦</text>
-										<text class="info-num">{{ layer.items.length }}</text>
-									</view>
 									<view class="abnormal-icons" v-if="hasAbnormal(layer)">
 										<view v-if="hasExpired(layer)" class="icon-btn"
 											@click.stop="setFilter(index, 'expired')"
@@ -220,38 +227,63 @@
 											<text class="info-icon">⏰</text>
 										</view>
 									</view>
+									<view class="info-badge" @click.stop="setFilter(index, 'all')"
+										:class="{ 'active': !layer.filterType || layer.filterType === 'all' }">
+										<text class="info-icon">📦</text>
+										<text class="info-num">{{ layer.items.length }}</text>
+									</view>
 								</view>
 							</view>
 
 							<!-- Layer Content -->
 							<view class="layer-content" v-if="layer.expanded">
 								<view class="list-view">
-									<view class="list-card" v-for="(item, i) in getFilteredItems(layer)" :key="item.id">
-										<view class="card-row top-row">
-											<text class="item-name-text">{{ i + 1 }}. {{ item.name }}</text>
-											<view v-if="item.days <= 30" class="status-icon"
-												:class="{ 'icon-warn': item.days < 30 && item.days >= 0, 'shaking': item.days < 0 }">
-												🔔</view>
-										</view>
-										<view class="card-row middle-row">
-											<view class="spec-qty-container">
-												<text class="item-spec-text">{{ item.spec }}</text>
-												<text class="item-qty-text">{{ item.qty }} 支</text>
-											</view>
-											<view class="days-info">
-												<view class="days-badge"
-													:class="{ 'badge-expired': item.days < 0, 'badge-danger': item.days >= 0 && item.days < 30, 'badge-warning': item.days >= 30 && item.days <= 60 }">
-													<text class="days-num">{{ Math.abs(item.days) }}</text>
+									<view class="list-card-wrapper" v-for="(item, i) in getFilteredItems(layer)"
+										:key="item.id">
+										<!-- Active Item Card -->
+										<view class="list-card" v-if="!item.isEmpty">
+											<view class="card-row top-row">
+												<view class="item-name-wrapper">
+													<text class="item-name-text"
+														:class="{ 'scrolling': item.name.length > 6 }">{{ i + 1 }}.
+														{{ item.name }}</text>
 												</view>
-												<text class="days-label">{{ item.days < 0 ? '过期' : '天' }}</text>
+												<view v-if="item.days <= 30" class="status-icon"
+													:class="{ 'icon-warn': item.days < 30 && item.days >= 0, 'shaking': item.days < 0 }">
+													🔔</view>
+											</view>
+											<view class="card-row middle-row">
+												<view class="spec-qty-container">
+													<text class="item-spec-text">{{ item.spec }}</text>
+													<!-- Use value-unit-row for qty if needed, keeping simple for now -->
+													<text class="item-qty-text">{{ item.qty }} {{ item.unit
+													}}</text>
+												</view>
+												<view class="days-info">
+													<view class="days-badge"
+														:class="{ 'badge-expired': item.days < 0, 'badge-danger': item.days >= 0 && item.days < 30, 'badge-warning': item.days >= 30 && item.days <= 60, 'badge-normal': item.days > 60 }">
+														<text v-if="item.days < 0" class="days-prefix">过期</text>
+														<text class="days-num">{{ Math.abs(item.days) }}</text>
+													</view>
+													<text class="days-label">天</text>
+												</view>
+											</view>
+											<view class="card-row bottom-row">
+												<view class="progress-container"
+													:class="{ 'shimmer': item.days < 30 && item.days >= 0 }"
+													:style="{ backgroundColor: getProgressColor(item.days) }">
+													<view class="progress-green"
+														:style="{ width: getGreenProgress(item.days) + '%' }">
+													</view>
+												</view>
 											</view>
 										</view>
-										<view class="card-row bottom-row">
-											<view class="progress-container"
-												:class="{ 'shimmer': item.days < 30 && item.days >= 0 }"
-												:style="{ backgroundColor: getProgressColor(item.days) }">
-												<view class="progress-green"
-													:style="{ width: getGreenProgress(item.days) + '%' }"></view>
+
+										<!-- Empty Slot Card -->
+										<view class="list-card empty-card" v-else>
+											<text class="empty-index">{{ i + 1 }}</text>
+											<view class="empty-icon-center">
+												<view class="empty-icon"></view>
 											</view>
 										</view>
 									</view>
@@ -260,13 +292,11 @@
 						</view>
 					</view>
 				</view>
-
-				<!-- Footer -->
-				<FooterInfo />
 			</view>
+
+			<FooterInfo />
 		</scroll-view>
 
-		<!-- Bottom Navigation -->
 		<BottomNav activePage="bigscreen" />
 	</view>
 </template>
@@ -274,6 +304,7 @@
 <script>
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import SimpleLineChart from '@/components/SimpleLineChart/SimpleLineChart.vue';
+import request from '@/utils/request.js';
 
 export default {
 	components: {
@@ -282,138 +313,201 @@ export default {
 	},
 	data() {
 		return {
-			layers: [
-				{
-					name: '第一层',
-					expanded: true,
-					items: [
-						{ id: '101', name: '盐酸肾上腺素注射液', spec: '1ml/1mg', qty: 3, expiry: '2026-01-01', days: 365, row: 1, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '102', name: '去乙酰毛花苷注射液', spec: '2ml/0.4g', qty: 3, expiry: '2025-12-24', days: 20, row: 1, col: 2, rowSpan: 1, colSpan: 1 },
-						{ id: '103', name: '盐酸洛贝林注射液', spec: '1ml/3mg', qty: 3, expiry: '2026-01-18', days: 45, row: 1, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '104', name: '去甲肾上腺素注射液', spec: '1ml/2mg', qty: 3, expiry: '2025-11-29', days: -5, row: 1, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '105', name: '葡萄糖酸钙注射液', spec: '10ml/1g', qty: 3, expiry: '2026-03-01', days: 420, row: 1, col: 5, rowSpan: 1, colSpan: 1 },
-
-						{ id: '106', name: '尼可刹米注射液', spec: '1.5ml/0.375g', qty: 3, expiry: '2026-01-01', days: 365, row: 2, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '107', name: '呋塞米注射液', spec: '2ml/20mg', qty: 3, expiry: '2026-01-28', days: 55, row: 2, col: 2, rowSpan: 1, colSpan: 1 },
-						{ id: '108', name: '重酒石酸间羟胺注射液', spec: '1ml/10mg', qty: 3, expiry: '2026-05-20', days: 500, row: 2, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '109', name: '地塞米松磷酸钠注射液', spec: '1ml/5mg', qty: 3, expiry: '2026-02-15', days: 400, row: 2, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '110', name: '氨茶碱注射液', spec: '10ml/0.25g', qty: 3, expiry: '2026-03-01', days: 420, row: 2, col: 5, rowSpan: 1, colSpan: 1 },
-
-						{ id: '111', name: '硫酸阿托品注射液', spec: '1ml/0.5mg', qty: 3, expiry: '2026-01-01', days: 365, row: 3, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '112', name: '盐酸异丙嗪注射液', spec: '2ml/50mg', qty: 3, expiry: '2025-12-14', days: 10, row: 3, col: 2, rowSpan: 1, colSpan: 1 },
-						{ id: '113', name: '盐酸氯丙嗪注射液', spec: '1ml/25mg', qty: 3, expiry: '2026-05-20', days: 500, row: 3, col: 3, rowSpan: 1, colSpan: 1 },
-						// Empty slot at row 3, col 4
-						{ id: '114', name: '葡萄糖注射液', spec: '20ml/10g', qty: 3, expiry: '2026-02-15', days: 400, row: 3, col: 5, rowSpan: 1, colSpan: 1 }
-					]
-				},
-				{
-					name: '第二层',
-					expanded: false,
-					items: [
-						{ id: '201-1', name: '血气分析针', spec: '1支', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '201-2', name: '抽血试管', spec: '紫、绿、红、蓝、黑各1支', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '202-1', name: '输血器', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 2, rowSpan: 1, colSpan: 1 },
-						{ id: '202-2', name: '输液器', spec: '2个', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '202-3', name: '延长管', spec: '2条', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '203-1', name: '注射器', spec: '50ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '203-2', name: '注射器', spec: '20ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '203-3', name: '注射器', spec: '10ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '203-4', name: '注射器', spec: '5ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '203-5', name: '注射器', spec: '2ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '203-6', name: '注射器', spec: '1ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 5, rowSpan: 1, colSpan: 1 },
-
-						{ id: '204-1', name: '医用润滑液', spec: '1支', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '204-2', name: '电极片', spec: '6个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '205-1', name: '棉签', spec: '2包', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 2, rowSpan: 1, colSpan: 1 },
-						{ id: '205-2', name: '静脉采血针', spec: '2个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 2, rowSpan: 1, colSpan: 1 },
-						{ id: '205-3', name: '头皮针', spec: '4个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '205-4', name: '肝素帽', spec: '2个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '205-5', name: '留置针', spec: '2个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '205-6', name: '透明敷料', spec: '2张', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '206-1', name: '安尔碘', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '206-2', name: '酒精', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '206-3', name: '探热针', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '206-4', name: '输液贴', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '206-5', name: '胶布', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '206-6', name: '止血带', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '206-7', name: '压舌板', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '206-8', name: '电筒', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '206-9', name: '砂轮', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 5, rowSpan: 1, colSpan: 1 }
-					]
-				},
-				{
-					name: '第三层',
-					expanded: false,
-					items: [
-						{ id: '301-1', name: '10%GS', spec: '500ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '301-2', name: '10%GS', spec: '250ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '301-3', name: '10%GS', spec: '100ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '301-4', name: '5%GNS', spec: '500ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 2, rowSpan: 1, colSpan: 1 },
-						{ id: '301-5', name: '5%GNS', spec: '250ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 2, rowSpan: 1, colSpan: 1 },
-						{ id: '301-6', name: '5%GS', spec: '500ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '301-7', name: '5%GS', spec: '250ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '301-8', name: '5%GS', spec: '100ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '301-9', name: '0.9%NS', spec: '500ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '301-10', name: '0.9%NS', spec: '250ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '301-11', name: '0.9%NS', spec: '100ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '301-12', name: '5%碳酸氢钠注射液', spec: '250ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '301-13', name: '林格注射液', spec: '500ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '301-14', name: '甘露醇注射液', spec: '250ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '301-15', name: '甘露醇注射液', spec: '250ml', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 5, rowSpan: 1, colSpan: 1 }
-					]
-				}, {
-					name: '第四层',
-					expanded: false,
-					items: [
-						{ id: '401-1', name: '薄膜手套', spec: '1包', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '401-2', name: '无菌手套', spec: '7#、7.5#各1双', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 2, rowSpan: 1, colSpan: 1 },
-						{ id: '401-3', name: '喉镜', spec: '1套', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '401-4', name: '备用电池', spec: '2个', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '401-5', name: '氧气表', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '401-6', name: '湿化瓶', spec: '1套', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 5, rowSpan: 1, colSpan: 1 },
-
-						{ id: '402-1', name: '导尿包', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '402-2', name: '水银血压计', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 2, rowSpan: 1, colSpan: 1 },
-						{ id: '402-3', name: '听诊器', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '402-4', name: '口咽通气管', spec: '7cm、10cm各1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '402-5', name: '气管插管', spec: '6.5#、7#、7.5#各1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '402-6', name: '牙垫', spec: '2个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '402-7', name: '丝绸胶布', spec: '1卷', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 5, rowSpan: 1, colSpan: 1 }
-					]
-				}, {
-					name: '第五层',
-					expanded: false,
-					items: [
-						{ id: '501-1', name: '备用氧气袋', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '501-2', name: '成人呼吸球囊', spec: '1套', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 2, rowSpan: 1, colSpan: 1 },
-						{ id: '501-3', name: '负压表', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 3, rowSpan: 1, colSpan: 1 },
-						{ id: '501-4', name: '负压瓶', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 4, rowSpan: 1, colSpan: 1 },
-						{ id: '501-5', name: '吸引管', spec: '2条', qty: 1, expiry: '2026-01-01', days: 365, row: 1, col: 5, rowSpan: 1, colSpan: 1 },
-						{ id: '502-1', name: '吸痰管', spec: '5条', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 1, rowSpan: 1, colSpan: 1 },
-						{ id: '502-2', name: '电插板', spec: '1个', qty: 1, expiry: '2026-01-01', days: 365, row: 2, col: 2, rowSpan: 1, colSpan: 1 }
-					]
-				}
-			]
+			userOrgInfo: uni.getStorageSync('userOrgInfo') || {},
+			selectedRescueCarId: null,
+			rescueCar: {},
+			layers: [],
+			serialList: [],
+			itemsMap: {},
+			stats: {
+				itemTypes: 0,
+				stockWarning: 0,
+				expiryWarning: 0,
+				itemValue: 0
+			},
+			initialFilterType: null
 		}
 	},
+	onLoad(options) {
+		if (options && options.type) {
+			this.initialFilterType = parseInt(options.type);
+		}
+		this.fetchRescueCars();
+	},
 	methods: {
-		onLoad(options) {
-			if (options && options.type) {
-				const type = parseInt(options.type);
-				// Type 10: Expiry, Type 20: Stock (Low stock logic not fully in sample, mapping to nearExpiry for demo if needed, or just opening layers)
+		async fetchRescueCars() {
+			try {
+				if (!this.userOrgInfo.Organization || !this.userOrgInfo.Department) return;
 
-				if (type === 10) {
-					// Expand layers with expired items and set filter
-					this.layers.forEach((layer, index) => {
-						if (this.hasExpired(layer)) {
-							this.setFilter(index, 'expired');
-						} else if (this.hasNearExpiry(layer)) {
-							this.setFilter(index, 'nearExpiry');
-						}
-					});
+				const res = await request.post('api/ssbh/Position/GetPageData', {
+					page: 1, rows: 100,
+					wheres: JSON.stringify([
+						{ name: 'Category', value: 10 }, // Only fetch Warehouses (Rescue Cars)
+						{ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
+						{ name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
+					]),
+					sort: 'OrderBy', order: 'asc'
+				});
+				const cars = res.rows || [];
+				if (cars.length > 0) {
+					this.rescueCar = cars[0];
+					this.selectedRescueCarId = this.rescueCar.Id;
+					this.fetchDashboardStats(this.selectedRescueCarId);
+					// Fetch floors/layers detailed view
+					this.fetchFloors(this.selectedRescueCarId);
+				} else {
+					this.rescueCar = {};
+					this.selectedRescueCarId = null;
+					this.layers = [];
 				}
+			} catch (e) {
+				console.error(e);
 			}
 		},
+		async fetchFloors(parentId) {
+			if (!parentId) return;
+			try {
+				const res = await request.post('api/ssbh/Position/GetPageData', {
+					page: 1, rows: 100,
+					wheres: JSON.stringify([
+						{ name: 'Category', value: 100 },
+						{ name: 'WarehouseId', value: parentId },
+						{ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
+						{ name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
+					]),
+					sort: 'OrderBy', order: 'asc'
+				});
+				const floors = res.rows || [];
+				console.log('Floors:', floors);
+				if (floors.length > 0) {
+					// In position-manage, it filters locally, here we query. 
+					// We need to fetch serials for ALL floors found.
+					const floorIds = floors.map(f => f.Id);
+					await this.fetchSerialsByFloors(floorIds, floors);
+				} else {
+					this.layers = [];
+				}
+			} catch (e) { console.error(e); }
+		},
+		async fetchSerialsByFloors(floorIds, floors) {
+			if (!floorIds || floorIds.length === 0) return;
+			try {
+				// Use 'ParentId' with array of floorIds, assuming backend supports 'value' as array or we need to check backend behavior. 
+				// position-manage sends array: { name: 'ParentId', value: floorIds }
+				const res = await request.post('api/ssbh/Position/GetPageData', {
+					page: 1, rows: 500,
+					wheres: JSON.stringify([
+						{ name: 'Category', value: 110 },
+						{ name: 'ParentId', value: floorIds.join(','), DisplayType: 'in' }
+					]),
+					sort: 'OrderBy', order: 'asc'
+				});
+				this.serialList = res.rows || [];
+
+				const itemIds = this.serialList.filter(s => s.ItemId > 0).map(s => s.ItemId);
+				if (itemIds.length > 0) {
+					await this.fetchItemDetails([...new Set(itemIds)]);
+				}
+
+				this.transformToLayers(floors, this.serialList);
+			} catch (e) { console.error(e); }
+		},
+		async fetchDashboardStats(warehouseId) {
+			try {
+				const res = await request.get(`api/ssbh/Position/Statistic?warehouseId=${warehouseId}`);
+				if (res) {
+					// Price conversion: Cent to Yuan (100)
+					let price = (res.PriceCounter || 0) / 100;
+
+					this.stats = {
+						itemTypes: res.ItemCounter || 0,
+						stockWarning: res.AbnormalStock || 0,
+						expiryWarning: res.AbnormalExpiry || 0,
+						itemValue: price.toFixed(0) // Display as whole number for Yuan
+					};
+				}
+			} catch (e) {
+				console.error('Fetch Dashboard Stats Failed', e);
+			}
+		},
+		async fetchItemDetails(ids) {
+			const distinctIds = [...new Set(ids)];
+			// We can try fetching all at once if API supports IN, but let's loop or fetch batch if possible
+			// Given previous code usage, we might be fetching individually or in small batches.
+			// Ideally we fetch all relevant items. For now, let's assume one by one or small batch isn't too slow for this demo,
+			// OR use a bulk fetch if available. Previous code used loop.
+			// Let's optimize slightly by just looping efficiently
+			const promises = distinctIds.map(id => {
+				if (this.itemsMap[id]) return Promise.resolve();
+				return request.post('api/ssbh/Item/GetPageData', {
+					page: 1, rows: 1,
+					wheres: JSON.stringify([
+						{ name: 'Id', value: id },
+						// Secure fetch with Org/Dept
+						{ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
+						{ name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
+					])
+				}).then(res => {
+					if (res.rows && res.rows.length > 0) {
+						this.$set(this.itemsMap, id, res.rows[0]);
+					}
+				});
+			});
+			await Promise.all(promises);
+		},
+		getDaysUntil(dateStr) {
+			if (!dateStr) return '999';
+			const now = new Date();
+			const target = new Date(dateStr);
+			return Math.ceil((target.getTime() - now.getTime()) / (1000 * 3600 * 24));
+		},
+		transformToLayers(floors, serials) {
+			this.layers = floors.map(floor => {
+				const floorSerials = serials.filter(s => s.FloorId === floor.Id);
+				// Map serials to dashboard items
+				// We need to show ALL serials, even if empty.
+				const items = floorSerials.map((s, index) => {
+					if (s.ItemId > 0 && this.itemsMap[s.ItemId]) {
+						const itemDetail = this.itemsMap[s.ItemId];
+						let expiryDate = itemDetail.LatestExpirationDate || itemDetail.ExpiryDate;
+						return {
+							id: s.Id,
+							name: itemDetail.Name,
+							spec: itemDetail.Specification,
+							qty: s.Stock || itemDetail.AvailableStock,
+							unit: itemDetail.Unit,
+							expiry: expiryDate,
+							days: this.getDaysUntil(expiryDate),
+							row: 1, col: index + 1,
+							isEmpty: false
+						};
+					}
+					// Empty/Unbound Serial
+					return {
+						id: s.Id,
+						name: '空闲',
+						row: 1, col: index + 1,
+						isEmpty: true
+					};
+				}); // No filtering
+
+				return {
+					name: floor.Name || floor.DisplayName,
+					count: floor.SerialId || 0, // Assuming SerialId on floor is the total count
+					expanded: items.length > 0 && items.some(i => !i.isEmpty), // Expand if there are actual items? Or just items.length > 0
+					items: items
+				};
+			});
+
+			// Handle initial filter if any
+			if (this.initialFilterType === 10) {
+				this.layers.forEach((layer, index) => {
+					if (this.hasExpired(layer)) this.setFilter(index, 'expired');
+					else if (this.hasNearExpiry(layer)) this.setFilter(index, 'nearExpiry');
+				});
+			}
+		},
+
 		navToHome() {
 			uni.reLaunch({
 				url: '/pages/index/index'
@@ -620,12 +714,48 @@ page {
 	border: 1px solid rgba(0, 0, 0, 0.04);
 }
 
+.item-icon {
+	width: 24px;
+	height: 24px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.bg-icon {
+	width: 100%;
+	height: 100%;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-size: contain;
+}
+
+.icon-money {
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23faad14'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05 1.06 1.91 2.57 1.91 1.74 0 2.5-.96 2.5-1.87 0-1.77-2.35-2.22-4.22-2.68-2.18-.51-3.66-1.57-3.66-3.65 0-1.78 1.4-3.18 3.12-3.53V3h2.67v1.93c1.71.36 3.16 1.46 3.27 3.4h-1.96c-.1-1.05-1.06-1.91-2.57-1.91-1.74 0-2.5.96-2.5 1.87 0 1.77 2.35 2.22 4.22 2.68 2.18.51 3.66 1.57 3.66 3.65 0 1.78-1.4 3.18-3.12 3.53z'/%3E%3C/svg%3E");
+}
+
 .info-item.warning {
 	background: rgba(255, 241, 240, 0.6);
 	border-color: rgba(255, 77, 79, 0.2);
 }
 
 .warning-text {
+	color: #ff4d4f !important;
+}
+
+.value-unit-row {
+	display: flex;
+	align-items: baseline;
+	gap: 2px;
+}
+
+.item-unit {
+	font-size: 10px;
+	color: $sull-text-secondary;
+	font-weight: normal;
+}
+
+.item-unit.warning-text {
 	color: #ff4d4f !important;
 }
 
@@ -980,18 +1110,21 @@ page {
 }
 
 /* List View */
+.list-card-wrapper {
+	margin-bottom: 8px;
+}
+
+.list-card-wrapper:last-child {
+	margin-bottom: 0px;
+}
+
 /* List View - Card Style */
 .list-card {
 	background: rgba(255, 255, 255, 0.8);
 	border-radius: 12px;
 	padding: 8px 16px;
-	margin-bottom: 8px;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 	border: 1px solid rgba(255, 255, 255, 0.6);
-}
-
-.list-card:last-child {
-	margin-bottom: 0;
 }
 
 .card-row {
@@ -1005,10 +1138,81 @@ page {
 	margin-bottom: 4px;
 }
 
+
+
+.item-name-wrapper {
+	width: 100%;
+	height: 24px;
+	overflow: hidden;
+	white-space: nowrap;
+	margin-bottom: 4px;
+	position: relative;
+}
+
 .item-name-text {
+	display: block;
 	font-size: 16px;
 	font-weight: bold;
 	color: $sull-text-main;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	width: 100%;
+}
+
+.item-name-text.scrolling {
+	display: inline-block;
+	width: auto;
+	padding-left: 100%;
+	animation: marquee 8s linear infinite;
+	text-overflow: clip;
+}
+
+@keyframes marquee {
+	0% {
+		transform: translateX(0);
+	}
+
+	100% {
+		transform: translateX(-100%);
+	}
+}
+
+.empty-card {
+	background: #F5F7FA;
+	border: 1px dashed #dcdfe6;
+	border-radius: 12px;
+	padding: 8px 16px;
+	height: 32px;
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.empty-index {
+	font-size: 16px;
+	font-weight: bold;
+	color: #C0C4CC;
+}
+
+.empty-icon-center {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+.empty-icon {
+	width: 24px;
+	height: 24px;
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23C0C4CC' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'%3E%3C/path%3E%3Cpolyline points='3.27 6.96 12 12.01 20.73 6.96'%3E%3C/polyline%3E%3Cline x1='12' y1='22.08' x2='12' y2='12'%3E%3C/line%3E%3C/svg%3E");
+	background-size: contain;
+	background-repeat: no-repeat;
+	/* Remove text content in template */
 }
 
 .status-icon {
@@ -1060,6 +1264,19 @@ page {
 	padding: 2px 6px;
 	min-width: 30px;
 	text-align: center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+}
+
+.days-badge.badge-normal {
+	background: #ffffff;
+	border: 1px solid #dcdfe6;
+}
+
+.days-badge.badge-normal .days-num {
+	color: #303133;
 }
 
 .days-badge.badge-danger {
@@ -1072,6 +1289,12 @@ page {
 
 .days-badge.badge-expired {
 	background: #000000;
+}
+
+.days-prefix {
+	font-size: 12px;
+	color: #fff;
+	margin-right: 2px;
 }
 
 .days-num {

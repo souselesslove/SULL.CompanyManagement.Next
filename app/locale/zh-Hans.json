@@ -6,7 +6,8 @@
         "delete": "删除",
         "edit": "编辑",
         "success": "成功",
-        "fail": "失败"
+        "fail": "失败",
+        "search": "搜索"
     },
     "index": {
         "home": "抢救车管理系统",
@@ -18,9 +19,10 @@
         "warning": "警告",
         "top": "顶部",
         "itemTypes": "物品种类",
+        "itemValue": "物品价值",
         "stockAbnormal": "库存异常",
         "expiryWarning": "效期警告",
-        "handoverOverdue": "交班逾期",
+        "handoverOverdue": "异常提醒",
         "quickActions": "快捷操作",
         "pendingTasks": "待办事项",
         "viewAll": "查看全部",
@@ -45,6 +47,10 @@
             "30m": "30分钟前",
             "1h": "1小时前",
             "2h": "2小时前"
+        },
+        "unit": {
+            "type": "种",
+            "tenThousand": "万元"
         },
         "locations": {
             "icu": "ICU-1",
@@ -84,7 +90,25 @@
             "expiry": "效期",
             "stock": "库存",
             "abnormal": "异常",
-            "other": "其他"
+            "other": "其他",
+            "processed": "已处理",
+            "ignored": "已忽略",
+            "pending": "待处理"
+        },
+        "timeline": {
+            "title": "处理详情",
+            "ignoreTitle": "忽略提醒",
+            "ignoreContent": "确定要忽略这条提醒吗？",
+            "ignoreSuccess": "已忽略",
+            "fail": "操作失败",
+            "loading": "加载中...",
+            "empty": "暂无处理记录",
+            "unknown": "未知",
+            "status": "状态",
+            "assignUser": "处理人",
+            "remark": "备注",
+            "completed": "已完成",
+            "canceled": "已取消"
         }
     },
     "handover": {
@@ -387,6 +411,30 @@
             "title": "语言切换",
             "en": "English",
             "zh-Hans": "简体中文"
+        }
+    },
+    "bigScreen": {
+        "rescueCar": {
+            "title": "抢救车智能管理看板",
+            "manager": "责任人",
+            "itemTypes": "物品种类",
+            "stockWarning": "库存预警",
+            "expiryWarning": "效期预警",
+            "abnormal": "异常统计",
+            "itemValue": "物品价值",
+            "handover": "交接班",
+            "cleaning": "清洁消毒",
+            "check": "清点检查",
+            "sealing": "封存管理",
+            "statusNormal": "正常",
+            "statusOverdue": "逾期",
+            "statusOpen": "开启",
+            "lastTime": "上次:",
+            "nextTime": "下次:",
+            "handoverRate": "交接完成率",
+            "expiryIssueRate": "效期问题率",
+            "cleaningRate": "清洁执行率",
+            "abnormalRate": "异常发生率"
         }
     }
 }

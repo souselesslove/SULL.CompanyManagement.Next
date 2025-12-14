@@ -61,6 +61,15 @@
 								<text class="floor-sub">已用 {{ getOccupiedCount(floor) }} / 共 {{ floor.SerialId || 0 }}
 									格</text>
 							</view>
+							<!-- Status Icons -->
+							<view class="floor-status-icons">
+								<view class="status-icon warning" v-if="hasExpiryProblem(floor)">
+									<view class="status-bg-icon icon-clock"></view>
+								</view>
+								<view class="status-icon danger" v-if="hasStockProblem(floor)">
+									<view class="status-bg-icon icon-siren"></view>
+								</view>
+							</view>
 						</view>
 
 						<!-- Expanded Details (Serials) -->
@@ -81,16 +90,21 @@
 									<view class="item-detail" v-if="serial.ItemId > 0 && itemsMap[serial.ItemId]">
 										<view class="item-name-wrapper">
 											<text class="item-name-text"
-												:class="{ scrolling: (itemsMap[serial.ItemId].Name || '').length > 7 }">{{
+												:class="{ scrolling: (itemsMap[serial.ItemId].Name || '').length > 8 }">{{
 													itemsMap[serial.ItemId].Name }}</text>
 										</view>
 										<view class="item-info-row">
 											<text class="item-spec">{{ itemsMap[serial.ItemId].Specification || '-'
 											}}</text>
-											<text class="item-stock"
-												:class="{ 'text-red-bold': isStockInsufficient(itemsMap[serial.ItemId]) }">x
-												{{ itemsMap[serial.ItemId].AvailableStock || 0
-												}}</text>
+											<view class="item-stock"
+												:class="{ 'text-red-bold': isStockInsufficient(itemsMap[serial.ItemId]) }">
+												<text>x {{ itemsMap[serial.ItemId].AvailableStock || 0 }}</text>
+												<text class="item-cardinality"
+													v-if="itemsMap[serial.ItemId].Cardinality"> / {{
+														itemsMap[serial.ItemId].Cardinality }}</text>
+												<text class="item-unit" v-if="itemsMap[serial.ItemId].Unit">{{
+													itemsMap[serial.ItemId].Unit }}</text>
+											</view>
 										</view>
 										<view class="item-expiry">
 											<text
@@ -284,7 +298,7 @@ export default {
 				const res = await request.post('api/ssbh/Position/GetPageData', {
 					page: 1, rows: 100,
 					wheres: JSON.stringify([
-						{ name: 'Category', value: [10, 100] },
+						{ name: 'Category', value: "10,100", DisplayType: 'in' },
 						{ name: 'OrganizationId', value: this.userOrgInfo.OrganizationId },
 						{ name: 'DepartmentId', value: this.userOrgInfo.DepartmentId }
 					]),
@@ -318,7 +332,7 @@ export default {
 					page: 1, rows: 500,
 					wheres: JSON.stringify([
 						{ name: 'Category', value: 110 },
-						{ name: 'ParentId', value: floorIds }
+						{ name: 'ParentId', value: floorIds.join(','), DisplayType: 'in' }
 					]),
 					sort: 'SerialId', order: 'asc'
 				});
@@ -648,8 +662,25 @@ export default {
 			const days = this.getDaysUntil(dateStr);
 			if (days < 0) return 'text-black';
 			if (days < 30) return 'text-red';
-			if (days <= 90) return 'text-yellow';
+			if (days <= 90) return 'text-yellow-bold';
 			return 'text-normal';
+		},
+		hasExpiryProblem(floor) {
+			return this.serialList.some(s => {
+				if (s.FloorId !== floor.Id) return false;
+				if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
+				const item = this.itemsMap[s.ItemId];
+				const days = this.getDaysUntil(item.LatestExpirationDate || item.ExpiryDate);
+				return days < 30;
+			});
+		},
+		hasStockProblem(floor) {
+			return this.serialList.some(s => {
+				if (s.FloorId !== floor.Id) return false;
+				if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
+				const item = this.itemsMap[s.ItemId];
+				return this.isStockInsufficient(item);
+			});
 		},
 		isStockInsufficient(item) {
 			if (!item) return false;
@@ -1090,11 +1121,28 @@ export default {
 	color: #909399;
 }
 
+.item-unit {
+	font-size: 10px;
+	color: inherit;
+	margin-left: 2px;
+	font-weight: normal;
+}
+
 .item-stock {
 	font-size: 11px;
 	font-weight: bold;
 	color: #666;
 	padding: 0 4px;
+	display: flex;
+	align-items: baseline;
+}
+
+.item-cardinality {
+	font-size: inherit;
+	color: inherit;
+	opacity: 0.8;
+	margin-left: 2px;
+	font-weight: normal;
 }
 
 .item-expiry {
@@ -1420,6 +1468,51 @@ export default {
 .text-red-bold {
 	color: #F56C6C !important;
 	font-weight: bold;
+}
+
+.floor-status-icons {
+	display: flex;
+	align-items: center;
+	margin-right: 8px;
+}
+
+.status-icon {
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: 4px;
+	background: #f5f7fa;
+}
+
+.status-icon.warning {
+	background: #FEF0F0;
+	border: 1px solid #F56C6C;
+}
+
+.status-icon.danger {
+	background: #FDF6EC;
+	border: 1px solid #E6A23C;
+}
+
+.status-bg-icon {
+	width: 16px;
+	height: 16px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.icon-clock {
+	/* Red Clock */
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23F56C6C'%3E%3Cpath d='M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8 8-8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z'/%3E%3C/svg%3E");
+}
+
+.icon-siren {
+	/* Orange Siren */
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23E6A23C'%3E%3Cpath d='M12 4c-3.3 0-6 2.7-6 6v4h12v-4c0-3.3-2.7-6-6-6zm-1 3h2v4h-2V7z'/%3E%3Cpath d='M5 16v3c0 1.1 0.9 2 2 2h10c1.1 0 2-0.9 2-2v-3H5z'/%3E%3Cpath d='M12 1.5l1.5 1.5-1.5 1.5-1.5-1.5L12 1.5zM4.5 5.5l2 2-1.5 1.5-2-2 1.5-1.5zM19.5 5.5l-2 2 1.5 1.5 2-2-1.5-1.5z'/%3E%3C/svg%3E");
 }
 
 .alert-bell {

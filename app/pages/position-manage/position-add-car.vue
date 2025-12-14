@@ -138,7 +138,7 @@ export default {
 
 .header-section {
     height: 200px;
-    background: linear-gradient(135deg, #A1C4FD 0%, #C2E9FB 100%);
+    background: linear-gradient(135deg, $sull-color-primary 0%, lighten($sull-color-primary, 20%) 100%);
     /* Soft Blue Gradient matching reference */
     padding: 20px 24px;
     display: flex;
@@ -232,7 +232,7 @@ export default {
 .submit-btn {
     width: 100%;
     height: 56px;
-    background: #95CAFF;
+    background: $sull-color-primary;
     /* Primary theme color */
     border-radius: 28px;
     color: #fff;
@@ -285,8 +285,8 @@ export default {
 
     &.active {
         background: rgba(149, 202, 255, 0.2);
-        color: #95CAFF;
-        border-color: #95CAFF;
+        color: $sull-color-primary;
+        border-color: $sull-color-primary;
         font-weight: 600;
     }
 

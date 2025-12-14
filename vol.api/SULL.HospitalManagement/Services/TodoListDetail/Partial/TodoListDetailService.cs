@@ -17,6 +17,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
 using SULL.HospitalManagement.IRepositories;
+using VOL.Core.ManageUser;
 
 namespace SULL.HospitalManagement.Services
 {
@@ -40,6 +41,23 @@ namespace SULL.HospitalManagement.Services
 
         public override WebResponseContent Add(SaveModel saveModel)
         {
+            AddOnExecuting = (detail, response) =>
+            {
+                // 权限校验：如果当前最新指定人不是登录的人，那么它无权处理信息
+                var exists = _repository.DbContext.Set<TodoList>().Any(x => x.Id == detail.TodoListId && x.LatestAssignUserId == UserContext.Current.UserId);
+                if (!exists)
+                {
+                    return new WebResponseContent().Error("非法操作");
+                }
+
+                if (detail.AssignUserId == null || detail.AssignUserId == 0)
+                {
+                    detail.AssignUserId = UserContext.Current.UserId;
+                    detail.AssignUser = UserContext.Current.UserTrueName;
+                }
+                return new WebResponseContent(true);
+            };
+
             AddOnExecuted = (detail, response) =>
             {
                 var db = _repository.DbContext;

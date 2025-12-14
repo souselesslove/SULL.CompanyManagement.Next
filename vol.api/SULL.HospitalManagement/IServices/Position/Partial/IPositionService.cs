@@ -9,5 +9,6 @@ namespace SULL.HospitalManagement.IServices
 {
     public partial interface IPositionService
     {
+        object GetPositionStatistics(long warehouseId);
     }
  }

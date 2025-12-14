@@ -61,6 +61,12 @@
 			}
 		},
 		{
+			"path": "pages/todo-list/todo-list",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/register/register",
 			"style": {
 				"navigationBarTitleText": "Register",

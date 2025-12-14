@@ -31,5 +31,10 @@ namespace SULL.HospitalManagement.Controllers
             _service = service;
             _httpContextAccessor = httpContextAccessor;
         }
+        [HttpGet, Route("Statistic")]
+        public IActionResult GetStatistic()
+        {
+            return JsonNormal(_service.GetTodoListStatistics());
+        }
     }
 }

@@ -138,7 +138,8 @@ export default {
                 Barcode: { label: '条码号', required: false },
                 OrderBy: { label: '排序', required: false }, // Default to (index+1)*10
                 SearchCode: { label: '检索码', required: false },
-                Remark: { label: '备注', required: false }
+                Remark: { label: '备注', required: false },
+                Tag: { label: '标签', required: false }
             },
 
             mapping: {}, // key (sysField) -> value (excelHeaderName)
@@ -618,7 +619,7 @@ export default {
 }
 
 .tab-item.active {
-    background: #95CAFF;
+    background: $sull-color-primary;
     color: #fff;
     font-weight: 600;
     box-shadow: 0 2px 6px rgba(149, 202, 255, 0.4);

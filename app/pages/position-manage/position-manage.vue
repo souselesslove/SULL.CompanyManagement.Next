@@ -69,6 +69,16 @@
                                 <text class="floor-sub">已用 {{ getOccupiedCount(floor) }} / 共 {{ floor.SerialId || 0 }}
                                     格</text>
                             </view>
+                            <!-- Status Icons -->
+                            <view class="floor-status-icons">
+                                <view class="status-icon warning" v-if="hasExpiryProblem(floor)">
+                                    <view class="status-bg-icon icon-clock"></view>
+                                </view>
+                                <view class="status-icon danger" v-if="hasStockProblem(floor)">
+                                    <view class="status-bg-icon icon-siren"></view>
+                                </view>
+                            </view>
+
                             <!-- Action Button -->
                             <view class="floor-action" @click.stop="showFloorActions(floor)">
                                 <text class="action-icon">⋮</text>
@@ -79,6 +89,7 @@
                         <view class="serial-grid-wrapper" v-if="floor.expanded">
                             <view class="serial-grid">
                                 <view class="serial-item" v-for="serial in getSerialsByFloor(floor.Id)" :key="serial.Id"
+                                    :class="{ 'expiry-warning': serial.ItemId > 0 && itemsMap[serial.ItemId] && isExpiryWarning(itemsMap[serial.ItemId]) }"
                                     @click="editSerial(serial)">
                                     <view class="serial-header">
                                         <text class="serial-no">{{ serial.SerialId || serial.OrderBy }}</text>
@@ -91,18 +102,25 @@
                                     <view class="item-detail" v-if="serial.ItemId > 0 && itemsMap[serial.ItemId]">
                                         <view class="item-name-wrapper">
                                             <text class="item-name-text"
-                                                :class="{ scrolling: (itemsMap[serial.ItemId].Name || '').length > 7 }">{{
-                                                itemsMap[serial.ItemId].Name }}</text>
+                                                :class="{ scrolling: (itemsMap[serial.ItemId].Name || '').length > 8 }">{{
+                                                    itemsMap[serial.ItemId].Name }}</text>
                                         </view>
                                         <view class="item-info-row">
                                             <text class="item-spec">{{ itemsMap[serial.ItemId].Specification || '-'
                                             }}</text>
-                                            <text class="item-stock">x {{ itemsMap[serial.ItemId].AvailableStock || 0
-                                            }}</text>
+                                            <view class="item-stock"
+                                                :class="{ 'text-red-bold': isStockInsufficient(itemsMap[serial.ItemId]) }">
+                                                <text>x {{ itemsMap[serial.ItemId].AvailableStock || 0 }}</text>
+                                                <text class="item-cardinality"
+                                                    v-if="itemsMap[serial.ItemId].Cardinality"> / {{
+                                                        itemsMap[serial.ItemId].Cardinality }}</text>
+                                                <text class="item-unit" v-if="itemsMap[serial.ItemId].Unit">{{
+                                                    itemsMap[serial.ItemId].Unit }}</text>
+                                            </view>
                                         </view>
                                         <view class="item-expiry">
-                                            <text :class="getExpiryClass(itemsMap[serial.ItemId].ExpiryDate)">
-                                                {{ formatDate(itemsMap[serial.ItemId].ExpiryDate) }}
+                                            <text :class="getExpiryClass(itemsMap[serial.ItemId].LatestExpirationDate)">
+                                                {{ formatDate(itemsMap[serial.ItemId].LatestExpirationDate) }}
                                             </text>
                                         </view>
                                     </view>
@@ -263,13 +281,21 @@ export default {
 
             // Item Manual
             showManualDialog: false,
-            itemRemarkContent: ''
+            itemRemarkContent: '',
+
+            // Filter
+            currentFilter: null
         };
     },
-    onLoad() {
+    onLoad(options) {
         const sysInfo = uni.getSystemInfoSync();
         this.statusBarHeight = sysInfo.statusBarHeight || 20;
         this.userOrgInfo = uni.getStorageSync('userOrgInfo') || {};
+
+        if (options && options.filter) {
+            this.currentFilter = options.filter; // 'AbnormalStock' or 'AbnormalExpiry'
+        }
+
         this.fetchData();
     },
     methods: {
@@ -304,7 +330,7 @@ export default {
                 const res = await request.post('api/ssbh/Position/GetPageData', {
                     page: 1, rows: 100,
                     wheres: JSON.stringify([
-                        { name: 'Category', value: [10, 100] },
+                        { name: 'Category', value: "10,100", DisplayType: 'in' },
                         { name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
                         { name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
                     ]),
@@ -344,7 +370,14 @@ export default {
                 if (this.floorList.length > 0) {
                     // Gather Floor IDs and fetch serials
                     const floorIds = this.floorList.map(f => f.Id);
-                    this.fetchSerialsByFloors(floorIds);
+
+                    if (this.currentFilter) {
+                        await this.fetchSerialsByFloors(floorIds);
+                        // Expand all floors if filtering
+                        this.floorList.forEach(f => this.$set(f, 'expanded', true));
+                    } else {
+                        this.fetchSerialsByFloors(floorIds);
+                    }
                 } else {
                     this.serialList = [];
                 }
@@ -359,7 +392,7 @@ export default {
                     page: 1, rows: 500,
                     wheres: JSON.stringify([
                         { name: 'Category', value: 110 },
-                        { name: 'ParentId', value: floorIds }
+                        { name: 'ParentId', value: floorIds.join(','), DisplayType: 'in' }
                     ]),
                     sort: 'OrderBy', order: 'asc'
                 });
@@ -374,7 +407,24 @@ export default {
         },
 
         getSerialsByFloor(floorId) {
-            return this.serialList.filter(s => s.FloorId === floorId);
+            let list = this.serialList.filter(s => s.FloorId === floorId);
+
+            if (this.currentFilter === 'AbnormalStock') {
+                list = list.filter(s => {
+                    const item = this.itemsMap[s.ItemId];
+                    // Stock Warning: stock < cardinality or stock <= 0
+                    return item && this.isStockInsufficient(item);
+                });
+            } else if (this.currentFilter === 'AbnormalExpiry') {
+                list = list.filter(s => {
+                    const item = this.itemsMap[s.ItemId];
+                    if (!item) return false;
+                    const days = this.getDaysUntil(item.LatestExpirationDate);
+                    return days < 30;
+                });
+            }
+
+            return list;
         },
 
         async fetchItemDetails(ids) {
@@ -758,6 +808,50 @@ export default {
         },
         onLoadMore() {
             // Placeholder
+        },
+        getDaysUntil(dateStr) {
+            if (!dateStr) return 9999;
+            const now = new Date();
+            const target = new Date(dateStr);
+            return Math.ceil((target.getTime() - now.getTime()) / (1000 * 3600 * 24));
+        },
+        getExpiryClass(dateStr) {
+            const days = this.getDaysUntil(dateStr);
+            if (days < 0) return 'text-black'; // Expired
+            if (days < 30) return 'text-red-bold'; // Urgent warning
+            if (days <= 90) return 'text-yellow-bold'; // Warning
+            return 'text-normal';
+        },
+        isStockInsufficient(item) {
+            if (!item) return false;
+            const stock = item.AvailableStock || 0;
+            const base = item.Cardinality || 0;
+            return stock < base || stock === 0;
+        },
+        isExpiryWarning(item) {
+            if (!item || !item.LatestExpirationDate) return false;
+            const days = this.getDaysUntil(item.LatestExpirationDate);
+            return days < 30; // Matches warning logic
+        },
+        hasExpiryProblem(floor) {
+            // Check full list for this floor, ignoring current filter
+            // Logic: Expiry < 30 days (User defined "AbnormalExpiry" as < 30)
+            return this.serialList.some(s => {
+                if (s.FloorId !== floor.Id) return false;
+                if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
+                const item = this.itemsMap[s.ItemId];
+                const days = this.getDaysUntil(item.LatestExpirationDate);
+                return days < 30;
+            });
+        },
+        hasStockProblem(floor) {
+            // Logic: Stock < Cardinality
+            return this.serialList.some(s => {
+                if (s.FloorId !== floor.Id) return false;
+                if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
+                const item = this.itemsMap[s.ItemId];
+                return this.isStockInsufficient(item);
+            });
         }
     }
 }
@@ -775,7 +869,7 @@ export default {
 
 .header-section {
     height: 200px;
-    background: linear-gradient(135deg, #1890FF 0%, #36CFCA 100%);
+    background: linear-gradient(135deg, $sull-color-primary 0%, lighten($sull-color-primary, 20%) 100%);
     padding: 0 24px;
     display: flex;
     flex-direction: column;
@@ -857,6 +951,7 @@ export default {
     height: 20px;
     background-color: #fff;
     -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
     -webkit-mask-size: contain;
     mask-size: contain;
     -webkit-mask-repeat: no-repeat;
@@ -965,7 +1060,7 @@ export default {
 .add-floor-btn {
     height: 48px;
     /** 56px in Add Car, but 48px is fine here */
-    background: #95CAFF;
+    background: $sull-color-primary;
     border-radius: 28px;
     display: flex;
     align-items: center;
@@ -1150,6 +1245,11 @@ export default {
         0 1px 2px rgba(255, 255, 255, 0.8),
         0 0 0 1px rgba(0, 0, 0, 0.03);
     border: 1px solid #E4E7ED;
+
+    &.expiry-warning {
+        border: 1px solid #F56C6C !important;
+        background-color: #FFF0F0;
+    }
 }
 
 .serial-header {
@@ -1238,10 +1338,39 @@ export default {
 .item-stock {
     font-size: 11px;
     font-weight: bold;
-    color: #409EFF;
-    background: rgba(64, 158, 255, 0.1);
+    color: #666;
     padding: 0 4px;
-    border-radius: 4px;
+    display: flex;
+    align-items: baseline;
+}
+
+.text-red-bold {
+    color: #F56C6C !important;
+    background: rgba(245, 108, 108, 0.1) !important;
+}
+
+.text-yellow-bold {
+    color: #E6A23C !important;
+}
+
+.text-black {
+    color: #303133 !important;
+    font-weight: bold !important;
+}
+
+.item-cardinality {
+    font-size: inherit;
+    color: inherit;
+    opacity: 0.8;
+    margin-left: 2px;
+    font-weight: normal;
+}
+
+.item-unit {
+    font-size: 10px;
+    color: inherit;
+    margin-left: 2px;
+    font-weight: normal;
 }
 
 .item-expiry {
@@ -1287,6 +1416,53 @@ export default {
     flex-direction: column;
     align-items: center;
     gap: 10px;
+}
+
+
+
+.floor-status-icons {
+    display: flex;
+    align-items: center;
+    margin-right: 8px;
+}
+
+.status-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 4px;
+    background: #f5f7fa;
+}
+
+.status-icon.warning {
+    background: #FEF0F0;
+    border: 1px solid #F56C6C;
+}
+
+.status-icon.danger {
+    background: #FDF6EC;
+    border: 1px solid #E6A23C;
+}
+
+.status-bg-icon {
+    width: 16px;
+    height: 16px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.icon-clock {
+    /* Red Clock */
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23F56C6C'%3E%3Cpath d='M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8 8-8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z'/%3E%3C/svg%3E");
+}
+
+.icon-siren {
+    /* Orange Siren */
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23E6A23C'%3E%3Cpath d='M12 4c-3.3 0-6 2.7-6 6v4h12v-4c0-3.3-2.7-6-6-6zm-1 3h2v4h-2V7z'/%3E%3Cpath d='M5 16v3c0 1.1 0.9 2 2 2h10c1.1 0 2-0.9 2-2v-3H5z'/%3E%3Cpath d='M12 1.5l1.5 1.5-1.5 1.5-1.5-1.5L12 1.5zM4.5 5.5l2 2-1.5 1.5-2-2 1.5-1.5zM19.5 5.5l-2 2 1.5 1.5 2-2-1.5-1.5z'/%3E%3C/svg%3E");
 }
 
 /* Custom Action Sheet */
