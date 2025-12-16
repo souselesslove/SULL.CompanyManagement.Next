@@ -1,8 +1,6 @@
 <template>
 	<view class="container">
-		<scroll-view class="main-scroll" scroll-y @scroll="onScroll" :scroll-top="scrollTop" lower-threshold="50"
-			@scrolltolower="onLoadMore" refresher-enabled @refresherrefresh="onRefresh"
-			:refresher-triggered="isRefreshing" scroll-with-animation>
+		<view class="main-content">
 
 			<!-- Header Gradient Section matching Position Manage -->
 			<view class="header-section" :style="{ paddingTop: (statusBarHeight + 10) + 'px' }">
@@ -107,10 +105,8 @@
 											</view>
 										</view>
 										<view class="item-expiry">
-											<text
-												:class="getExpiryClass(itemsMap[serial.ItemId].LatestExpirationDate || itemsMap[serial.ItemId].ExpiryDate)">
-												{{ formatDate(itemsMap[serial.ItemId].LatestExpirationDate ||
-													itemsMap[serial.ItemId].ExpiryDate) }}
+											<text :class="itemsMap[serial.ItemId].ExpiryClass">
+												{{ itemsMap[serial.ItemId].FormattedDate }}
 											</text>
 										</view>
 									</view>
@@ -129,7 +125,7 @@
 
 			<view class="bottom-spacer"></view>
 			<FooterInfo />
-		</scroll-view>
+		</view>
 
 		<BackToTop :scroll-top="scrollTop" @click="goTop" />
 
@@ -261,7 +257,27 @@ export default {
 		},
 		canSubmit() {
 			return this.selectedBatchId && this.outQty > 0 && this.outQty <= this.maxQty;
+		},
+		floorSerialsMap() {
+			const map = {};
+			this.floorList.forEach(f => map[f.Id] = []);
+			this.serialList.forEach(s => {
+				if (!map[s.FloorId]) map[s.FloorId] = [];
+				map[s.FloorId].push(s);
+			});
+			return map;
 		}
+	},
+	onPageScroll(e) {
+		this.scrollTop = e.scrollTop;
+	},
+	onPullDownRefresh() {
+		this.isRefreshing = true;
+		this.fetchData().then(() => {
+			this.isRefreshing = false;
+			uni.showToast({ title: '已刷新', icon: 'none' });
+			uni.stopPullDownRefresh();
+		});
 	},
 	onLoad() {
 		const sysInfo = uni.getSystemInfoSync();
@@ -272,18 +288,9 @@ export default {
 	methods: {
 		goBack() { uni.navigateBack(); },
 		goTop() {
-			this.scrollTop = this.oldScrollTop;
-			this.$nextTick(() => { this.scrollTop = 0; });
-		},
-		onScroll(e) {
-			this.scrollTop = e.detail.scrollTop;
-			this.oldScrollTop = e.detail.scrollTop;
-		},
-		onRefresh() {
-			this.isRefreshing = true;
-			this.fetchData().then(() => {
-				this.isRefreshing = false;
-				uni.showToast({ title: '已刷新', icon: 'none' });
+			uni.pageScrollTo({
+				scrollTop: 0,
+				duration: 300
 			});
 		},
 
@@ -354,21 +361,28 @@ export default {
 						{ name: 'DepartmentId', value: this.userOrgInfo.DepartmentId }])
 					});
 					if (res.rows && res.rows.length > 0) {
-						this.$set(this.itemsMap, id, res.rows[0]);
+						const item = res.rows[0];
+						const dateToUse = item.LatestExpirationDate || item.ExpiryDate;
+						// Pre-calculate
+						const days = this.getDaysUntil(dateToUse);
+						item.FormattedDate = this.formatDate(dateToUse);
+						item.ExpiryClass = this.getExpiryClass(dateToUse);
+						item.IsStockInsufficient = ((item.AvailableStock || 0) < (item.Cardinality || 0)) || (item.AvailableStock || 0) <= 0;
+						item.IsExpiryWarning = days < 30;
+
+						this.$set(this.itemsMap, id, item);
 					}
 				} catch (e) { }
 			}
 		},
 		getSerialsByFloor(floorId) {
-			return this.serialList.filter(s => s.FloorId === floorId);
+			return this.floorSerialsMap[floorId] || [];
 		},
 		getOccupiedCount(floor) {
 			const serials = this.getSerialsByFloor(floor.Id);
 			return serials.filter(s => s.ItemId && s.ItemId > 0).length;
 		},
 		getFloorStatusClass(floor) {
-			// Simplified status for Outbound (maybe just show stock status)
-			// Copy logic from position-manage basically
 			const serials = this.getSerialsByFloor(floor.Id);
 			if (!serials || serials.length === 0) return 'blink-green';
 			let hasExpiryWarning = false;
@@ -376,9 +390,8 @@ export default {
 			for (let s of serials) {
 				if (s.ItemId > 0 && this.itemsMap[s.ItemId]) {
 					const item = this.itemsMap[s.ItemId];
-					const days = this.getDaysUntil(item.ExpiryDate);
-					if (days < 30) { hasExpiryWarning = true; break; }
-					if (item.AvailableStock < item.Cardinality || item.AvailableStock <= 0) { hasStockWarning = true; }
+					if (item && item.IsExpiryWarning) { hasExpiryWarning = true; break; }
+					if (item && item.IsStockInsufficient) { hasStockWarning = true; }
 				}
 			}
 			if (hasExpiryWarning) return 'blink-red';
@@ -666,30 +679,32 @@ export default {
 			return 'text-normal';
 		},
 		hasExpiryProblem(floor) {
-			return this.serialList.some(s => {
-				if (s.FloorId !== floor.Id) return false;
-				if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
+			const serials = this.getSerialsByFloor(floor.Id);
+			return serials.some(s => {
+				if (!s.ItemId) return false;
 				const item = this.itemsMap[s.ItemId];
-				const days = this.getDaysUntil(item.LatestExpirationDate || item.ExpiryDate);
-				return days < 30;
+				return item && this.isExpiryWarning(item);
 			});
 		},
 		hasStockProblem(floor) {
-			return this.serialList.some(s => {
-				if (s.FloorId !== floor.Id) return false;
-				if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
+			const serials = this.getSerialsByFloor(floor.Id);
+			return serials.some(s => {
+				if (!s.ItemId) return false;
 				const item = this.itemsMap[s.ItemId];
-				return this.isStockInsufficient(item);
+				return item && this.isStockInsufficient(item);
 			});
 		},
 		isStockInsufficient(item) {
 			if (!item) return false;
+			if (typeof item.IsStockInsufficient !== 'undefined') return item.IsStockInsufficient;
+
 			const stock = item.AvailableStock || 0;
-			const base = item.BaseStock || 0; // Assuming BaseStock exists
+			const base = item.Cardinality || 0;
 			return stock < base || stock === 0;
 		},
 		isExpiryWarning(item) {
-			// Prefer LatestExpirationDate, allow ExpiryDate fallback if needed, or stick to Latest
+			if (typeof item.IsExpiryWarning !== 'undefined') return item.IsExpiryWarning;
+
 			const date = item.LatestExpirationDate || item.ExpiryDate;
 			if (!date) return false;
 			const days = this.getDaysUntil(date);
@@ -706,8 +721,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 // Layout & structure from position-manage.vue
 .container {
 	background-color: #F7F8FA;
@@ -814,6 +827,7 @@ export default {
 	height: 20px;
 	background-color: #fff;
 	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
+	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
 	-webkit-mask-size: contain;
 	mask-size: contain;
 	-webkit-mask-repeat: no-repeat;
@@ -1182,7 +1196,7 @@ export default {
 	display: flex;
 	flex-direction: column;
 	animation: slideUp 0.3s ease;
-	max-height: 85vh;
+	max-height: 95vh;
 }
 
 .modal-header {
@@ -1561,5 +1575,28 @@ export default {
 	100% {
 		transform: rotate(0) scale(1);
 	}
+}
+
+/* Page Scroll Fix */
+page {
+	min-height: 100%;
+	height: auto;
+	overflow-y: auto;
+	background-color: $sull-color-background;
+}
+
+.container {
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+	height: auto;
+	width: 100%;
+	overflow: visible;
+	background-color: $sull-color-background;
+}
+
+.main-content {
+	flex: 1;
+	width: 100%;
 }
 </style>

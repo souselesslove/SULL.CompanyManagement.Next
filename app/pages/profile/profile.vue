@@ -495,10 +495,8 @@ export default {
 					} catch (e) {
 						data = uploadFileRes.data;
 					}
-
 					if (uploadFileRes.statusCode === 200 && (data.status || data.success)) {
 						// Update avatar path
-						console.log('==========', filePath);
 						const newAvatarPath = data.data + fileName;
 						if (newAvatarPath) {
 							// Create update payload with existing user info and new avatar
@@ -598,8 +596,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 .container {
 	display: flex;
 	flex-direction: column;

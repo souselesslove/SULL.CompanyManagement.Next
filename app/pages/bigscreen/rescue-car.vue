@@ -10,7 +10,7 @@
 				<view class="info-section">
 					<view class="card-header">
 						<view class="header-left">
-							<view class="header-icon">🏥</view>
+							<view class="header-icon">🚑</view>
 							<text class="header-title">{{ rescueCar.DisplayName || rescueCar.Name || '骨伤一科' }}</text>
 						</view>
 						<view class="header-right">
@@ -72,7 +72,7 @@
 							<view class="tasks-grid-2x2">
 								<view class="task-item-compact">
 									<view class="task-header">
-										<view class="task-icon-small">🔄</view>
+										<view class="task-icon-small">📋</view>
 										<text class="task-label-inline">{{ $t('bigScreen.rescueCar.handover') }}</text>
 										<text class="task-status normal">{{ $t('bigScreen.rescueCar.statusNormal')
 										}}</text>
@@ -104,7 +104,7 @@
 								</view>
 								<view class="task-item-compact">
 									<view class="task-header">
-										<view class="task-icon-small">📝</view>
+										<view class="task-icon-small">✅</view>
 										<text class="task-label-inline">{{ $t('bigScreen.rescueCar.check') }}</text>
 										<text class="task-status normal">{{ $t('bigScreen.rescueCar.statusNormal')
 										}}</text>
@@ -219,7 +219,7 @@
 										<view v-if="hasExpired(layer)" class="icon-btn"
 											@click.stop="setFilter(index, 'expired')"
 											:class="{ 'active': layer.filterType === 'expired' }">
-											<text class="info-icon">🚫</text>
+											<text class="info-icon">⚠️</text>
 										</view>
 										<view v-if="hasNearExpiry(layer)" class="icon-btn"
 											@click.stop="setFilter(index, 'nearExpiry')"
@@ -250,7 +250,7 @@
 												</view>
 												<view v-if="item.days <= 30" class="status-icon"
 													:class="{ 'icon-warn': item.days < 30 && item.days >= 0, 'shaking': item.days < 0 }">
-													🔔</view>
+													⚠️</view>
 											</view>
 											<view class="card-row middle-row">
 												<view class="spec-qty-container">
@@ -378,7 +378,6 @@ export default {
 					sort: 'OrderBy', order: 'asc'
 				});
 				const floors = res.rows || [];
-				console.log('Floors:', floors);
 				if (floors.length > 0) {
 					// In position-manage, it filters locally, here we query. 
 					// We need to fetch serials for ALL floors found.
@@ -464,6 +463,9 @@ export default {
 		transformToLayers(floors, serials) {
 			this.layers = floors.map(floor => {
 				const floorSerials = serials.filter(s => s.FloorId === floor.Id);
+				// Sort by SerialId as requested
+				floorSerials.sort((a, b) => (a.SerialId || 0) - (b.SerialId || 0));
+
 				// Map serials to dashboard items
 				// We need to show ALL serials, even if empty.
 				const items = floorSerials.map((s, index) => {
@@ -570,8 +572,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 /* Apply border-box selectively to prevent overflow */
 .container,
 .content,
@@ -1403,116 +1403,5 @@ page {
 
 .text-warning {
 	color: #faad14;
-}
-
-
-
-/* Bottom Navigation */
-.bottom-nav {
-	position: fixed;
-	bottom: 0;
-	left: 0;
-	width: 100%;
-	height: 90px;
-	background: $sull-color-white;
-	display: flex;
-	justify-content: space-around;
-	align-items: center;
-	padding-bottom: calc(20px + constant(safe-area-inset-bottom));
-	padding-bottom: calc(20px + env(safe-area-inset-bottom));
-	box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
-	border-radius: 24px 24px 0 0;
-}
-
-.nav-item {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	width: 60px;
-}
-
-.nav-icon {
-	width: 24px;
-	height: 24px;
-	margin-bottom: 4px;
-	background-color: $sull-gray-50;
-	-webkit-mask-size: contain;
-	-webkit-mask-repeat: no-repeat;
-	-webkit-mask-position: center;
-	mask-size: contain;
-	mask-repeat: no-repeat;
-	mask-position: center;
-}
-
-.nav-label {
-	font-size: $font-size-body-xs;
-	color: $sull-gray-50;
-}
-
-.nav-item.active .nav-icon {
-	background-color: $sull-color-primary;
-}
-
-.nav-item.active .nav-label {
-	color: $sull-color-primary;
-}
-
-.center-item {
-	position: relative;
-	top: -30px;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-}
-
-.center-btn {
-	width: 60px;
-	height: 60px;
-	background: $sull-color-primary;
-	border-radius: $radius-circle;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	box-shadow: 0 10px 20px rgba(149, 202, 255, 0.4);
-	border: 4px solid $sull-color-white;
-	margin-bottom: 4px;
-}
-
-.center-icon {
-	width: 32px;
-	height: 32px;
-	background-color: #fff;
-	-webkit-mask-size: contain;
-	-webkit-mask-repeat: no-repeat;
-	-webkit-mask-position: center;
-	mask-size: contain;
-	mask-repeat: no-repeat;
-	mask-position: center;
-}
-
-/* Navigation Icons */
-.icon-home {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z'/%3E%3C/svg%3E");
-}
-
-.icon-screen {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H3V4h18v12z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H3V4h18v12z'/%3E%3C/svg%3E");
-}
-
-.icon-scan {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z'/%3E%3C/svg%3E");
-}
-
-.icon-stats {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z'/%3E%3C/svg%3E");
-}
-
-.icon-user {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E");
 }
 </style>

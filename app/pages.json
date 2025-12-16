@@ -21,6 +21,13 @@
 			}
 		},
 		{
+			"path": "pages/sealing/sealing",
+			"style": {
+				"navigationBarTitleText": "%registerCode.title%",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/handover-check/handover-check",
 			"style": {
 				"navigationBarTitleText": "%handoverCheck.title%",

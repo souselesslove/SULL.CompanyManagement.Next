@@ -314,7 +314,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
+
 
 page {
     background-color: #F8F8F8;

@@ -51,12 +51,13 @@ namespace SULL.HospitalManagement.Services
             base.AddOnExecuting = (obj, o) =>
             {
                 var exist = _repository.FindFirst(x => x.CreatorId == UserContext.Current.UserId
-                && x.Category == obj.Category
-                && (string.IsNullOrWhiteSpace(obj.ShiftName) || x.ShiftName == obj.ShiftName)
-                && x.RelatedId == obj.RelatedId
-                && x.IsDeleted != true
-                && (startTime == null || (x.ShiftTime >= startTime.Value.Date
-                                          && x.ShiftTime < startTime.Value.Date.AddDays(1))));
+                                                       && x.Category == obj.Category
+                                                       && (string.IsNullOrWhiteSpace(obj.ShiftName) ||
+                                                           x.ShiftName == obj.ShiftName)
+                                                       && x.RelatedId == obj.RelatedId
+                                                       && x.IsDeleted != true
+                                                       && (startTime == null || (x.ShiftTime >= startTime.Value.Date
+                                                           && x.ShiftTime < startTime.Value.Date.AddDays(1))));
                 return exist == null ? new WebResponseContent(true) : new WebResponseContent().Error("重复交接班");
             };
 
@@ -68,29 +69,30 @@ namespace SULL.HospitalManagement.Services
                     // 1. 获取该抢救车（Position）绑定的所有物品
                     // 抢救车编号通过 RelatedId (对应Position的warehouseId) 获取
                     // 查询条件: OrganizationId, DepartmentId, WarehouseId = handover.RelatedId, Category = 110 (具体绑定的物品位置)
-                    
+
                     var db = _repository.DbContext;
                     var relatedId = handover.RelatedId; // 抢救车ID
 
                     // 使用 Join 联表查询 Position -> ItemDetail -> Item
                     //以此一次性获取所需的所有信息
                     var query = from p in db.Set<Position>()
-                                join d in db.Set<ItemDetail>().Where(x => x.IsDeleted != true) on p.ItemId equals d.ItemId into details
-                                from d in details.DefaultIfEmpty()
-                                where p.OrganizationId == handover.OrganizationId
-                                   && p.DepartmentId == handover.DepartmentId
-                                   && p.WarehouseId == relatedId
-                                   && p.Category == 110 // 绑定物品的层级/位置
-                                   && p.IsDeleted != true
-                                   && p.ItemId != null
-                                select new 
-                                {
-                                    ItemId = p.ItemId ?? 0,
-                                    ItemDetailId = d != null ? d.Id : 0,
-                                    ItemName = p.ItemName,
-                                    ItemCounter = d != null ? d.Stock : 0,
-                                    ExpirationDate = d != null ? (DateTime?)d.ExpirationDate : null
-                                };
+                        join d in db.Set<ItemDetail>().Where(x => x.IsDeleted != true) on p.ItemId equals d.ItemId into
+                            details
+                        from d in details.DefaultIfEmpty()
+                        where p.OrganizationId == handover.OrganizationId
+                              && p.DepartmentId == handover.DepartmentId
+                              && p.WarehouseId == relatedId
+                              && p.Category == 110 // 绑定物品的层级/位置
+                              && p.IsDeleted != true
+                              && p.ItemId != null
+                        select new
+                        {
+                            ItemId = p.ItemId ?? 0,
+                            ItemDetailId = d != null ? d.Id : 0,
+                            ItemName = p.ItemName,
+                            ItemCounter = d != null ? d.Stock : 0,
+                            ExpirationDate = d != null ? (DateTime?)d.ExpirationDate : null
+                        };
 
                     var resultList = query.ToList();
 
@@ -116,14 +118,13 @@ namespace SULL.HospitalManagement.Services
                         db.SaveChanges();
                     }
                 }
+
                 return new WebResponseContent(true);
             };
-            
+
             // 使用细粒度锁防止重复提交
-            return KeyLock.Lock($"Handover_Add_{UserContext.Current.UserId}_{saveModel.MainData["RelatedId"]}", () =>
-            {
-                return base.Add(saveModel);
-            });
+            return KeyLock.Lock($"Handover_Add_{UserContext.Current.UserId}_{saveModel.MainData["RelatedId"]}",
+                () => { return base.Add(saveModel); });
         }
 
         public override WebResponseContent Update(SaveModel saveModel)
@@ -133,7 +134,8 @@ namespace SULL.HospitalManagement.Services
                 string statusStr = status.ToString();
                 if (statusStr == "10" || statusStr == "20")
                 {
-                    if (saveModel.MainData.TryGetValue("Id", out object id) && id != null && long.TryParse(id.ToString(), out long handoverId))
+                    if (saveModel.MainData.TryGetValue("Id", out object id) && id != null &&
+                        long.TryParse(id.ToString(), out long handoverId))
                     {
                         var entity = _repository.FindFirst(x => x.Id == handoverId);
                         if (entity == null)
@@ -147,23 +149,28 @@ namespace SULL.HospitalManagement.Services
                             {
                                 return new WebResponseContent().Error("非法操作");
                             }
-                            
+
                             saveModel.MainData["operate"] = "complete";
-                            _messageProducer.PublishAsync(saveModel, Define.ExchangeName, Define.TodoQueue).GetAwaiter().GetResult();
+                            saveModel.MainData["Kind"] = 1;
+                            _messageProducer.PublishAsync(saveModel, Define.ExchangeName, Define.TodoQueue).GetAwaiter()
+                                .GetResult();
                         }
                         else if (statusStr == "20")
                         {
-                             if (entity.AuditStatus != 10)
-                             {
-                                 return new WebResponseContent().Error("非法操作");
-                             }
-                             saveModel.MainData["AuditUserId"] = UserContext.Current.UserId;
-                             saveModel.MainData["AuditUser"] = UserContext.Current.UserTrueName;
-                             saveModel.MainData["AuditTime"] = DateTime.Now;
+                            if (entity.AuditStatus != 10)
+                            {
+                                return new WebResponseContent().Error("非法操作");
+                            }
+
+                            saveModel.MainData["Kind"] = 1;
+                            saveModel.MainData["AuditUserId"] = UserContext.Current.UserId;
+                            saveModel.MainData["AuditUser"] = UserContext.Current.UserTrueName;
+                            saveModel.MainData["AuditTime"] = DateTime.Now;
                         }
                     }
                 }
             }
+
             return base.Update(saveModel);
         }
     }

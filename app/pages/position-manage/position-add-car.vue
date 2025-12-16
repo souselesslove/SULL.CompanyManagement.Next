@@ -127,7 +127,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
+
 
 .container {
     min-height: 100vh;

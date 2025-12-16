@@ -107,7 +107,7 @@
                                         </view>
                                         <view class="item-info-row">
                                             <text class="item-spec">{{ itemsMap[serial.ItemId].Specification || '-'
-                                            }}</text>
+                                                }}</text>
                                             <view class="item-stock"
                                                 :class="{ 'text-red-bold': isStockInsufficient(itemsMap[serial.ItemId]) }">
                                                 <text>x {{ itemsMap[serial.ItemId].AvailableStock || 0 }}</text>
@@ -858,8 +858,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 .container {
     background-color: #F7F8FA;
     height: 100vh;

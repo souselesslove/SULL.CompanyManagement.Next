@@ -197,7 +197,7 @@
 </script>
 
 <style lang="scss" scoped>
-	@import '@/sull.scss';
+	
 	.container { background-color: $sull-color-background; height: 100vh; display: flex; flex-direction: column; }
 	.custom-nav { background-color: $sull-color-white; position: fixed; top: 0; left: 0; width: 100%; z-index: 999; box-shadow: 0 1px 4px rgba(0,0,0,0.03); 
 		.nav-content { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; 

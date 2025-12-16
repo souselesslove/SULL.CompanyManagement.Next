@@ -35,10 +35,10 @@ namespace VOL.Entity.DomainModels
        [Required(AllowEmptyStrings=false)]
        public long TodoListId { get; set; }
 
-       /// <summary>
-       ///物品名称
-       /// </summary>
-       [Display(Name ="物品名称")]
+        /// <summary>
+        ///描述信息
+        /// </summary>
+        [Display(Name = "描述信息")]
        [MaxLength(128)]
        [Column(TypeName="nvarchar(128)")]
        [Editable(true)]

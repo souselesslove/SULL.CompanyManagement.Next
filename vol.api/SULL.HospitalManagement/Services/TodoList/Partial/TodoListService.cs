@@ -63,6 +63,8 @@ namespace SULL.HospitalManagement.Services
 
         public override WebResponseContent Add(SaveModel saveDataModel)
         {
+            if (saveDataModel.DetailData == null || saveDataModel.DetailData.Count == 0)
+                return new WebResponseContent(false).Error("信息不全");
             var desc = saveDataModel.DetailData[0]["Description"].ToString();
             var status = saveDataModel.DetailData[0]["Status"].GetByte();
             saveDataModel.DetailData = null;

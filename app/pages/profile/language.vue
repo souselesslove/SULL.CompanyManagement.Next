@@ -116,7 +116,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
+
 
 page {
     background-color: $sull-color-background;

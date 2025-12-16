@@ -45,9 +45,9 @@ namespace VOL.Entity.DomainModels
        public byte Category { get; set; }
 
        /// <summary>
-       ///物品名称
+       ///描述信息
        /// </summary>
-       [Display(Name ="物品名称")]
+       [Display(Name ="描述信息")]
        [MaxLength(128)]
        [Column(TypeName="nvarchar(128)")]
        [Editable(true)]
@@ -188,20 +188,27 @@ namespace VOL.Entity.DomainModels
        public DateTime? Deadline { get; set; }
 
        /// <summary>
+       ///分类
+       /// </summary>
+       [Display(Name ="分类")]
+       [Column(TypeName="tinyint")]
+       [Editable(true)]
+       [Required(AllowEmptyStrings=false)]
+       public byte Kind { get; set; }
+
+       /// <summary>
        ///创建时间
        /// </summary>
        [Display(Name ="创建时间")]
        [Column(TypeName="datetime")]
-       [Editable(true)]
-        public DateTime? CreationTime { get; set; }
+       public DateTime? CreationTime { get; set; }
 
        /// <summary>
        ///创建人编号
        /// </summary>
        [Display(Name ="创建人编号")]
        [Column(TypeName="int")]
-       [Editable(true)]
-        public int? CreatorId { get; set; }
+       public int? CreatorId { get; set; }
 
        
     }

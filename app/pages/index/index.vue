@@ -13,10 +13,7 @@
 			<!-- Header (Now inside scroll-view) -->
 			<view class="header">
 				<view class="header-left">
-					<text class="greeting">{{ $t('index.greeting', {
-						name: userInfo.userTrueName || userInfo.userName ||
-							'用户'
-					}) }}</text>
+					<text class="greeting">{{ greetingText }}</text>
 					<text class="subtitle">{{ userOrgInfo.Department ? userOrgInfo.Department.Name : $t('index.dept')
 					}}</text>
 				</view>
@@ -178,8 +175,8 @@
 					<text class="close-btn" @click="closeAddRescueCar">×</text>
 				</view>
 				<view class="modal-body">
-					<input class="modal-input" v-model="addCarForm.Name" placeholder="抢救车名称 (如: 1号车)" />
-					<input class="modal-input" type="number" v-model="addCarForm.Floor" placeholder="层数 (如: 5)" />
+					<input class="modal-input" v-model="addCarForm.Name" placeholder="抢救车名(如1号车)" />
+					<input class="modal-input" type="number" v-model="addCarForm.Floor" placeholder="层数 (如5)" />
 				</view>
 				<view class="modal-footer">
 					<button class="btn btn-secondary btn-sm" @click="closeAddRescueCar">取消</button>
@@ -197,7 +194,7 @@
 				</view>
 				<scroll-view scroll-y class="modal-body timeline-body">
 					<view v-if="timelineLoading" class="loading-state">
-						<text>加载中...</text>
+						<text>加载�.</text>
 					</view>
 					<view v-else-if="timelineData.length === 0" class="empty-state-simple">
 						<text class="empty-text-simple">暂无处理记录</text>
@@ -221,9 +218,9 @@
 								</view>
 								<view class="timeline-desc">{{ item.Description }}</view>
 								<view class="timeline-footer">
-									<text class="timeline-status" v-if="item.Status">状态: {{ getStatusText(item.Status)
+									<text class="timeline-status" v-if="item.Status">状� {{ getStatusText(item.Status)
 									}}</text>
-									<text class="timeline-assign" v-if="item.AssignUser">处理人: {{ item.AssignUser
+									<text class="timeline-assign" v-if="item.AssignUser">处理�{{ item.AssignUser
 									}}</text>
 									<text class="timeline-remark" v-if="item.Remark">备注: {{ item.Remark }}</text>
 								</view>
@@ -272,11 +269,11 @@ export default {
 				{ labelKey: 'index.actions.itemOutbound', icon: '📤' },
 				{ labelKey: 'index.actions.virtualPos', icon: '📍' },
 				{ labelKey: 'index.actions.sealing', icon: '🔒' },
-				{ labelKey: 'index.actions.inventory', icon: '📋', reminder: true },
+				// { labelKey: 'index.actions.inventory', icon: '📋', reminder: true },
 				{ labelKey: 'index.actions.records', icon: '📝' },
-				{ labelKey: 'index.actions.cleaning', icon: '✨' },
-				{ labelKey: 'index.actions.report', icon: '🔧' },
-				{ labelKey: 'index.actions.learning', icon: '📖' },
+				{ labelKey: 'index.actions.cleaning', icon: '🧹' },
+				// { labelKey: 'index.actions.report', icon: '🔧' },
+				// { labelKey: 'index.actions.learning', icon: '📖' },
 				{ labelKey: 'index.actions.itemManage', icon: '📦' },
 			],
 			alerts: [],
@@ -351,6 +348,12 @@ export default {
 				if (this.currentTodoTab === 'other') return cat === 0 || cat === 40;
 				return true;
 			});
+		},
+		greetingText() {
+			const name = this.userInfo.userTrueName || '';
+			const template = this.$t('index.greeting');
+			// Manually replace if interpolation fails or for safety
+			return template.replace('[name]', name);
 		}
 	},
 	methods: {
@@ -403,6 +406,17 @@ export default {
 				uni.navigateTo({
 					url: `/pages/handover/handover?relatedId=${relatedId}&relatedName=${relatedName}`
 				});
+			} else if (action.labelKey === 'index.actions.sealing') {
+				let relatedId = '';
+				let relatedName = '';
+				if (this.rescueCars && this.rescueCars.length > 0) {
+					const car = this.rescueCars[this.currentRescueCarIndex];
+					relatedId = car.Id;
+					relatedName = car.DisplayName;
+				}
+				uni.navigateTo({
+					url: `/pages/sealing/sealing?relatedId=${relatedId}&relatedName=${relatedName}`
+				});
 			} else if (action.labelKey === 'index.actions.itemOutbound') {
 				uni.navigateTo({
 					url: '/pages/item-outbound/item-outbound'
@@ -428,7 +442,12 @@ export default {
 		},
 		fetchTodoData() {
 			// Fetch pending tasks
-			request.post('api/ssbh/TodoList/GetPageData', { page: this.todoListPage, rows: this.todoListRowsInPage, sort: 'CreationTime', order: 'desc' })
+			request.post('api/ssbh/TodoList/GetPageData', {
+				page: this.todoListPage, rows: this.todoListRowsInPage, sort: 'CreationTime', order: 'desc'
+				, wheres: JSON.stringify([
+					{ name: 'IsFinished', value: false }
+				])
+			})
 				.then(res => {
 					this.alerts = res.rows || [];
 					this.todoTotal = res.total || 0;
@@ -519,9 +538,15 @@ export default {
 					});
 					break;
 				case 40: // Notification
-					uni.navigateTo({
-						url: `/pages/handover-check/handover-item-check?id=${relatedId}&todoListId=${item.Id}`
-					});
+					if (item.Kind === 1) {
+						uni.navigateTo({
+							url: `/pages/handover-check/handover-item-check?id=${relatedId}&todoListId=${item.Id}`
+						});
+					} else if (item.Kind === 2) {
+						uni.navigateTo({
+							url: `/pages/sealing/sealing?relatedId=${relatedId}&todoListId=${item.Id}&relatedName=${item.Title}`
+						});
+					}
 					break;
 				default:
 					uni.showToast({
@@ -610,9 +635,9 @@ export default {
 				.then(res => {
 					if (res) {
 						let price = (res.PriceCounter || 0) / 10000 / 100; // Cent to Yuan (100), then to 10k (10000) => / 1000000? 
-						// Request: "单位为分，需要转化为万元，保留两位小数"
-						// 1 元 = 100 分
-						// 1 万元 = 10000 元 = 1000000 分
+						// Request: "单位为分，需要转化为万元，保留两位小�
+						// 1 � 100 �
+						// 1 万元 = 10000 � 1000000 �
 						price = (res.PriceCounter || 0) / 1000000;
 						this.dashboardStats = {
 							ItemCounter: res.ItemCounter || 0,
@@ -669,8 +694,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 page {
 	background-color: $sull-color-background;
 	height: 100%;
@@ -1442,95 +1465,6 @@ page {
 
 .timeline-status {
 	color: $sull-color-primary;
-}
-
-/* Footer styles removed - moved to component */
-
-.bottom-nav {
-	position: fixed;
-	bottom: 0;
-	left: 0;
-	width: 100%;
-	height: 90px;
-	background: $sull-color-white;
-	display: flex;
-	justify-content: space-around;
-	align-items: center;
-	padding-bottom: calc(20px + constant(safe-area-inset-bottom));
-	padding-bottom: calc(20px + env(safe-area-inset-bottom));
-	box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.05);
-	border-radius: 24px 24px 0 0;
-}
-
-.nav-item {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	width: 60px;
-}
-
-.nav-icon {
-	width: 24px;
-	height: 24px;
-	margin-bottom: 4px;
-	background-color: $sull-gray-50;
-	-webkit-mask-size: contain;
-	-webkit-mask-repeat: no-repeat;
-	-webkit-mask-position: center;
-	mask-size: contain;
-	mask-repeat: no-repeat;
-	mask-position: center;
-}
-
-.nav-label {
-	font-size: $font-size-body-xs;
-	color: $sull-gray-50;
-}
-
-.nav-item.active .nav-icon {
-	background-color: $sull-color-primary;
-}
-
-.nav-item.active .nav-label {
-	color: $sull-color-primary;
-}
-
-.center-item {
-	position: relative;
-	top: -30px;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-}
-
-.center-btn {
-	width: 60px;
-	height: 60px;
-	background: $sull-color-primary;
-	border-radius: $radius-circle;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	box-shadow: 0 10px 20px rgba(149, 202, 255, 0.4);
-	border: 4px solid $sull-color-white;
-	margin-bottom: 4px;
-}
-
-.center-icon {
-	width: 32px;
-	height: 32px;
-	background-color: #fff;
-	-webkit-mask-size: contain;
-	-webkit-mask-repeat: no-repeat;
-	-webkit-mask-position: center;
-	mask-size: contain;
-	mask-repeat: no-repeat;
-	mask-position: center;
-}
-
-.center-label {
-	color: $sull-gray-50;
-	font-size: $font-size-body-xs;
 }
 
 /* Custom Refresher */

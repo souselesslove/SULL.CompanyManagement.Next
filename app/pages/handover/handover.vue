@@ -72,7 +72,7 @@
 					</view>
 					<view class="end-controls">
 						<view class="icon-btn" @click="handleShare"><text>📤</text></view>
-						<view class="icon-btn" @click="handleExport"><text>📥</text></view>
+						<view class="icon-btn" @click="handleExport"><text>📑</text></view>
 						<view class="icon-btn" @click="handlePrint"><text>🖨️</text></view>
 					</view>
 				</view>
@@ -80,7 +80,7 @@
 				<!-- 4. List View -->
 				<view class="list-section">
 					<view v-if="isLoading" class="loading-state">
-						<text class="loading-spinner">🔄</text>
+						<text class="loading-spinner">↻</text>
 						<text>{{ $t('handover.loading') }}</text>
 					</view>
 
@@ -179,8 +179,8 @@
 		</view>
 
 		<!-- New Handover Modal -->
-		<view class="modal-overlay" v-if="showModal" @click.self="closeNewHandoverModal">
-			<view class="modal-content">
+		<view class="modal-overlay" v-if="showModal" @click.stop="doNothing" @touchmove.stop.prevent="doNothing">
+			<view class="modal-content" @click.stop="doNothing">
 				<view class="modal-header">
 					<text class="modal-title">{{ formData.relatedName || '' }}{{ $t('handover.title') }}</text>
 					<text class="close-btn" @click="closeNewHandoverModal">✖️</text>
@@ -221,8 +221,9 @@
 				</view>
 			</view>
 		</view>
-		<view class="member-overlay" v-if="showMemberSelector" @click.self="closeMemberSelector">
-			<view class="member-modal">
+		<view class="member-overlay" v-if="showMemberSelector" @click.stop="doNothing"
+			@touchmove.stop.prevent="doNothing">
+			<view class="member-modal" @click.stop="doNothing">
 				<view class="member-header">
 					<view class="search-box">
 						<input class="member-search-input" v-model="memberSearchKey"
@@ -272,6 +273,7 @@ export default {
 				month: 0,
 				missing: 0
 			},
+			todayHandoverCount: -1,
 			// Modal Data
 			showModal: false,
 			shifts: ['早班', '中班', '晚班'],
@@ -327,6 +329,7 @@ export default {
 	},
 	onShow() {
 		this.fetchData();
+		this.checkTodayStatus();
 	},
 	mounted() {
 		const sysInfo = uni.getSystemInfoSync();
@@ -374,7 +377,7 @@ export default {
 					name: days[i],
 					date: String(d.getDate()).padStart(2, '0'),
 					fullDate: fDate,
-					hasData: i % 3 === 0
+					hasData: fDate === this.formatDate(new Date()) && this.todayHandoverCount === 0
 				});
 			}
 		},
@@ -398,10 +401,11 @@ export default {
 				wheres: []
 			};
 
-			if (this.selectedDate) {
-				// Calculate next day for range query [start 00:00, end 00:00)
-				const start = this.selectedDate + ' 00:00:00';
+			// If selected date is today, we can use the result to update todayHandoverCount
+			const isToday = this.selectedDate === this.formatDate(new Date());
 
+			if (this.selectedDate) {
+				const start = this.selectedDate + ' 00:00:00';
 				const d = new Date(this.selectedDate);
 				d.setDate(d.getDate() + 1);
 				const y = d.getFullYear();
@@ -440,18 +444,55 @@ export default {
 						isNew: false
 					}));
 
-					// Keep stats mocked or reset to avoid confusion, or try to fetch if API exists
-					// this.stats = { ... }; 
+					if (isToday) {
+						this.todayHandoverCount = rows.length; // Approximate using current page length or total
+						if (res.total !== undefined) this.todayHandoverCount = res.total;
+						this.stats.today = this.todayHandoverCount;
+						this.updateWeekDaysDot();
+					}
 
 					this.isLoading = false;
 					this.isRefreshing = false;
 				})
 				.catch(err => {
 					console.error("Fetch Data Failed", err);
-					// Fail silently or show toast?
 					this.isLoading = false;
 					this.isRefreshing = false;
 				});
+		},
+		checkTodayStatus() {
+			const today = this.formatDate(new Date());
+			// If already selected today, fetchData handles it, but checkTodayStatus ensures it even if looking at other dates
+			// However, to avoid double loading on init, rely on fetchData if selectedDate is today.
+			// But if looking at history, we still need to know if today is missing.
+			if (this.selectedDate === today) return;
+
+			const d = new Date();
+			d.setDate(d.getDate() + 1);
+			const tmr = this.formatDate(d);
+
+			const searchOptions = {
+				page: 1,
+				rows: 1, // Minimize data
+				wheres: JSON.stringify([
+					{ name: 'ShiftTime', value: today + ' 00:00:00', displayType: 'thanorequal' },
+					{ name: 'ShiftTime', value: tmr + ' 00:00:00', displayType: 'lt' }
+				])
+			};
+
+			request.post('api/ssbh/Handover/GetPageData', searchOptions).then(res => {
+				const count = res.total !== undefined ? res.total : (res.rows ? res.rows.length : 0);
+				this.todayHandoverCount = count;
+				this.stats.today = count;
+				this.updateWeekDaysDot();
+			});
+		},
+		updateWeekDaysDot() {
+			const todayStr = this.formatDate(new Date());
+			this.weekDays.forEach(day => {
+				// Only show dot if it is today AND count is 0
+				day.hasData = (day.fullDate === todayStr && this.todayHandoverCount === 0);
+			});
 		},
 		onRefresh() {
 			this.isRefreshing = true;
@@ -599,6 +640,12 @@ export default {
 								});
 							}
 						});
+						// Update stats immediately if we just added one for today
+						if (this.formatDate(new Date(payload.ShiftTime)) === this.formatDate(new Date())) {
+							this.todayHandoverCount++;
+							this.stats.today = this.todayHandoverCount;
+							this.updateWeekDaysDot();
+						}
 					} else {
 						uni.showToast({ title: res.message || 'Submission Failed', icon: 'none' });
 						if (res.message !== '重复交接班') {
@@ -664,7 +711,7 @@ export default {
 				success: (res) => {
 					if (res.confirm) {
 						uni.showLoading({ title: this.$t('handover.loading'), mask: true });
-						request.post('api/ssbh/Handover/Del', [item.id]).then(res => {
+						request.post('api/ssbh/Handover/Del', [item.Id]).then(res => {
 							uni.hideLoading();
 							if (res.success || res.status) {
 								uni.showToast({ title: this.$t('handover.delete_success') });
@@ -680,15 +727,14 @@ export default {
 					}
 				}
 			});
-		}
+		},
+		doNothing() { }
 	}
 }
 
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 .page-container {
 	background-color: $sull-color-background;
 	min-height: 100vh;

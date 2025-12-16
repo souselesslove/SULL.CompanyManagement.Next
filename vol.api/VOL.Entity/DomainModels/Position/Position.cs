@@ -202,6 +202,14 @@ namespace VOL.Entity.DomainModels
        public int? DutyUserId { get; set; }
 
        /// <summary>
+       ///状态
+       /// </summary>
+       [Display(Name ="状态")]
+       [Column(TypeName="tinyint")]
+       [Editable(true)]
+       public byte? Status { get; set; }
+
+       /// <summary>
        ///修改人
        /// </summary>
        [Display(Name ="修改人")]
@@ -227,6 +235,14 @@ namespace VOL.Entity.DomainModels
        [Column(TypeName="nvarchar(32)")]
        [Editable(true)]
        public string DisplayName { get; set; }
+
+       /// <summary>
+       ///状态编号
+       /// </summary>
+       [Display(Name ="状态编号")]
+       [Column(TypeName="bigint")]
+       [Editable(true)]
+       public long? StatusId { get; set; }
 
        
     }

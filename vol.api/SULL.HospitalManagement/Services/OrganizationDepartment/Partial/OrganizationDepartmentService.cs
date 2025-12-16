@@ -32,11 +32,12 @@ namespace SULL.HospitalManagement.Services
         private readonly IOrganizationRepository _organizationRepository;
 
         private readonly IOrganizationUserService _organizationUserService;
+        private readonly IRegisterCodeRepository _registerCodeRepository;
 
         [ActivatorUtilitiesConstructor]
         public OrganizationDepartmentService(
             IOrganizationDepartmentRepository dbRepository,
-            IHttpContextAccessor httpContextAccessor, IOrganizationUserRepository organizationUserRepository, IOrganizationRepository organizationRepository, IOrganizationUserService organizationUserService)
+            IHttpContextAccessor httpContextAccessor, IOrganizationUserRepository organizationUserRepository, IOrganizationRepository organizationRepository, IOrganizationUserService organizationUserService, IRegisterCodeRepository registerCodeRepository)
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
@@ -44,6 +45,7 @@ namespace SULL.HospitalManagement.Services
             _organizationRepository = organizationRepository;
             _repository = dbRepository;
             _organizationUserService = organizationUserService;
+            _registerCodeRepository = registerCodeRepository;
             //多租户会用到这init代码，其他情况可以不用
             //base.Init(dbRepository);
         }
@@ -52,6 +54,22 @@ namespace SULL.HospitalManagement.Services
         {
             base.AddOnExecute = model =>
             {
+                //校验邀请码
+                if (!saveModel.MainData.ContainsKey("Code") || string.IsNullOrEmpty(saveModel.MainData["Code"]?.ToString()))
+                {
+                    return new WebResponseContent().Error("请输入邀请码");
+                }
+                string code = saveModel.MainData["Code"].ToString();
+                var registerCode = _registerCodeRepository.FindFirst(x => x.Code == code);
+                if (registerCode == null)
+                {
+                    return new WebResponseContent().Error("邀请码不存在");
+                }
+                if (registerCode.RelatedId != null || registerCode.UseTime != null)
+                {
+                    return new WebResponseContent().Error("邀请码已被使用");
+                }
+
                 var exist = _repository.FindFirst(x => x.Name == saveModel.MainData["Name"].ToString());
                 return exist == null ? new WebResponseContent(true) : new WebResponseContent().Error("部门已存在");
             };
@@ -77,6 +95,19 @@ namespace SULL.HospitalManagement.Services
                 o.LastModificationTime = DateTime.Now;
                 _organizationRepository.Update(o, true);
 
+                //更新邀请码使用状态
+                if (saveModel.MainData.ContainsKey("Code"))
+                {
+                    string code = saveModel.MainData["Code"].ToString();
+                    var registerCode = _registerCodeRepository.FindFirst(x => x.Code == code);
+                    if (registerCode != null)
+                    {
+                        registerCode.RelatedId = (int)organization.Id;
+                        registerCode.UseTime = DateTime.Now;
+                        _registerCodeRepository.Update(registerCode, true);
+                    }
+                }
+
                 return new WebResponseContent(true).OK(ResponseType.SaveSuccess);
             };
             // 使用细粒度锁防止重复添加部门
@@ -85,6 +116,42 @@ namespace SULL.HospitalManagement.Services
             {
                 return base.Add(saveModel);
             });
+        }
+
+        public override WebResponseContent Update(SaveModel saveModel)
+        {
+            // check validates
+            if (saveModel.MainData.ContainsKey("DutyUserId") || saveModel.MainData.ContainsKey("DutyUser"))
+            {
+                object idObj = null;
+                if (saveModel.MainData.TryGetValue("Id", out idObj))
+                {
+                    long id = idObj.ToString().GetLong();
+                    var entity = _repository.FindFirst(x => x.Id == id);
+                    if (entity != null)
+                    {
+                        // 检查值是否真正发生改变
+                        bool isChanged = false;
+                        if (saveModel.MainData.TryGetValue("DutyUserId", out object newIdObj))
+                        {
+                            int? newId = newIdObj == null || string.IsNullOrEmpty(newIdObj.ToString()) ? (int?)null : newIdObj.ToString().GetInt();
+                            if (entity.DutyUserId != newId) isChanged = true;
+                        }
+                        
+                        // 如果值改变了，检查权限
+                        if (isChanged)
+                        {
+                            int currentUserId = UserContext.Current.UserId;
+                            // 只有创建人 或 原负责人 可以修改
+                            if (currentUserId != entity.CreatorId && currentUserId != entity.DutyUserId)
+                            {
+                                return new WebResponseContent().Error("非法操作");
+                            }
+                        }
+                    }
+                }
+            }
+            return base.Update(saveModel);
         }
 
         public virtual async Task<PageGridData<OrganizationDepartment>> GetUserDepartmentAsync(CancellationToken cancellationToken = default)

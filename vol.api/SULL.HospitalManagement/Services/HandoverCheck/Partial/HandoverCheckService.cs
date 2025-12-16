@@ -117,6 +117,8 @@ namespace SULL.HospitalManagement.Services
                                 todo.MainData.Add("Description", $"{handover.Creator}向您提交了交班申请");
                                 todo.MainData.Add("LatestAssignUserId", handover.ReceiverId);
                                 todo.MainData.Add("LatestAssignUser", handover.ReceiverName);
+                                todo.MainData.Add("Kind",1);
+
 
                                 var detail = new Dictionary<string, object>();
                                 detail.Add("Description", "交接班申请");

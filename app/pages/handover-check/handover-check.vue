@@ -90,7 +90,7 @@
 								<view v-for="(opt, idx) in currentItem.options" :key="idx" class="option-item"
 									:class="{ active: currentItem.value === opt.value, disabled: isReadOnly }"
 									@click="!isReadOnly && selectOption(opt.value)">
-									<text class="radio-icon">{{ currentItem.value === opt.value ? '🔘' : '⚪' }}</text>
+									<text class="radio-icon">{{ currentItem.value === opt.value ? '⚫' : '⚪' }}</text>
 									<text class="option-label">{{ opt.label }}</text>
 								</view>
 							</block>
@@ -699,8 +699,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 .page-container {
 	background-color: $sull-color-background;
 	min-height: 100vh;

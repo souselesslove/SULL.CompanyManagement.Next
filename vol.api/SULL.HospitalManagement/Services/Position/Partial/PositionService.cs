@@ -305,5 +305,102 @@ namespace SULL.HospitalManagement.Services
                 AbnormalExpiry = abnormalExpiry
             };
         }
+
+        public WebResponseContent GetAbnormalList()
+        {
+            var db = _repository.DbContext;
+            // 1. 获取所有抢救车 (Category=10)，并且未删除
+            var cars = _repository.Find(x => x.Category == 10)
+                .Where(x => x.IsDeleted != true)
+                .Select(x => new { x.Id, x.DisplayName })
+                .ToList();
+
+            if (cars.Count == 0) return new WebResponseContent().OK(null, new List<object>());
+
+            var carIds = cars.Select(x => x.Id).ToList();
+
+            // 2. 获取抢救车上绑定的所有物品位置信息
+            var slots = _repository.Find(x => x.WarehouseId != null && carIds.Contains(x.WarehouseId.Value) && x.ItemId != null && x.IsDeleted != true)
+                                   .Select(x => new { WarehouseId = x.WarehouseId.Value, ItemId = x.ItemId.Value })
+                                   .ToList();
+
+            if (slots.Count == 0) return new WebResponseContent().OK(null, new List<object>());
+
+            var itemIds = slots.Select(x => x.ItemId).Distinct().ToList();
+
+            // 3. 获取物品详细信息（基数、库存、效期）
+            var items = db.Set<Item>()
+                          .Where(x => itemIds.Contains(x.Id))
+                          .Select(x => new
+                          {
+                              x.Id,
+                              x.Name,
+                              x.Specification,
+                              x.Cardinality,
+                              Stock = x.AvailableStock,
+                              x.LatestExpirationDate
+                          })
+                          .ToList();
+
+            // 4. 计算异常
+            var result = new List<object>();
+            var now = DateTime.Now.Date;
+            var warningDate = now.AddDays(30);
+
+            // 为了快速查找，建立 Items 字典
+            var itemDict = items.ToDictionary(k => k.Id, v => v);
+
+            foreach (var car in cars)
+            {
+                // 找出该车下的所有 ItemId
+                var carItemIds = slots.Where(s => s.WarehouseId == car.Id).Select(s => s.ItemId).Distinct();
+
+                foreach (var itemId in carItemIds)
+                {
+                    if (itemDict.TryGetValue(itemId, out var item))
+                    {
+                        var stock = item.Stock ?? 0;
+                        var cardinality = item.Cardinality;
+
+                        // 判定异常: 库存不足 或 效期不足
+                        bool isStockAbnormal = cardinality > 0 && stock < cardinality;
+                        bool isExpiryAbnormal = item.LatestExpirationDate != null && item.LatestExpirationDate <= warningDate;
+
+                        if (isStockAbnormal || isExpiryAbnormal)
+                        {
+                            var remarks = new List<string>();
+                            if (isStockAbnormal)
+                            {
+                                int missing = cardinality - stock;
+                                remarks.Add($"基数为{cardinality}，当前库存{stock}，缺少{missing}");
+                            }
+                            if (isExpiryAbnormal)
+                            {
+                                var days = (item.LatestExpirationDate.Value - now).TotalDays;
+                                int remainingDays = (int)Math.Ceiling(days);
+                                remainingDays = remainingDays < 0 ? 0 : remainingDays;
+                                remarks.Add($"剩余有效期不足{remainingDays}天");
+                            }
+
+                            result.Add(new
+                            {
+                                CarId = car.Id,
+                                CarName = car.DisplayName,
+                                ItemId = item.Id,
+                                ItemName = item.Name,
+                                Specification = item.Specification,
+                                Cardinality = cardinality,
+                                Stock = stock,
+                                ExpirationDate = item.LatestExpirationDate,
+                                Remark = string.Join("；", remarks),
+                                ErrorType = (isStockAbnormal ? 1 : 0) | (isExpiryAbnormal ? 2 : 0)
+                            });
+                        }
+                    }
+                }
+            }
+
+            return new WebResponseContent().OK(null, result);
+        }
   }
 }

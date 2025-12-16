@@ -391,8 +391,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 .container {
 	background-color: $sull-color-background;
 	min-height: 100vh;

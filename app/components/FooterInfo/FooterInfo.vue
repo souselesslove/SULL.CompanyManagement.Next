@@ -22,7 +22,7 @@
 </script>
 
 <style lang="scss">
-	@import '@/sull.scss';
+	
 
 	.footer {
 		display: flex;

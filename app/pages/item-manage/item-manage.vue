@@ -24,7 +24,7 @@
                 <view class="refresher-content">
                     <view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
                     <text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
-                    }}</text>
+                        }}</text>
                 </view>
             </view>
 
@@ -56,7 +56,7 @@
                             <view class="name-section">
                                 <text class="item-name">{{ item.Name }}</text>
                                 <text class="item-code text-gray" v-if="item.InterfaceCode">({{ item.InterfaceCode
-                                }})</text>
+                                    }})</text>
                             </view>
                             <view class="status-tag" :class="getExpiryStatus(item.ExpiryDate).class"
                                 v-if="item.ExpiryDate && getExpiryStatus(item.ExpiryDate)">
@@ -77,7 +77,7 @@
                                 <text class="unit" v-if="item.Unit">{{ item.Unit }}</text>
                             </view>
                             <text class="expiry-date">过期日期: {{ item.ExpiryDate ? formatDate(item.ExpiryDate) : '-'
-                            }}</text>
+                                }}</text>
                         </view>
                     </view>
 
@@ -114,7 +114,7 @@
 
         <!-- Floating Action Button -->
         <view class="fab-btn" @click="toggleActions" :class="{ active: showActions }" v-if="!selectMode">
-            <text class="main-icon">🤖</text>
+            <text class="main-icon">➕</text>
         </view>
 
         <!-- Selection Footer -->
@@ -333,7 +333,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
 // ... imported styles
 
 // Previous styles...

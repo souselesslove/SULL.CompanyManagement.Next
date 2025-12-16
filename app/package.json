@@ -1,6 +1,8 @@
 {
   "devDependencies": {
-    "html2canvas": "^1.4.1"
+    "html2canvas": "^1.4.1",
+    "sass": "^1.96.0",
+    "sass-loader": "^16.0.6"
   },
   "dependencies": {
     "@climblee/uv-ui": "^1.1.20",

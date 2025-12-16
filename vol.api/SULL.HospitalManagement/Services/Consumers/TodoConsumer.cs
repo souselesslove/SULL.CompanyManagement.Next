@@ -5,6 +5,7 @@ using VOL.Core.ManageUser;
 using VOL.Core.RabbitMQ;
 using VOL.Entity.DomainModels;
 using Microsoft.Extensions.DependencyInjection;
+using VOL.Core.Extensions;
 
 namespace SULL.HospitalManagement.Services.Consumers;
 
@@ -36,7 +37,7 @@ public class TodoConsumer : RabbitConsumerBase
                             todo.FinishTime = DateTime.Now;
                             todo.FinalStatus = 100;
                             repository.Update(todo);
-                            repository.SaveChanges();
+                            await repository.SaveChangesAsync();
                         }
                     }
                 }

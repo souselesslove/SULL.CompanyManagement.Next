@@ -190,7 +190,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
+
 
 .container {
 	display: flex;

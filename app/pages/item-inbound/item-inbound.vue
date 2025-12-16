@@ -1,8 +1,6 @@
 <template>
     <view class="container">
-        <scroll-view class="main-scroll" scroll-y @scroll="onScroll" :scroll-top="scrollTop" lower-threshold="50"
-            @scrolltolower="onLoadMore" refresher-enabled @refresherrefresh="onRefresh"
-            :refresher-triggered="isRefreshing" scroll-with-animation>
+        <view class="main-content">
 
             <!-- Header Gradient Section matching Position Manage (Blue for Inbound) -->
             <view class="header-section" :style="{ paddingTop: (statusBarHeight + 10) + 'px' }">
@@ -95,7 +93,7 @@
                                         </view>
                                         <view class="item-info-row">
                                             <text class="item-spec">{{ itemsMap[serial.ItemId].Specification || '-'
-                                                }}</text>
+                                            }}</text>
                                             <view class="item-stock"
                                                 :class="{ 'text-red-bold': isStockInsufficient(itemsMap[serial.ItemId]) }">
                                                 <text>x {{ itemsMap[serial.ItemId].AvailableStock || 0 }}</text>
@@ -107,8 +105,8 @@
                                             </view>
                                         </view>
                                         <view class="item-expiry">
-                                            <text :class="getExpiryClass(itemsMap[serial.ItemId].LatestExpirationDate)">
-                                                {{ formatDate(itemsMap[serial.ItemId].LatestExpirationDate) }}
+                                            <text :class="itemsMap[serial.ItemId].ExpiryClass">
+                                                {{ itemsMap[serial.ItemId].FormattedDate }}
                                             </text>
                                         </view>
                                     </view>
@@ -127,7 +125,7 @@
 
             <view class="bottom-spacer"></view>
             <FooterInfo />
-        </scroll-view>
+        </view>
 
         <BackToTop :scroll-top="scrollTop" @click="goTop" />
 
@@ -170,7 +168,8 @@
                                             <text class="batch-no">批号: {{ batch.RegisterCode || '-' }}</text>
                                         </view>
                                         <view class="batch-row">
-                                            <text class="batch-expiry">效期: {{ formatDate(batch.ExpirationDate) }}</text>
+                                            <text class="batch-expiry">效期: {{ formatDate(batch.ExpirationDate)
+                                                }}</text>
                                         </view>
                                         <view class="batch-row">
                                             <text class="batch-stock"
@@ -340,7 +339,30 @@ export default {
                 // New Batch
                 return this.newBatchForm.BatchNo && this.newBatchForm.ExpirationDate;
             }
+        },
+        floorSerialsMap() {
+            const map = {};
+            this.floorList.forEach(f => map[f.Id] = []);
+            this.serialList.forEach(s => {
+                if (!map[s.FloorId]) map[s.FloorId] = [];
+                map[s.FloorId].push(s);
+            });
+            return map;
         }
+    },
+    onPageScroll(e) {
+        this.scrollTop = e.scrollTop;
+    },
+    onPullDownRefresh() {
+        this.isRefreshing = true;
+        this.fetchData().then(() => {
+            this.isRefreshing = false;
+            uni.showToast({ title: '已刷新', icon: 'none' });
+            uni.stopPullDownRefresh();
+        });
+    },
+    onReachBottom() {
+        // Placeholder logic if needed
     },
     onLoad() {
         const sysInfo = uni.getSystemInfoSync();
@@ -351,18 +373,9 @@ export default {
     methods: {
         goBack() { uni.navigateBack(); },
         goTop() {
-            this.scrollTop = this.oldScrollTop;
-            this.$nextTick(() => { this.scrollTop = 0; });
-        },
-        onScroll(e) {
-            this.scrollTop = e.detail.scrollTop;
-            this.oldScrollTop = e.detail.scrollTop;
-        },
-        onRefresh() {
-            this.isRefreshing = true;
-            this.fetchData().then(() => {
-                this.isRefreshing = false;
-                uni.showToast({ title: '已刷新', icon: 'none' });
+            uni.pageScrollTo({
+                scrollTop: 0,
+                duration: 300
             });
         },
 
@@ -433,13 +446,21 @@ export default {
                         { name: 'DepartmentId', value: this.userOrgInfo.DepartmentId }])
                     });
                     if (res.rows && res.rows.length > 0) {
-                        this.$set(this.itemsMap, id, res.rows[0]);
+                        const item = res.rows[0];
+                        // Pre-calculate properties for performance
+                        const days = this.getDaysUntil(item.LatestExpirationDate);
+                        item.FormattedDate = this.formatDate(item.LatestExpirationDate);
+                        item.ExpiryClass = this.getExpiryClass(item.LatestExpirationDate);
+                        item.IsStockInsufficient = ((item.AvailableStock || 0) < (item.Cardinality || 0)) || (item.AvailableStock || 0) <= 0;
+                        item.IsExpiryWarning = days < 30;
+
+                        this.$set(this.itemsMap, id, item);
                     }
                 } catch (e) { }
             }
         },
         getSerialsByFloor(floorId) {
-            return this.serialList.filter(s => s.FloorId === floorId);
+            return this.floorSerialsMap[floorId] || [];
         },
         getOccupiedCount(floor) {
             const serials = this.getSerialsByFloor(floor.Id);
@@ -805,29 +826,34 @@ export default {
         },
         isStockInsufficient(item) {
             if (!item) return false;
+            // Use cached property if available
+            if (typeof item.IsStockInsufficient !== 'undefined') return item.IsStockInsufficient;
+
             const stock = item.AvailableStock || 0;
-            const base = item.Cardinality || 0; // Use Cardinality, matching others
+            const base = item.Cardinality || 0;
             return stock < base || stock === 0;
         },
         hasExpiryProblem(floor) {
-            return this.serialList.some(s => {
-                if (s.FloorId !== floor.Id) return false;
-                if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
+            const serials = this.getSerialsByFloor(floor.Id); // Uses cached map
+            return serials.some(s => {
+                if (!s.ItemId) return false;
                 const item = this.itemsMap[s.ItemId];
-                const days = this.getDaysUntil(item.LatestExpirationDate);
-                return days < 30;
+                return item && this.isExpiryWarning(item);
             });
         },
         hasStockProblem(floor) {
-            return this.serialList.some(s => {
-                if (s.FloorId !== floor.Id) return false;
-                if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
+            const serials = this.getSerialsByFloor(floor.Id); // Uses cached map
+            return serials.some(s => {
+                if (!s.ItemId) return false;
                 const item = this.itemsMap[s.ItemId];
-                return this.isStockInsufficient(item);
+                return item && this.isStockInsufficient(item);
             });
         },
         isExpiryWarning(item) {
-            if (!item || !item.LatestExpirationDate) return false;
+            if (!item) return false;
+            if (typeof item.IsExpiryWarning !== 'undefined') return item.IsExpiryWarning;
+
+            if (!item.LatestExpirationDate) return false;
             const days = this.getDaysUntil(item.LatestExpirationDate);
             return days < 30;
         },
@@ -844,8 +870,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 // Layout & structure from position-manage.vue
 .container {
     background-color: #F7F8FA;
@@ -1218,7 +1242,7 @@ export default {
     display: block;
     font-size: 13px;
     font-weight: 600;
-    color: #303133;
+    color: $sull-text-main;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1252,7 +1276,7 @@ export default {
 
 .item-spec {
     font-size: 11px;
-    color: #909399;
+    color: $sull-text-secondary;
 }
 
 .item-unit {
@@ -1265,7 +1289,7 @@ export default {
 .item-stock {
     font-size: 11px;
     font-weight: bold;
-    color: #666;
+    color: $sull-text-secondary;
     padding: 0 4px;
 
     display: flex;
@@ -1273,7 +1297,7 @@ export default {
 }
 
 .text-red-bold {
-    color: #F56C6C !important;
+    color: $sull-color-error !important;
     background: rgba(245, 108, 108, 0.1) !important;
 }
 
@@ -1292,15 +1316,15 @@ export default {
 
 // Colors
 .text-red {
-    color: #ff4d4f;
+    color: $sull-color-error;
 }
 
 .text-yellow {
-    color: #faad14;
+    color: $sull-color-warning;
 }
 
 .text-normal {
-    color: #999;
+    color: $sull-text-secondary;
 }
 
 .text-black {
@@ -1336,12 +1360,12 @@ export default {
 
 .modal-content {
     width: 100%;
-    background: #fff;
+    background: $sull-color-white;
     border-radius: 24px 24px 0 0;
     display: flex;
     flex-direction: column;
     animation: slideUp 0.3s ease;
-    max-height: 85vh;
+    max-height: 95vh;
 }
 
 .modal-header {
@@ -1349,7 +1373,7 @@ export default {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid $sull-color-line;
 }
 
 .title-section {
@@ -1364,7 +1388,7 @@ export default {
 
 .close-btn {
     font-size: 20px;
-    color: #999;
+    color: $sull-text-secondary;
     padding: 8px;
 }
 
@@ -1374,7 +1398,7 @@ export default {
 
 .form-label {
     font-size: 14px;
-    color: #666;
+    color: $sull-text-secondary;
     margin-bottom: 8px;
     display: block;
 }
@@ -1392,13 +1416,13 @@ export default {
 
 .batch-item {
     padding: 10px;
-    border: 1px solid #eee;
+    border: 1px solid $sull-color-line;
     border-radius: 8px;
     min-width: 120px;
     transition: all 0.2s;
 
     &.active {
-        border-color: #1890FF;
+        border-color: $sull-color-primary;
         background: #E6F7FF;
     }
 
@@ -1409,24 +1433,24 @@ export default {
 
 .batch-row {
     font-size: 12px;
-    color: #333;
+    color: $sull-text-main;
     margin-bottom: 2px;
 }
 
 .batch-no {
     font-size: 12px;
     font-weight: bold;
-    color: #333;
+    color: $sull-text-main;
 }
 
 .batch-expiry {
     font-size: 11px;
-    color: #666;
+    color: $sull-text-secondary;
 }
 
 .batch-stock {
     font-size: 11px;
-    color: #666;
+    color: $sull-text-secondary;
     font-weight: bold;
 }
 
@@ -1455,25 +1479,25 @@ export default {
 
 .label {
     font-size: 12px;
-    color: #606266;
+    color: $sull-text-secondary;
 }
 
 .qty-text {
     font-size: 32px;
     font-weight: bold;
-    color: #303133;
+    color: $sull-text-main;
     line-height: 1;
 }
 
 .unit-text {
     font-size: 12px;
-    color: #909399;
+    color: $sull-text-secondary;
     margin-left: 4px;
 }
 
 .stock-hint {
     font-size: 12px;
-    color: #909399;
+    color: $sull-text-secondary;
 }
 
 .q-btn-circle {
@@ -1486,7 +1510,7 @@ export default {
     font-size: 16px;
     font-weight: bold;
     background: #F2F3F5;
-    color: #606266;
+    color: $sull-text-secondary;
 
     &:active {
         opacity: 0.8;
@@ -1496,12 +1520,12 @@ export default {
 
 .q-btn-circle.sub {
     background: #FFF1F0;
-    color: #FF4D4F;
+    color: $sull-color-error;
 }
 
 .q-btn-circle.add {
     background: #E6F7FF;
-    color: #1890FF;
+    color: $sull-color-primary;
 }
 
 /* Clear Full Width - Match Keypad Width */
@@ -1515,7 +1539,7 @@ export default {
     height: 48px;
     border-radius: 8px;
     background: #F5F7FA;
-    color: #909399;
+    color: $sull-text-secondary;
     font-size: 16px;
     display: flex;
     align-items: center;
@@ -1535,13 +1559,13 @@ export default {
 
 .modal-footer {
     padding: 16px 24px calc(16px + env(safe-area-inset-bottom)) 24px;
-    border-top: 1px solid #eee;
+    border-top: 1px solid $sull-color-line;
 }
 
 .submit-btn {
-    background: #1890FF;
+    background: $sull-color-primary;
     /* Blue for Inbound */
-    color: #fff;
+    color: $sull-color-white;
     font-size: 16px;
     height: 44px;
     line-height: 44px;
@@ -1554,7 +1578,7 @@ export default {
 
     &[disabled] {
         background: #ccc;
-        color: #fff;
+        color: $sull-color-white;
     }
 }
 
@@ -1614,7 +1638,7 @@ export default {
     align-items: center;
     justify-content: center;
     font-size: 14px;
-    color: #909399;
+    color: $sull-text-secondary;
     font-weight: 500;
     border-radius: 21px;
     transition: all 0.3s;
@@ -1625,8 +1649,8 @@ export default {
 }
 
 .tab-item.active {
-    background: #1890FF;
-    color: #fff;
+    background: $sull-color-primary;
+    color: $sull-color-white;
     font-weight: 600;
     box-shadow: 0 2px 6px rgba(24, 144, 255, 0.4);
 }
@@ -1649,7 +1673,7 @@ export default {
 
 .input-label {
     font-size: 14px;
-    color: #606266;
+    color: $sull-text-secondary;
     margin-bottom: 8px;
 }
 
@@ -1676,30 +1700,30 @@ export default {
 }
 
 .required {
-    color: #FF4D4F;
+    color: $sull-color-error;
     margin-left: 4px;
 }
 
 /* Stock Warning Styles */
 .batch-item.stock-warning {
-    border: 2px solid #F56C6C !important;
+    border: 2px solid $sull-color-error !important;
     /* Zero - Red */
     background-color: #FFF0F0;
 }
 
 .batch-item.stock-insufficient {
-    border: 2px solid #E6A23C !important;
+    border: 2px solid $sull-color-warning !important;
     /* Insufficient - Orange */
     background-color: #FDF6EC;
 }
 
 .stock-zero {
-    color: #F56C6C;
+    color: $sull-color-error;
     font-weight: bold;
 }
 
 .stock-insufficient-text {
-    color: #E6A23C;
+    color: $sull-color-warning;
     font-weight: bold;
 }
 
@@ -1709,13 +1733,13 @@ export default {
     border-radius: 8px;
     padding: 0 12px;
     font-size: 14px;
-    color: #333;
+    color: $sull-text-main;
     border: 1px solid transparent;
 }
 
 .input-field:focus {
-    border-color: #1890FF;
-    background: #fff;
+    border-color: $sull-color-primary;
+    background: $sull-color-white;
 }
 
 .picker-display {
@@ -1724,7 +1748,7 @@ export default {
     border-radius: 8px;
     padding: 0 12px;
     font-size: 14px;
-    color: #333;
+    color: $sull-text-main;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1732,12 +1756,12 @@ export default {
 }
 
 .picker-display.empty {
-    color: #909399;
+    color: $sull-text-secondary;
 }
 
 .picker-clear-btn {
     padding: 4px 8px;
-    color: #999;
+    color: $sull-text-secondary;
     font-size: 14px;
     display: flex;
     align-items: center;
@@ -1746,7 +1770,7 @@ export default {
 
 /* Alerts */
 .text-red-bold {
-    color: #F56C6C !important;
+    color: $sull-color-error !important;
     font-weight: bold;
 }
 
@@ -1847,3 +1871,26 @@ export default {
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23E6A23C'%3E%3Cpath d='M12 4c-3.3 0-6 2.7-6 6v4h12v-4c0-3.3-2.7-6-6-6zm-1 3h2v4h-2V7z'/%3E%3Cpath d='M5 16v3c0 1.1 0.9 2 2 2h10c1.1 0 2-0.9 2-2v-3H5z'/%3E%3Cpath d='M12 1.5l1.5 1.5-1.5 1.5-1.5-1.5L12 1.5zM4.5 5.5l2 2-1.5 1.5-2-2 1.5-1.5zM19.5 5.5l-2 2 1.5 1.5 2-2-1.5-1.5z'/%3E%3C/svg%3E");
 }
 </style>
+
+/* Page Scroll Fix */
+page {
+min-height: 100%;
+height: auto;
+overflow-y: auto;
+background-color: $sull-color-background;
+}
+
+.container {
+display: flex;
+flex-direction: column;
+min-height: 100vh;
+height: auto;
+width: 100%;
+overflow: visible;
+background-color: $sull-color-background;
+}
+
+.main-content {
+flex: 1;
+width: 100%;
+}

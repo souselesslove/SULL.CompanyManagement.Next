@@ -19,7 +19,7 @@
                 <view class="refresher-content">
                     <view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
                     <text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
-                    }}</text>
+                        }}</text>
                 </view>
             </view>
 
@@ -136,7 +136,7 @@
                                 <view class="timeline-header">
                                     <text class="timeline-time">{{ formatTime(item.CreationTime) }}</text>
                                     <text class="timeline-creator">{{ item.Creator || $t('index.timeline.unknown')
-                                        }}</text>
+                                    }}</text>
                                 </view>
                                 <view class="timeline-desc">{{ item.Description }}</view>
                                 <view class="timeline-footer">
@@ -491,8 +491,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 .container {
     height: 100vh;
     display: flex;

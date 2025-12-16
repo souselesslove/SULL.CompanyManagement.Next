@@ -22,7 +22,7 @@
 
                 <view class="file-area" @click="chooseFile">
                     <view v-if="!fileName" class="upload-placeholder">
-                        <text class="icon">📂</text>
+                        <text class="icon">📄</text>
                         <text class="text">{{ $t('itemManage.select_file') }}</text>
                     </view>
                     <view v-else class="file-info">
@@ -535,8 +535,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 .container {
     background-color: $sull-color-background;
     height: 100vh;

@@ -124,7 +124,7 @@
                                     member.CreationTime || '-' }}</text>
                             </view>
 
-                            <view class="member-action" v-if="!isDutyUser(member)">
+                            <view class="member-action" v-if="!isDutyUser(member) && canSetDuty">
                                 <button class="btn-set-duty" @click="handleSetDuty(member)">
                                     {{ $t('department.set_duty') }}
                                 </button>
@@ -240,6 +240,25 @@ export default {
             return this.orgDeptList.filter(dept =>
                 (dept.Name && dept.Name.toLowerCase().includes(keyword))
             );
+        },
+        canSetDuty() {
+            if (!this.userDeptList.length || !this.userOrgInfo || !this.userOrgInfo.User) return false;
+            const dept = this.userDeptList[0];
+            const userId = this.userOrgInfo.User.UserId;
+
+            const hasDutyUser = dept.DutyUserId && dept.DutyUser;
+
+            // Condition 1: No duty user, and current user is Creator
+            if (!hasDutyUser) {
+                return dept.CreatorId == userId;
+            }
+
+            // Condition 2: Has duty user, and current user IS the duty user
+            if (hasDutyUser) {
+                return dept.DutyUserId == userId;
+            }
+
+            return false;
         }
     },
     onLoad() {
@@ -495,8 +514,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '@/sull.scss';
-
 /* Styles copied from organization.vue */
 .container {
     display: flex;

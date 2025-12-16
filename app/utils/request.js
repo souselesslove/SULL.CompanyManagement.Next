@@ -3,6 +3,8 @@ const SERVER_CONFIG = {
     // Replace with your actual server address
     BASE_URL: 'http://10.0.0.1:64624/',
     RESOURCE_URL: 'http://10.0.0.1:64624/',
+    // BASE_URL: 'https://www.gdssbh.com/cmfv2/',
+    // RESOURCE_URL: 'https://www.gdssbh.com/cmfv2/',
     TIMEOUT: 30000
 };
 

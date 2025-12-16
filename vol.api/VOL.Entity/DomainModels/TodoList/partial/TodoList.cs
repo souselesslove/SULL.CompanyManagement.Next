@@ -20,5 +20,6 @@ namespace VOL.Entity.DomainModels
         // Category: 10=效期；20=库存；30=异常；40=其他
         // RelatedId: 比如提醒交接班，那么关联的就是交接班单的编号
         // FinalStatus: 0=未完成；200=完成；210=取消；220=忽略
+        // Kind:0=不区分；1=交接班；2=封存
     }
 }
