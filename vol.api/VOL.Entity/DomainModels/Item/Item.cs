@@ -30,8 +30,8 @@ namespace VOL.Entity.DomainModels
        ///物品名称
        /// </summary>
        [Display(Name ="物品名称")]
-       [MaxLength(128)]
-       [Column(TypeName="nvarchar(128)")]
+       [MaxLength(255)]
+       [Column(TypeName="varchar(255)")]
        [Editable(true)]
        [Required(AllowEmptyStrings=false)]
        public string Name { get; set; }
@@ -68,8 +68,8 @@ namespace VOL.Entity.DomainModels
        ///规格
        /// </summary>
        [Display(Name ="规格")]
-       [MaxLength(64)]
-       [Column(TypeName="nvarchar(64)")]
+       [MaxLength(255)]
+       [Column(TypeName="varchar(255)")]
        [Editable(true)]
        public string Specification { get; set; }
 
@@ -217,8 +217,8 @@ namespace VOL.Entity.DomainModels
        ///备注
        /// </summary>
        [Display(Name ="备注")]
-       [MaxLength(128)]
-       [Column(TypeName="nvarchar(128)")]
+       [MaxLength(1024)]
+       [Column(TypeName="nvarchar(1024)")]
        [Editable(true)]
        public string Remark { get; set; }
 
@@ -254,6 +254,15 @@ namespace VOL.Entity.DomainModels
        [Column(TypeName="int")]
        [Editable(true)]
        public int? Price { get; set; }
+
+       /// <summary>
+       ///标记
+       /// </summary>
+       [Display(Name ="标记")]
+       [MaxLength(128)]
+       [Column(TypeName="nvarchar(128)")]
+       [Editable(true)]
+       public string Tag { get; set; }
 
        /// <summary>
        ///创建时间

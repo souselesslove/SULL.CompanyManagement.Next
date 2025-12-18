@@ -232,17 +232,25 @@
 
 		<!-- Bottom Navigation (Only show if logged in) -->
 		<BottomNav v-if="isLoggedIn" activePage="profile" />
+
+		<!-- Confirm Modal -->
+		<ConfirmModal v-model:visible="confirmModal.visible" :title="confirmModal.title" :message="confirmModal.message"
+			:confirmText="confirmModal.confirmText" :cancelText="confirmModal.cancelText"
+			:confirmColor="confirmModal.confirmColor" :cancelColor="confirmModal.cancelColor"
+			@confirm="handleConfirmAction" @cancel="handleCancelAction" />
 	</view>
 
 </template>
 
 <script>
 import BottomNav from '@/components/BottomNav/BottomNav.vue';
+import ConfirmModal from '@/components/ConfirmModal/ConfirmModal.vue';
 import request from '@/utils/request.js';
 
 export default {
 	components: {
-		BottomNav
+		BottomNav,
+		ConfirmModal
 	},
 	data() {
 		return {
@@ -266,13 +274,22 @@ export default {
 
 			// User Info
 			userInfo: {},
+			userOrgInfo: {},
 
 			// Refresher state
 			isRefreshing: false,
 
-			// Dynamic Button Texts
-			orgBtnText: 'Organization Info',
-			deptBtnText: 'Department Info'
+			// Confirm Modal State
+			confirmModal: {
+				visible: false,
+				title: '',
+				message: '',
+				confirmText: 'Confirm',
+				cancelText: 'Cancel',
+				confirmColor: '#92C5F7',
+				cancelColor: '#FF6B6B',
+				actionType: '' // 'joinOrg', 'logout', etc.
+			}
 		}
 	},
 	computed: {
@@ -290,6 +307,16 @@ export default {
 				return request.config.RESOURCE_URL + url;
 			}
 			return '/static/avatar_placeholder.png';
+		},
+		orgBtnText() {
+			return (this.userOrgInfo && this.userOrgInfo.Organization && this.userOrgInfo.Organization.Name)
+				? this.userOrgInfo.Organization.Name
+				: this.$t('organization.title_info');
+		},
+		deptBtnText() {
+			return (this.userOrgInfo && this.userOrgInfo.Department && this.userOrgInfo.Department.Name)
+				? this.userOrgInfo.Department.Name
+				: this.$t('department.title_info');
 		}
 	},
 	onShow() {
@@ -474,7 +501,22 @@ export default {
 				sizeType: ['compressed'],
 				success: (res) => {
 					const tempFilePaths = res.tempFilePaths;
-					this.uploadAvatar(tempFilePaths[0], res.tempFiles[0].name);
+					let fileName = res.tempFiles[0].name;
+					// Fallback if name is missing (common in WeChat/App)
+					if (!fileName && tempFilePaths[0]) {
+						const path = tempFilePaths[0];
+						const lastSlash = path.lastIndexOf('/');
+						if (lastSlash !== -1) {
+							fileName = path.substring(lastSlash + 1);
+						} else {
+							fileName = path;
+						}
+					}
+					// Final fallback if parsing failed
+					if (!fileName) {
+						fileName = `avatar_${new Date().getTime()}.jpg`;
+					}
+					this.uploadAvatar(tempFilePaths[0], fileName);
 				}
 			});
 		},
@@ -566,17 +608,37 @@ export default {
 						const data = res;
 						// Store in local cache
 						uni.setStorageSync('userOrgInfo', data);
-						if (data.Organization.Name) {
-							this.orgBtnText = data.Organization.Name;
-						}
-						if (data.Department.Name) {
-							this.deptBtnText = data.Department.Name;
+						this.userOrgInfo = data;
+
+						// Check if Organization is missing
+						if (!data.Organization || !data.Organization.Id || data.Organization.Id === 0) {
+							this.showOrgMissingModal();
 						}
 					}
 				})
 				.catch(err => {
 					console.error("Failed to get user organization", err);
 				});
+		},
+		showOrgMissingModal() {
+			this.confirmModal = {
+				visible: true,
+				title: this.$t('profile.org_required_title'),
+				message: this.$t('profile.org_required_msg'),
+				confirmText: this.$t('profile.join_now'),
+				cancelText: this.$t('profile.not_now'),
+				confirmColor: '#92C5F7',
+				cancelColor: '#999999',
+				actionType: 'joinOrg'
+			};
+		},
+		handleConfirmAction() {
+			if (this.confirmModal.actionType === 'joinOrg') {
+				this.navToOrgInfo();
+			}
+		},
+		handleCancelAction() {
+			// Do nothing or maybe logout if strict
 		},
 		onRefresh() {
 			this.isRefreshing = true;

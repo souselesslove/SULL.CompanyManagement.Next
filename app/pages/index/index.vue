@@ -35,7 +35,7 @@
 						<view class="overview-header">
 							<view class="status-left">
 								<picker v-if="rescueCars.length > 1" @change="onRescueCarChange"
-									:value="currentRescueCarIndex" :range="rescueCars" range-key="Name">
+									:value="currentRescueCarIndex" :range="rescueCars" range-key="DisplayName">
 									<view class="picker-wrap">
 										<text class="overview-title">{{ rescueCars[currentRescueCarIndex] ?
 											rescueCars[currentRescueCarIndex].DisplayName : $t('index.deptStatus')
@@ -194,7 +194,7 @@
 				</view>
 				<scroll-view scroll-y class="modal-body timeline-body">
 					<view v-if="timelineLoading" class="loading-state">
-						<text>加载�.</text>
+						<text>加载中.</text>
 					</view>
 					<view v-else-if="timelineData.length === 0" class="empty-state-simple">
 						<text class="empty-text-simple">暂无处理记录</text>
@@ -218,9 +218,9 @@
 								</view>
 								<view class="timeline-desc">{{ item.Description }}</view>
 								<view class="timeline-footer">
-									<text class="timeline-status" v-if="item.Status">状� {{ getStatusText(item.Status)
+									<text class="timeline-status" v-if="item.Status">状态 {{ getStatusText(item.Status)
 									}}</text>
-									<text class="timeline-assign" v-if="item.AssignUser">处理�{{ item.AssignUser
+									<text class="timeline-assign" v-if="item.AssignUser">处理人{{ item.AssignUser
 									}}</text>
 									<text class="timeline-remark" v-if="item.Remark">备注: {{ item.Remark }}</text>
 								</view>
@@ -489,8 +489,20 @@ export default {
 				])
 			}).then(res => {
 				this.rescueCars = res.rows || [];
+				this.rescueCars = res.rows || [];
 				if (this.rescueCars.length > 0) {
-					this.currentRescueCarIndex = 0;
+					// Restore last selected car
+					const lastId = uni.getStorageSync('lastSelectedRescueCarId');
+					if (lastId) {
+						const idx = this.rescueCars.findIndex(c => c.Id === lastId);
+						if (idx > -1) {
+							this.currentRescueCarIndex = idx;
+						} else {
+							this.currentRescueCarIndex = 0;
+						}
+					} else {
+						this.currentRescueCarIndex = 0;
+					}
 					// Fetch stats
 					this.fetchDashboardStats();
 				} else {
@@ -500,6 +512,11 @@ export default {
 		},
 		onRescueCarChange(e) {
 			this.currentRescueCarIndex = e.detail.value;
+			// Save selection
+			const car = this.rescueCars[this.currentRescueCarIndex];
+			if (car) {
+				uni.setStorageSync('lastSelectedRescueCarId', car.Id);
+			}
 			this.fetchDashboardStats();
 		},
 

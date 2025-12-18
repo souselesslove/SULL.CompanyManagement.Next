@@ -437,11 +437,9 @@
         "deleting": "Deleting...",
         "fetchError": "Failed to fetch data",
         "shared": "Shared",
-        "exported": "Exported", 
+        "exported": "Exported",
         "printing": "Printing...",
         "selectConfirmerError": "Please select a confirmer",
-        "searchMemberPlaceholder": "Enter name to search member",
-        "empty": "No Records"
-    },
+        "searchMemberPlaceholder": "Enter name to search member"
     }
 }

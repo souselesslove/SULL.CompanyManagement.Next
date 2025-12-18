@@ -315,6 +315,12 @@ namespace VOL.Core.BaseProvider
         /// <returns></returns>
         public virtual PageGridData<T> GetPageData(PageDataOptions options)
         {
+            // Limit page size to 50
+            if (options.Rows > 50)
+            {
+                options.Rows = 50;
+            }
+
             options = ValidatePageOptions(options, out IQueryable<T> queryable);
             //获取排序字段
             Dictionary<string, QueryOrderBy> orderbyDic = GetPageDataSort(options, TProperties);

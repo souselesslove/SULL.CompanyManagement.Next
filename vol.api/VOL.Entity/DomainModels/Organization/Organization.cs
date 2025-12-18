@@ -125,8 +125,8 @@ namespace VOL.Entity.DomainModels
        ///邀请码
        /// </summary>
        [Display(Name ="邀请码")]
-       [MaxLength(8)]
-       [Column(TypeName="nvarchar(8)")]
+       [MaxLength(32)]
+       [Column(TypeName="nvarchar(32)")]
        [Editable(true)]
        public string InvitationCode { get; set; }
 

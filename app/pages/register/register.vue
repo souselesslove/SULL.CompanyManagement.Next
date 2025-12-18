@@ -3,7 +3,9 @@
 		<view class="login-container">
 			<!-- Header -->
 			<view class="login-header">
-				<BackButton class="header-back-btn" @click="goBack" />
+				<view class="back-btn-placeholder" @click="goBack">
+					<BackButton :color="'#000000'" />
+				</view>
 				<view class="login-title-section">
 					<text class="login-title">{{ $t('register.title') }}</text>
 					<text class="login-subtitle">{{ $t('register.subtitle') }}</text>
@@ -83,16 +85,22 @@
 				</view>
 			</scroll-view>
 		</view>
+
+		<!-- Success Modal -->
+		<SuccessModal v-model:visible="successModal.visible" :title="successModal.title" :message="successModal.message"
+			:buttonText="successModal.buttonText" @confirm="handleSuccessConfirm" />
 	</view>
 </template>
 
 <script>
 import request from '@/utils/request.js';
 import BackButton from '@/components/BackButton/BackButton.vue';
+import SuccessModal from '@/components/SuccessModal/SuccessModal.vue';
 
 export default {
 	components: {
-		BackButton
+		BackButton,
+		SuccessModal
 	},
 	data() {
 		return {
@@ -104,12 +112,28 @@ export default {
 			inviteCode: '',
 
 			showPassword: false,
-			countdown: 0
+			countdown: 0,
+
+			// Success Modal State
+			successModal: {
+				visible: false,
+				title: 'Success',
+				message: '',
+				buttonText: 'Continue'
+			}
 		}
 	},
 	methods: {
 		goBack() {
-			uni.navigateBack();
+			const pages = getCurrentPages();
+			if (pages.length > 1) {
+				uni.navigateBack();
+			} else {
+				// If refreshed or direct entry, fallback to profile/login page
+				uni.reLaunch({
+					url: '/pages/profile/profile'
+				});
+			}
 		},
 		togglePassword() {
 			this.showPassword = !this.showPassword;
@@ -161,18 +185,15 @@ export default {
 				HeadImageUrl: "",
 				User_Id: null
 			};
-			const data = { "mainData": mainData, "detailData": detailData, "delKeys": null };
+			const data = { "mainData": mainData, "delKeys": null };
 			request.post('api/Sys_User/register', data)
 				.then(res => {
 					if (res.status) {
-						uni.showToast({
-							title: res.message || 'Registration Success',
-							icon: 'success'
-						});
+						// Show custom success modal
+						this.successModal.message = res.message || 'Registration successfully created';
+						this.successModal.visible = true;
 
-						setTimeout(() => {
-							this.goBack();
-						}, 1500);
+						// uni.showToast replaced by modal
 					} else {
 						uni.showToast({
 							title: res.message || 'Registration Failed',
@@ -184,14 +205,15 @@ export default {
 					// Error handling is mostly done in request.js, but we can do extra here
 					console.error(err);
 				});
+		},
+		handleSuccessConfirm() {
+			this.goBack();
 		}
 	}
 }
 </script>
 
 <style lang="scss" scoped>
-
-
 .container {
 	display: flex;
 	flex-direction: column;
@@ -208,16 +230,28 @@ export default {
 }
 
 .login-header {
-	margin-bottom: 8px;
-	display: block;
-	position: relative;
-	/* For absolute positioning of back button if needed, though here we might just use flex or flow */
-	padding-top: 20px;
-	padding-left: 24px;
+	padding: 60px 24px 40px;
+	background: linear-gradient(180deg, $sull-color-primary 0%, $sull-color-secondary-light 100%);
+	display: flex;
+	flex-direction: column;
 }
 
-.header-back-btn {
-	margin-bottom: 20px;
+.back-btn-placeholder {
+	width: 40px;
+	height: 40px;
+	background: #ffffff;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 24px;
+}
+
+.login-title {
+	font-size: 28px;
+	font-weight: bold;
+	color: #ffffff;
+	margin-bottom: 8px;
 	display: block;
 }
 

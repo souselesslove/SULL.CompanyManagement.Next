@@ -33,11 +33,13 @@ namespace SULL.HospitalManagement.Services
 
         private readonly IOrganizationUserService _organizationUserService;
         private readonly IRegisterCodeRepository _registerCodeRepository;
+        private readonly IDashboardService _dashboardService;
 
         [ActivatorUtilitiesConstructor]
         public OrganizationDepartmentService(
             IOrganizationDepartmentRepository dbRepository,
-            IHttpContextAccessor httpContextAccessor, IOrganizationUserRepository organizationUserRepository, IOrganizationRepository organizationRepository, IOrganizationUserService organizationUserService, IRegisterCodeRepository registerCodeRepository)
+            IHttpContextAccessor httpContextAccessor, IOrganizationUserRepository organizationUserRepository, IOrganizationRepository organizationRepository, IOrganizationUserService organizationUserService, IRegisterCodeRepository registerCodeRepository,
+            IDashboardService dashboardService)
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
@@ -46,6 +48,7 @@ namespace SULL.HospitalManagement.Services
             _repository = dbRepository;
             _organizationUserService = organizationUserService;
             _registerCodeRepository = registerCodeRepository;
+            _dashboardService = dashboardService;
             //多租户会用到这init代码，其他情况可以不用
             //base.Init(dbRepository);
         }
@@ -108,6 +111,12 @@ namespace SULL.HospitalManagement.Services
                     }
                 }
 
+                // Log to Dashboard
+                if (organization.OrganizationId > 0)
+                {
+                     _dashboardService.AddLog(organization.OrganizationId.Value, "系统消息", $"系统消息：部门[{organization.Name}]由 {UserContext.Current.UserTrueName} 创建成功");
+                }
+
                 return new WebResponseContent(true).OK(ResponseType.SaveSuccess);
             };
             // 使用细粒度锁防止重复添加部门
@@ -162,6 +171,7 @@ namespace SULL.HospitalManagement.Services
             var qry = from a in db.Set<OrganizationDepartment>()
                 join b in db.Set<OrganizationUser>() on a.Id equals b.DepartmentId
                 where b.UserId == userId
+                && b.IsDeleted != true
                 select a;
             pageGridData.total = await qry.CountAsync(cancellationToken);
             pageGridData.rows = await qry.ToListAsync(cancellationToken);
@@ -177,6 +187,7 @@ namespace SULL.HospitalManagement.Services
             join c in db.Set<Organization>() on a.OrganizationId equals c.Id
             join b in db.Set<OrganizationUser>() on c.Id equals b.OrganizationId
             where b.UserId == userId
+                  && b.IsDeleted != true
                 select a;
             pageGridData.total = await qry.CountAsync(cancellationToken);
             pageGridData.rows = await qry.ToListAsync(cancellationToken);

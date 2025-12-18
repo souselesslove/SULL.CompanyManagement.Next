@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Http;
 using SULL.HospitalManagement.IRepositories;
 using VOL.Core.ManageUser;
 using VOL.Core.RabbitMQ;
+using SULL.HospitalManagement.IServices;
 
 namespace SULL.HospitalManagement.Services
 {
@@ -28,17 +29,20 @@ namespace SULL.HospitalManagement.Services
         private readonly ISealHistoryRepository _repository;//访问数据库
 
         private readonly IMessageProducer _messageProducer;
+        private readonly IDashboardService _dashboardService;
 
         [ActivatorUtilitiesConstructor]
         public SealHistoryService(
             ISealHistoryRepository dbRepository,
-            IHttpContextAccessor httpContextAccessor, IMessageProducer messageProducer
+            IHttpContextAccessor httpContextAccessor, IMessageProducer messageProducer,
+            IDashboardService dashboardService
             )
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _repository = dbRepository;
             _messageProducer = messageProducer;
+            _dashboardService = dashboardService;
             //多租户会用到这init代码，其他情况可以不用
             //base.Init(dbRepository);
         }
@@ -94,6 +98,25 @@ namespace SULL.HospitalManagement.Services
                         if (entity.Status != 0)
                         {
                             return new WebResponseContent().Error("非法操作");
+                        }
+
+                        // Log to Dashboard
+                        var db = _repository.DbContext;
+                        var car = db.Set<Position>().FirstOrDefault(x => x.Id == entity.RelatedId);
+                        if (car != null && car.OrganizationId > 0)
+                        {
+                            string deptName = "未知科室";
+                            string carName = car.DisplayName;
+                            string operatorName = UserContext.Current.UserTrueName;
+
+                            if (car.DepartmentId > 0)
+                            {
+                                var dept = db.Set<OrganizationDepartment>().FirstOrDefault(x => x.Id == car.DepartmentId);
+                                if (dept != null) deptName = dept.Name;
+                            }
+                            
+                            string logMsg = $"[{deptName}]-[{carName}] 由 {operatorName} 完成封存";
+                            _dashboardService.AddLog(car.OrganizationId.Value, "封存", logMsg);
                         }
                     }
                 }

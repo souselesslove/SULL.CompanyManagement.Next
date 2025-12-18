@@ -2,9 +2,7 @@
     <view class="container">
         <!-- Navigation Bar Removed - Using Header Section -->
 
-        <scroll-view class="main-scroll" scroll-y @scroll="onScroll" :scroll-top="scrollTop" lower-threshold="50"
-            @scrolltolower="onLoadMore" refresher-enabled @refresherrefresh="onRefresh"
-            :refresher-triggered="isRefreshing">
+        <view class="main-content">
 
             <!-- Header Gradient Section matching Add Car page -->
             <view class="header-section" :style="{ paddingTop: (statusBarHeight + 10) + 'px' }">
@@ -34,15 +32,18 @@
             <view class="content-panel">
                 <!-- Rescue Car Switcher -->
                 <view class="horizontal-section" v-if="rescueCarList.length > 0">
-                    <scroll-view scroll-x class="horizontal-scroll" :show-scrollbar="false">
+                    <scroll-view scroll-x class="horizontal-scroll" :show-scrollbar="false"
+                        :scroll-into-view="scrollIntoViewId" scroll-with-animation>
                         <view class="scroll-inner">
                             <view class="fixed-add-btn" @click="goAdd(10)">
                                 <text class="add-icon">+</text>
                             </view>
 
                             <view class="h-card" v-for="(item, index) in rescueCarList" :key="item.Id"
-                                :class="{ active: selectedRescueCarId === item.Id }" @click="selectRescueCar(item.Id)">
+                                :id="'car-' + item.Id" :class="{ active: selectedRescueCarId === item.Id }"
+                                @click="selectRescueCar(item.Id)" @longpress="showDutyUserModal(item)">
                                 <text class="card-name">{{ item.DisplayName }}</text>
+                                <text class="card-duty" v-if="item.DutyUser">{{ item.DutyUser }}</text>
                             </view>
                         </view>
                     </scroll-view>
@@ -143,7 +144,7 @@
 
             <view class="bottom-spacer"></view>
             <FooterInfo />
-        </scroll-view>
+        </view>
 
         <BackToTop :scroll-top="scrollTop" @click="goTop" />
 
@@ -236,6 +237,30 @@
             </view>
         </view>
     </view>
+
+    <!-- Member Selector Modal (Bottom Sheet Style) -->
+    <view class="member-overlay" v-if="showMemberSelector" @click="closeMemberSelector">
+        <view class="member-modal" @click.stop>
+            <view class="member-top-bar">
+                <text class="member-modal-title">设置抢救车责任人</text>
+                <text class="close-btn" @click="closeMemberSelector">✖️</text>
+            </view>
+            <view class="member-search-bar">
+                <view class="search-box">
+                    <input class="search-input" v-model="searchMemberKey" placeholder="搜索人员" />
+                    <text v-if="searchMemberKey" class="clear-icon" @click="clearSearchMember">✖</text>
+                </view>
+            </view>
+            <scroll-view scroll-y class="member-list">
+                <view v-for="(m, index) in filteredMemberList" :key="m.id" class="member-item" @click="selectMember(m)">
+                    <text class="item-text">{{ m.name }}</text>
+                </view>
+                <view v-if="filteredMemberList.length === 0" class="empty-state-small">
+                    <text>无搜索结果</text>
+                </view>
+            </scroll-view>
+        </view>
+    </view>
 </template>
 
 <script>
@@ -261,6 +286,7 @@ export default {
 
             // Selections
             selectedRescueCarId: null,
+            scrollIntoViewId: '',
 
             // Items Cache
             itemsMap: {},
@@ -283,8 +309,18 @@ export default {
             showManualDialog: false,
             itemRemarkContent: '',
 
+            // Item Manual
+            showManualDialog: false,
+            itemRemarkContent: '',
+
             // Filter
-            currentFilter: null
+            currentFilter: null,
+
+            // Duty User Selection
+            showMemberSelector: false,
+            memberList: [],
+            searchMemberKey: '',
+            currentEditingCar: null
         };
     },
     onLoad(options) {
@@ -297,24 +333,34 @@ export default {
         }
 
         this.fetchData();
+        this.fetchMembers();
+    },
+    computed: {
+        filteredMemberList() {
+            if (!this.searchMemberKey) return this.memberList;
+            const key = this.searchMemberKey.toLowerCase();
+            return this.memberList.filter(m => m.name.toLowerCase().includes(key));
+        }
     },
     methods: {
         goBack() {
             uni.navigateBack();
         },
         goTop() {
-            this.scrollTop = this.oldScrollTop;
-            this.$nextTick(() => { this.scrollTop = 0; });
+            uni.pageScrollTo({
+                scrollTop: 0,
+                duration: 300
+            });
         },
-        onScroll(e) {
-            this.scrollTop = e.detail.scrollTop;
-            this.oldScrollTop = e.detail.scrollTop;
+        onPageScroll(e) {
+            this.scrollTop = e.scrollTop;
         },
-        onRefresh() {
+        onPullDownRefresh() {
             this.isRefreshing = true;
             this.fetchData().then(() => {
                 this.isRefreshing = false;
                 uni.showToast({ title: '已刷新', icon: 'none' });
+                uni.stopPullDownRefresh();
             });
         },
         async fetchData() {
@@ -339,12 +385,20 @@ export default {
                 this.rescueCarList = (res.rows || []).filter(w => w.Category === 10);
                 this.allFloorList = (res.rows || []).filter(w => w.Category === 100);
                 if (this.rescueCarList.length > 0) {
-                    // Default select first
-                    if (!this.selectedRescueCarId || !this.rescueCarList.find(w => w.Id === this.selectedRescueCarId)) {
+                    let targetId = this.selectedRescueCarId;
+
+                    // Try to load from storage
+                    if (!targetId) {
+                        const lastId = uni.getStorageSync('lastSelectedRescueCarId');
+                        if (lastId && this.rescueCarList.find(w => w.Id === lastId)) {
+                            targetId = lastId;
+                        }
+                    }
+
+                    if (!targetId || !this.rescueCarList.find(w => w.Id === targetId)) {
                         this.selectRescueCar(this.rescueCarList[0].Id);
                     } else {
-                        // Refresh current selection
-                        this.selectRescueCar(this.selectedRescueCarId);
+                        this.selectRescueCar(targetId);
                     }
                 } else {
                     this.rescueCarList = [];
@@ -359,6 +413,8 @@ export default {
 
         selectRescueCar(id) {
             this.selectedRescueCarId = id;
+            uni.setStorageSync('lastSelectedRescueCarId', id);
+            this.scrollIntoViewId = 'car-' + id;
             this.fetchFloors(id);
         },
 
@@ -438,7 +494,15 @@ export default {
                         { name: 'DepartmentId', value: this.userOrgInfo.Department.Id }])
                     });
                     if (res.rows && res.rows.length > 0) {
-                        this.$set(this.itemsMap, id, res.rows[0]);
+                        const item = res.rows[0];
+                        const dateToUse = item.LatestExpirationDate || item.ExpiryDate;
+                        const days = this.getDaysUntil(dateToUse);
+
+                        // Pre-calculate
+                        item.IsExpiryWarning = days < 30;
+                        item.IsStockInsufficient = this.isStockInsufficient(item);
+
+                        this.$set(this.itemsMap, id, item);
                     }
                 } catch (e) { }
             }
@@ -447,14 +511,11 @@ export default {
         goAdd(category) {
             let parentId = 0;
             // category 10 = rescue car, 100 = floor
-            if (category === 100) {
-                if (!this.selectedRescueCarId) return uni.showToast({ title: '请选择抢救车', icon: 'none' });
-                parentId = this.selectedRescueCarId;
+            if (category === 10) {
+                uni.navigateTo({
+                    url: `/pages/position-manage/position-add-car`
+                });
             }
-
-            uni.navigateTo({
-                url: `/pages/position-manage/position-add?category=${category}&parentId=${parentId}`
-            });
         },
         editSerial(serial) {
             // Navigate to edit serial or add item to serial
@@ -524,7 +585,7 @@ export default {
         },
         getFloorStatusClass(floor) {
             const serials = this.getSerialsByFloor(floor.Id);
-            if (!serials || serials.length === 0) return 'blink-green'; // Default green if empty? Or gray? User implies normal is green.
+            if (!serials || serials.length === 0) return 'blink-green';
 
             let hasExpiryWarning = false;
             let hasStockWarning = false;
@@ -532,14 +593,11 @@ export default {
             for (let s of serials) {
                 if (s.ItemId > 0 && this.itemsMap[s.ItemId]) {
                     const item = this.itemsMap[s.ItemId];
-                    // Check Expiry (Red)
-                    const days = this.getDaysUntil(item.ExpiryDate);
-                    if (days < 30) {
+                    if (item.IsExpiryWarning) {
                         hasExpiryWarning = true;
-                        break; // Highest priority
+                        break;
                     }
-                    // Check Stock (Orange)
-                    if (item.AvailableStock < item.Cardinality || item.AvailableStock <= 0) { // Assuming MinStock exists or just 0
+                    if (item.IsStockInsufficient) {
                         hasStockWarning = true;
                     }
                 }
@@ -645,8 +703,30 @@ export default {
             return serials.filter(s => s.ItemId && s.ItemId > 0).length;
         },
         async restockFloor(floor) {
-            uni.showToast({ title: '已触发一键补库', icon: 'success' });
-            // Call API placeholder
+            try {
+                uni.showLoading({ title: '补库中...', mask: true });
+                // One-click restock: Set all stock for the warehouse (car) or floor?
+                // User said "SetAllStock, need to pass WarehouseId". 
+                // Context is "Action Sheet Item 2: One Key Restock", which is triggered from a Floor card 'showFloorActions'.
+                // If it really means WarehouseId, it might restock the WHOLE car.
+                // Assuming it means for this floor's scope, but API takes WarehouseId.
+                // If the user wants to restock the whole car, we pass floor.WarehouseId.
+
+                await request.post('api/ssbh/ItemHistory/SetAllStock', {
+                    mainData: { WarehouseId: floor.WarehouseId }
+                });
+
+                uni.showToast({ title: '补库成功', icon: 'success' });
+
+                // Refresh to show updated stock
+                await this.refreshFloorSerials(floor);
+
+            } catch (e) {
+                console.error(e);
+                uni.showToast({ title: '补库失败', icon: 'none' });
+            } finally {
+                uni.hideLoading();
+            }
         },
         showSerialActions(serial) {
             this.tempSerial = serial;
@@ -803,12 +883,65 @@ export default {
             this.itemRemarkContent = item.Remark || '暂无说明书内容';
             this.showManualDialog = true;
         },
+        // Duty User Logic
+        showDutyUserModal(car) {
+            this.currentEditingCar = car;
+            this.showMemberSelector = true;
+            this.searchMemberKey = '';
+        },
+        closeMemberSelector() {
+            this.showMemberSelector = false;
+        },
+        clearSearchMember() {
+            this.searchMemberKey = '';
+        },
+        fetchMembers() {
+            request.get('api/ssbh/OrganizationUser/DepartmentUser')
+                .then(res => {
+                    this.memberList = (res.rows || []).map(u => ({
+                        name: u.UserTrueName || u.userTrueName || u.UserName || u.userName,
+                        id: u.UserId || u.userId
+                    }));
+                })
+                .catch(err => {
+                    console.error("Fetch Members Failed", err);
+                });
+        },
+        selectMember(member) {
+            if (!this.currentEditingCar) return;
+            const car = this.currentEditingCar;
+
+            uni.showLoading({ title: '更新中...' });
+
+            const payload = {
+                ...car,
+                DutyUser: member.name,
+                // DutyUserId: member.id, 
+            };
+
+            // Using standard update
+            request.post('api/ssbh/Position/Update', {
+                mainData: payload
+            }).then(res => {
+                uni.hideLoading();
+                if (res.success !== false) { // Handle variable response structure
+                    uni.showToast({ title: '已更新责任人' });
+                    // Update local list
+                    car.DutyUser = member.name;
+                    this.closeMemberSelector();
+                } else {
+                    uni.showToast({ title: res.msg || '更新失败', icon: 'none' });
+                }
+            }).catch(e => {
+                uni.hideLoading();
+                console.error(e);
+                uni.showToast({ title: '网络错误', icon: 'none' });
+            });
+        },
         closeManualDialog() {
             this.showManualDialog = false;
         },
-        onLoadMore() {
-            // Placeholder
-        },
+
         getDaysUntil(dateStr) {
             if (!dateStr) return 9999;
             const now = new Date();
@@ -824,6 +957,8 @@ export default {
         },
         isStockInsufficient(item) {
             if (!item) return false;
+            if (typeof item.IsStockInsufficient !== 'undefined') return item.IsStockInsufficient;
+
             const stock = item.AvailableStock || 0;
             const base = item.Cardinality || 0;
             return stock < base || stock === 0;
@@ -835,13 +970,11 @@ export default {
         },
         hasExpiryProblem(floor) {
             // Check full list for this floor, ignoring current filter
-            // Logic: Expiry < 30 days (User defined "AbnormalExpiry" as < 30)
             return this.serialList.some(s => {
                 if (s.FloorId !== floor.Id) return false;
                 if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
                 const item = this.itemsMap[s.ItemId];
-                const days = this.getDaysUntil(item.LatestExpirationDate);
-                return days < 30;
+                return item.IsExpiryWarning;
             });
         },
         hasStockProblem(floor) {
@@ -850,7 +983,7 @@ export default {
                 if (s.FloorId !== floor.Id) return false;
                 if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
                 const item = this.itemsMap[s.ItemId];
-                return this.isStockInsufficient(item);
+                return item && item.IsStockInsufficient;
             });
         }
     }
@@ -858,11 +991,22 @@ export default {
 </script>
 
 <style lang="scss" scoped>
+/* Page Scroll Fix */
+page {
+    min-height: 100%;
+    height: auto;
+    overflow-y: auto;
+    background-color: $sull-color-background;
+}
+
 .container {
-    background-color: #F7F8FA;
-    height: 100vh;
     display: flex;
     flex-direction: column;
+    min-height: 100vh;
+    height: auto;
+    width: 100%;
+    overflow: visible;
+    background-color: $sull-color-background;
 }
 
 .header-section {
@@ -874,13 +1018,18 @@ export default {
     box-sizing: border-box;
 }
 
+.main-content {
+    flex: 1;
+    width: 100%;
+}
+
 .nav-bar {
     display: flex;
     align-items: center;
 }
 
 .header-content {
-    margin-top: 10px;
+    margin-top: 0;
     padding-bottom: 20px;
 }
 
@@ -892,10 +1041,7 @@ export default {
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.main-scroll {
-    flex: 1;
-    height: 100%;
-}
+
 
 .search-row {
     margin-top: 12px;
@@ -1010,20 +1156,34 @@ export default {
 
 .h-card {
     display: inline-flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     height: 48px;
-    padding: 0 20px;
+    padding: 0 12px;
+    min-width: 60px;
     background: #F7F8FA;
     border-radius: 24px;
     margin-right: 12px;
     border: 1px solid transparent;
+    margin-right: 12px;
+    border: 1px solid transparent;
     transition: all 0.3s;
+    min-width: auto;
+    flex-shrink: 0;
 
     .card-name {
         font-size: 14px;
         font-weight: 500;
         color: #555;
+        line-height: 1.2;
+    }
+
+    .card-duty {
+        font-size: 10px;
+        color: #999;
+        margin-top: 2px;
+        line-height: 1;
     }
 
     .floor-count {
@@ -1661,6 +1821,104 @@ export default {
     color: #333;
     line-height: 1.8;
     white-space: pre-wrap;
+    white-space: pre-wrap;
     text-align: justify;
+}
+
+/* Member Selector Modal (Bottom Sheet) */
+.member-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 3000;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+}
+
+.member-modal {
+    width: 100%;
+    background: #fff;
+    border-radius: 20px 20px 0 0;
+    padding: 20px;
+    padding-bottom: 40px;
+    display: flex;
+    flex-direction: column;
+    max-height: 70vh;
+    animation: slideUp 0.3s ease;
+}
+
+.member-top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.member-modal-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #171725;
+}
+
+.member-search-bar {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+
+    .search-box {
+        flex: 1;
+        position: relative;
+        display: flex;
+        align-items: center;
+        background: transparent; // Reset
+        height: auto; // Reset
+        border-radius: 0; // Reset
+        backdrop-filter: none; // Reset
+        padding: 0; // Reset
+    }
+
+    .search-input {
+        flex: 1;
+        height: 40px;
+        background: #F5F7FA;
+        border-radius: 20px;
+        padding: 0 36px 0 16px;
+        font-size: 14px;
+        color: #333; // Dark text for member search
+    }
+}
+
+.member-list {
+    flex: 1;
+    height: 0;
+    min-height: 300px;
+}
+
+.member-item {
+    padding: 16px;
+    border-bottom: 1px solid #f9f9f9;
+    display: flex;
+    align-items: center;
+
+    &:active {
+        background: #f5f5f5;
+    }
+}
+
+.item-text {
+    font-size: 15px;
+    color: #171725;
+}
+
+.empty-state-small {
+    padding: 20px;
+    text-align: center;
+    color: #999;
+    font-size: 14px;
 }
 </style>

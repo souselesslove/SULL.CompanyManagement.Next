@@ -30,16 +30,19 @@ namespace SULL.HospitalManagement.Services
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IHandoverRepository _repository; //访问数据库
         private readonly IMessageProducer _messageProducer;
+        private readonly IDashboardService _dashboardService;
 
         [ActivatorUtilitiesConstructor]
         public HandoverService(
             IHandoverRepository dbRepository,
-            IHttpContextAccessor httpContextAccessor, IMessageProducer messageProducer)
+            IHttpContextAccessor httpContextAccessor, IMessageProducer messageProducer,
+            IDashboardService dashboardService)
             : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _messageProducer = messageProducer;
             _repository = dbRepository;
+            _dashboardService = dashboardService;
             //多租户会用到这init代码，其他情况可以不用
             //base.Init(dbRepository);
         }
@@ -154,6 +157,30 @@ namespace SULL.HospitalManagement.Services
                             saveModel.MainData["Kind"] = 1;
                             _messageProducer.PublishAsync(saveModel, Define.ExchangeName, Define.TodoQueue).GetAwaiter()
                                 .GetResult();
+
+                            // Log to Dashboard
+                            if (entity.OrganizationId > 0)
+                            {
+                                var db = _repository.DbContext;
+                                string deptName = "未知科室";
+                                string carName = "未知位置";
+                                string operatorName = UserContext.Current.UserTrueName;
+
+                                if (entity.DepartmentId > 0)
+                                {
+                                    var dept = db.Set<OrganizationDepartment>().FirstOrDefault(x => x.Id == entity.DepartmentId);
+                                    if (dept != null) deptName = dept.Name;
+                                }
+
+                                if (entity.RelatedId > 0)
+                                {
+                                    var car = db.Set<Position>().FirstOrDefault(x => x.Id == entity.RelatedId);
+                                    if (car != null) carName = car.DisplayName;
+                                }
+
+                                string logMsg = $"[{deptName}]-[{carName}] 由 {operatorName} 完成交接班";
+                                _dashboardService.AddLog(entity.OrganizationId.Value, "交接班", logMsg);
+                            }
                         }
                         else if (statusStr == "20")
                         {

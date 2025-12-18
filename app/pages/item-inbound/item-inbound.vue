@@ -31,10 +31,12 @@
             <view class="content-panel">
                 <!-- Rescue Car Switcher -->
                 <view class="horizontal-section" v-if="rescueCarList.length > 0">
-                    <scroll-view scroll-x class="horizontal-scroll" :show-scrollbar="false">
+                    <scroll-view scroll-x class="horizontal-scroll" :show-scrollbar="false"
+                        :scroll-into-view="scrollIntoViewId" scroll-with-animation>
                         <view class="scroll-inner">
                             <view class="h-card" v-for="(item, index) in rescueCarList" :key="item.Id"
-                                :class="{ active: selectedRescueCarId === item.Id }" @click="selectRescueCar(item.Id)">
+                                :id="'car-' + item.Id" :class="{ active: selectedRescueCarId === item.Id }"
+                                @click="selectRescueCar(item.Id)">
                                 <text class="card-name">{{ item.DisplayName }}</text>
                             </view>
                         </view>
@@ -93,7 +95,7 @@
                                         </view>
                                         <view class="item-info-row">
                                             <text class="item-spec">{{ itemsMap[serial.ItemId].Specification || '-'
-                                            }}</text>
+                                                }}</text>
                                             <view class="item-stock"
                                                 :class="{ 'text-red-bold': isStockInsufficient(itemsMap[serial.ItemId]) }">
                                                 <text>x {{ itemsMap[serial.ItemId].AvailableStock || 0 }}</text>
@@ -169,7 +171,7 @@
                                         </view>
                                         <view class="batch-row">
                                             <text class="batch-expiry">效期: {{ formatDate(batch.ExpirationDate)
-                                                }}</text>
+                                            }}</text>
                                         </view>
                                         <view class="batch-row">
                                             <text class="batch-stock"
@@ -295,6 +297,7 @@ export default {
 
             // Search Highlight
             highlightedSerialIds: [], // Array of IDs
+            scrollIntoViewId: '',
 
             // Inbound Modal Data
             showModal: false,
@@ -399,16 +402,28 @@ export default {
                 this.rescueCarList = (res.rows || []).filter(w => w.Category === 10);
                 this.allFloorList = (res.rows || []).filter(w => w.Category === 100);
                 if (this.rescueCarList.length > 0) {
-                    if (!this.selectedRescueCarId || !this.rescueCarList.find(w => w.Id === this.selectedRescueCarId)) {
+                    let targetId = this.selectedRescueCarId;
+
+                    // Try to load from storage if no specific selection yet
+                    if (!targetId) {
+                        const lastId = uni.getStorageSync('lastSelectedRescueCarId');
+                        if (lastId && this.rescueCarList.find(w => w.Id === lastId)) {
+                            targetId = lastId;
+                        }
+                    }
+
+                    if (!targetId || !this.rescueCarList.find(w => w.Id === targetId)) {
                         this.selectRescueCar(this.rescueCarList[0].Id);
                     } else {
-                        this.selectRescueCar(this.selectedRescueCarId);
+                        this.selectRescueCar(targetId);
                     }
                 }
             } catch (e) { console.error(e); }
         },
         selectRescueCar(id) {
             this.selectedRescueCarId = id;
+            uni.setStorageSync('lastSelectedRescueCarId', id);
+            this.scrollIntoViewId = 'car-' + id;
             this.floorList = this.allFloorList.filter(f => f.WarehouseId === id);
             if (this.floorList.length > 0) {
                 const floorIds = this.floorList.map(f => f.Id);
@@ -447,10 +462,11 @@ export default {
                     });
                     if (res.rows && res.rows.length > 0) {
                         const item = res.rows[0];
+                        const dateToUse = item.LatestExpirationDate || item.ExpiryDate;
                         // Pre-calculate properties for performance
-                        const days = this.getDaysUntil(item.LatestExpirationDate);
-                        item.FormattedDate = this.formatDate(item.LatestExpirationDate);
-                        item.ExpiryClass = this.getExpiryClass(item.LatestExpirationDate);
+                        const days = this.getDaysUntil(dateToUse);
+                        item.FormattedDate = this.formatDate(dateToUse);
+                        item.ExpiryClass = this.getExpiryClass(dateToUse);
                         item.IsStockInsufficient = ((item.AvailableStock || 0) < (item.Cardinality || 0)) || (item.AvailableStock || 0) <= 0;
                         item.IsExpiryWarning = days < 30;
 
@@ -475,9 +491,8 @@ export default {
             for (let s of serials) {
                 if (s.ItemId > 0 && this.itemsMap[s.ItemId]) {
                     const item = this.itemsMap[s.ItemId];
-                    const days = this.getDaysUntil(item.ExpiryDate);
-                    if (days < 30) { hasExpiryWarning = true; break; }
-                    if (item.AvailableStock < item.Cardinality || item.AvailableStock <= 0) { hasStockWarning = true; }
+                    if (item.IsExpiryWarning) { hasExpiryWarning = true; break; }
+                    if (item.IsStockInsufficient) { hasStockWarning = true; }
                 }
             }
             if (hasExpiryWarning) return 'blink-red';
@@ -834,11 +849,13 @@ export default {
             return stock < base || stock === 0;
         },
         hasExpiryProblem(floor) {
-            const serials = this.getSerialsByFloor(floor.Id); // Uses cached map
-            return serials.some(s => {
-                if (!s.ItemId) return false;
+            // Check full list for this floor, ignoring current filter
+            // Logic: Expiry < 30 days (User defined "AbnormalExpiry" as < 30)
+            return this.serialList.some(s => {
+                if (s.FloorId !== floor.Id) return false;
+                if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
                 const item = this.itemsMap[s.ItemId];
-                return item && this.isExpiryWarning(item);
+                return item.IsExpiryWarning;
             });
         },
         hasStockProblem(floor) {
@@ -846,16 +863,13 @@ export default {
             return serials.some(s => {
                 if (!s.ItemId) return false;
                 const item = this.itemsMap[s.ItemId];
-                return item && this.isStockInsufficient(item);
+                return item && item.IsStockInsufficient;
             });
         },
         isExpiryWarning(item) {
-            if (!item) return false;
-            if (typeof item.IsExpiryWarning !== 'undefined') return item.IsExpiryWarning;
-
-            if (!item.LatestExpirationDate) return false;
+            if (!item || !item.LatestExpirationDate) return false;
             const days = this.getDaysUntil(item.LatestExpirationDate);
-            return days < 30;
+            return days < 30; // Matches warning logic
         },
         shouldShowAlert(item) {
             if (!item) return false;
@@ -976,6 +990,7 @@ export default {
     height: 20px;
     background-color: #fff;
     -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
     -webkit-mask-size: contain;
     mask-size: contain;
     -webkit-mask-repeat: no-repeat;
@@ -1013,6 +1028,10 @@ export default {
     margin-right: 12px;
     border: 1px solid transparent;
     transition: all 0.3s;
+    min-width: auto;
+    /* Ensure it adapts */
+    flex-shrink: 0;
+    /* Prevent shrinking in scroll view */
 
     .card-name {
         font-size: 14px;
@@ -1604,19 +1623,7 @@ export default {
     }
 }
 
-@keyframes strong-pulse-red {
-    0% {
-        box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.4);
-    }
 
-    70% {
-        box-shadow: 0 0 0 6px rgba(255, 77, 79, 0);
-    }
-
-    100% {
-        box-shadow: 0 0 0 0 rgba(255, 77, 79, 0);
-    }
-}
 
 /* Tabs - Mirrored from Index Page */
 .tab-header {

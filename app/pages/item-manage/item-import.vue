@@ -62,6 +62,7 @@
                     <view class="mapping-row header">
                         <text class="col-sys">{{ $t('itemManage.sys_field') }}</text>
                         <text class="col-excel">{{ $t('itemManage.excel_field') }}</text>
+                        <text class="col-preview">预览 (前3行)</text>
                     </view>
 
                     <view class="mapping-row" v-for="(field, key) in sysFields" :key="key">
@@ -76,6 +77,9 @@
                                     {{ mapping[key] || '请选择' }}
                                 </view>
                             </picker>
+                        </view>
+                        <view class="col-preview">
+                            <text class="preview-text">{{ getPreviewData(key) }}</text>
                         </view>
                     </view>
                 </view>
@@ -357,6 +361,16 @@ export default {
                 this.$set(this.mapping, key, this.excelHeaders[index - 1]);
             }
             this.saveCache(); // Save mapping change
+        },
+        getPreviewData(key) {
+            const header = this.mapping[key];
+            if (!header || !this.excelData || this.excelData.length === 0) return '-';
+            // Get first 3 rows, check if undefined
+            const previews = this.excelData.slice(0, 3).map(row => {
+                const val = row[header];
+                return (val === undefined || val === null) ? '' : val;
+            });
+            return previews.join(', ');
         },
         validateData() {
             this.importResults = [];
@@ -758,14 +772,32 @@ export default {
 }
 
 .col-sys {
-    flex: 1;
+    width: 100px;
     padding: 8px;
     border-right: 1px solid #eee;
+    flex-shrink: 0;
 }
 
 .col-excel {
+    width: 120px;
+    padding: 8px;
+    border-right: 1px solid #eee;
+    flex-shrink: 0;
+}
+
+.col-preview {
     flex: 1;
     padding: 8px;
+    color: #999;
+    font-size: 12px;
+    overflow: hidden;
+}
+
+.preview-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
 }
 
 .field-label {

@@ -11,6 +11,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
 using VOL.Entity.DomainModels;
 using SULL.HospitalManagement.IServices;
+using SULL.HospitalManagement.Services;
+using VOL.Core.Filters;
 
 namespace SULL.HospitalManagement.Controllers
 {
@@ -28,6 +30,19 @@ namespace SULL.HospitalManagement.Controllers
         {
             _service = service;
             _httpContextAccessor = httpContextAccessor;
+        }
+
+        [HttpPost, Route("Statistics")]
+        public ActionResult Statistics([FromBody] PageDataOptions options)
+        {
+            return Json(_service.Statistics(options));
+        }
+
+        [HttpPost, Route("SetAllStock")]
+        [ApiActionPermission("ItemHistory", VOL.Core.Enums.ActionPermissionOptions.Add)]
+        public ActionResult SetAllStock([FromBody] SaveModel saveModel)
+        {
+            return Json(_service.SetAllStock(saveModel));
         }
     }
 }

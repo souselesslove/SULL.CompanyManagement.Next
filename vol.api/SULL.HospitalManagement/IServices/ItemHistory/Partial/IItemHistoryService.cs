@@ -9,5 +9,7 @@ namespace SULL.HospitalManagement.IServices
 {
     public partial interface IItemHistoryService
     {
+        WebResponseContent Statistics(PageDataOptions options);
+        WebResponseContent SetAllStock(SaveModel saveModel);
     }
  }

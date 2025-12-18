@@ -251,7 +251,9 @@
         "success_update": "更新成功",
         "success_create": "创建成功",
         "fail_update": "更新失败",
-        "fail_create": "创建失败"
+        "fail_create": "创建失败",
+        "quit": "退出机构",
+        "quit_confirm": "确定要退出该机构吗？"
     },
     "department": {
         "title_create": "创建部门",
@@ -376,6 +378,10 @@
         "confirm_password": "确认新密码",
         "confirm_password_placeholder": "请再次输入新密码",
         "password_changed": "密码修改成功",
+        "org_required_title": "需加入机构",
+        "org_required_msg": "您目前未加入任何机构，无法使用完整功能。是否立即前往加入或创建？",
+        "join_now": "立即加入",
+        "not_now": "暂不",
         "language": {
             "title": "语言切换",
             "en": "English",

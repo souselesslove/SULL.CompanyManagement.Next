@@ -17,7 +17,7 @@
 				<view class="refresher-content">
 					<view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
 					<text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
-						}}</text>
+					}}</text>
 				</view>
 			</view>
 
@@ -112,6 +112,11 @@
 				<view class="btn-container" v-if="isCreator">
 					<button class="btn-primary" @click="handleEditAction">{{ isEditing ? $t('organization.update') :
 						$t('organization.edit') }}</button>
+				</view>
+
+				<!-- Exit Button -->
+				<view class="btn-container" v-if="hasOrg && !isEditing">
+					<button class="btn-danger" @click="handleDeleteAction">{{ $t('organization.quit') }}</button>
 				</view>
 			</view>
 
@@ -243,8 +248,8 @@ export default {
 						t.hasOrg = true;
 						t.orgInfo = res.rows[0];
 					} else {
-						t.createForm.Name = '成都市第一人民医院';
-						t.createForm.Level = '三级甲等';
+						t.createForm.Name = '';
+						t.createForm.Level = '';
 						t.hasOrg = false;
 					}
 				})
@@ -308,7 +313,7 @@ export default {
 				});
 		},
 		handleCreate() {
-			if (!this.createForm.Name || !this.createForm.Level) {
+			if ((!this.createForm.Name || !this.createForm.Level) && !this.createForm.InvitationCode) {
 				uni.showToast({ title: 'Please fill required fields', icon: 'none' });
 				return;
 			}
@@ -325,6 +330,40 @@ export default {
 				.catch(err => {
 					uni.showToast({ title: 'Create Error', icon: 'none' });
 				});
+		},
+		handleDeleteAction() {
+			const uInfo = uni.getStorageSync('userOrgInfo');
+			if (!uInfo || !uInfo.Organization.Id) {
+				uni.showToast({ title: 'Failed to find relation info', icon: 'none' });
+				return;
+			}
+			const t = this;
+			uni.showModal({
+				title: this.$t('common.confirm'),
+				content: this.$t('organization.quit_confirm'),
+				success: (res) => {
+					if (res.confirm) {
+						request.post('api/ssbh/OrganizationUser/Del',
+							[uInfo.User.Id]
+						).then(res => {
+							if (res.status || res.success) {
+								uni.showToast({ title: t.$t('common.success'), icon: 'success' });
+								t.hasOrg = false;
+								t.orgInfo = {};
+								t.createForm.Name = '';
+								t.createForm.Level = '';
+								uni.removeStorageSync('userOrgInfo');
+								// Refresh current page logic handled by reactive hasOrg
+							} else {
+								uni.showToast({ title: res.message || t.$t('common.fail'), icon: 'none' });
+							}
+						}).catch(err => {
+							console.error(err);
+							uni.showToast({ title: 'Network Error', icon: 'none' });
+						});
+					}
+				}
+			});
 		},
 
 		handleLevelChange(e) {
@@ -515,7 +554,6 @@ export default {
 
 .btn-container {
 	margin-top: 24px;
-	margin-bottom: 40px;
 }
 
 .btn-primary {
@@ -523,6 +561,20 @@ export default {
 	height: 50px;
 	background: $sull-color-primary;
 	color: #fff;
+	border-radius: 25px;
+	font-size: 16px;
+	font-weight: 600;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.btn-danger {
+	width: 100%;
+	height: 50px;
+	background: #ffffff;
+	color: #FF4D4F;
+	border: 1px solid #FF4D4F;
 	border-radius: 25px;
 	font-size: 16px;
 	font-weight: 600;

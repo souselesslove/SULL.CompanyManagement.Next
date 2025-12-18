@@ -19,9 +19,11 @@ using Microsoft.AspNetCore.Http;
 using SULL.HospitalManagement.IRepositories;
 using SULL.HospitalManagement.IServices.Dtos;
 using VOL.Core.ManageUser;
+using VOL.Core.RabbitMQ;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using SULL.HospitalManagement.Repositories;
 using VOL.Core.Enums;
+using SULL.HospitalManagement.IServices;
 
 namespace SULL.HospitalManagement.Services
 {
@@ -31,17 +33,20 @@ namespace SULL.HospitalManagement.Services
         private readonly IOrganizationUserRepository _repository;//访问数据库
         private readonly IOrganizationDepartmentRepository _organizationDepartmentRepository;
         private readonly IOrganizationRepository _organizationRepository;
+        private readonly IDashboardService _dashboardService;
 
         [ActivatorUtilitiesConstructor]
         public OrganizationUserService(
             IOrganizationUserRepository dbRepository,
-            IHttpContextAccessor httpContextAccessor, IOrganizationDepartmentRepository organizationDepartmentRepository, IOrganizationRepository organizationRepository)
+            IHttpContextAccessor httpContextAccessor, IOrganizationDepartmentRepository organizationDepartmentRepository, IOrganizationRepository organizationRepository,
+            IDashboardService dashboardService)
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _organizationDepartmentRepository = organizationDepartmentRepository;
             _organizationRepository = organizationRepository;
             _repository = dbRepository;
+            _dashboardService = dashboardService;
             //多租户会用到这init代码，其他情况可以不用
             //base.Init(dbRepository);
         }
@@ -68,7 +73,7 @@ namespace SULL.HospitalManagement.Services
             var db = _repository.DbContext;
             var qry = from a in db.Set<OrganizationUser>()
                 join b in db.Set<OrganizationUser>() on a.DepartmentId equals b.DepartmentId
-                where a.UserId == userId
+                where a.UserId == userId && b.IsDeleted != true
                 select b;
             pageGridData.total = await qry.CountAsync(cancellationToken);
             pageGridData.rows = await qry.ToListAsync(cancellationToken);
@@ -77,15 +82,61 @@ namespace SULL.HospitalManagement.Services
 
         public override WebResponseContent Update(SaveModel saveDataModel)
         {
-            var user = _repository.FindFirst(x => x.UserId == UserContext.Current.UserId);
-            base.AddOnExecuted = (organization, obj) =>
+            if (!saveDataModel.MainData.ContainsKey("Id")) return base.Update(saveDataModel);
+
+            long id = saveDataModel.MainData["Id"].ToString().GetLong();
+            var oldUser = _repository.FindFirst(x => x.Id == id);
+            long? oldDeptId = oldUser?.DepartmentId;
+
+            base.UpdateOnExecuted = (user, obj, x, x1) =>
             {
-                var department = _organizationDepartmentRepository.FindFirst(x => x.Id == user.DepartmentId);
-                department.UserCounter -= 1;
-                department.LastModifierId = UserContext.Current.UserId;
-                department.LastModifier = UserContext.Current.UserName;
-                department.LastModificationTime = DateTime.Now;
-                _organizationDepartmentRepository.Update(department, true);
+                // Check if Department changed
+                if (user.DepartmentId != oldDeptId)
+                {
+                    // 1. Log Leaving Old Dept
+                    if (oldDeptId > 0)
+                    {
+                        var oldDept = _organizationDepartmentRepository.FindFirst(x => x.Id == oldDeptId);
+                        if (oldDept != null)
+                        {
+                            // Update Counter
+                            oldDept.UserCounter = Math.Max(0, (oldDept.UserCounter ?? 0) - 1);
+                            oldDept.LastModifierId = UserContext.Current.UserId;
+                            oldDept.LastModifier = UserContext.Current.UserTrueName;
+                            oldDept.LastModificationTime = DateTime.Now;
+                            _organizationDepartmentRepository.Update(oldDept, true);
+
+                            // Log
+                            if (oldDept.OrganizationId > 0)
+                            {
+                                string msg = $"系统消息：由 {UserContext.Current.UserTrueName} 将用户[{user.UserName}]移出部门[{oldDept.Name}]";
+                                _dashboardService.AddLog(oldDept.OrganizationId.Value, "系统消息", msg);
+                            }
+                        }
+                    }
+
+                    // 2. Log Joining New Dept
+                    if (user.DepartmentId > 0)
+                    {
+                        var newDept = _organizationDepartmentRepository.FindFirst(x => x.Id == user.DepartmentId);
+                        if (newDept != null)
+                        {
+                            // Update Counter
+                            newDept.UserCounter = (newDept.UserCounter ?? 0) + 1;
+                            newDept.LastModifierId = UserContext.Current.UserId;
+                            newDept.LastModifier = UserContext.Current.UserTrueName;
+                            newDept.LastModificationTime = DateTime.Now;
+                            _organizationDepartmentRepository.Update(newDept, true);
+
+                            // Log
+                            if (newDept.OrganizationId > 0)
+                            {
+                                string msg = $"系统消息：由 {UserContext.Current.UserTrueName} 将用户[{user.UserName}]加入部门[{newDept.Name}]";
+                                _dashboardService.AddLog(newDept.OrganizationId.Value, "系统消息", msg);
+                            }
+                        }
+                    }
+                }
                 return new WebResponseContent(true).OK(ResponseType.SaveSuccess);
             };
             return base.Update(saveDataModel);
