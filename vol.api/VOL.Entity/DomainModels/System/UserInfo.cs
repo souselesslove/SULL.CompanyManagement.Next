@@ -29,6 +29,10 @@ namespace VOL.Entity.DomainModels
 
         public List<Guid> DeptIds { get; set; }
 
+        public long OrganizationId { get; set; }
+
+        public long DepartmentId { get; set; }
+
         public string Token { get; set; }
     }
 }

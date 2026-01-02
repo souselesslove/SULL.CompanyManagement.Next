@@ -9,5 +9,7 @@ namespace SULL.HospitalManagement.IServices
 {
     public partial interface IItemService
     {
+        WebResponseContent CheckItemWarnings(long id);
+        Task<string> GetItemRemarkAsync(string combinedId);
     }
  }

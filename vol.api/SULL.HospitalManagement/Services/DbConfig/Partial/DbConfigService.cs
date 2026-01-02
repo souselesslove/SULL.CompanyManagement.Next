@@ -15,44 +15,66 @@ using System.Linq.Expressions;
 using VOL.Core.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.Http;
-using SULL.HospitalManagement.IRepositories;
 using VOL.Core.Enums;
 using VOL.Core.ManageUser;
+using VOL.Core.CacheManager;
+using Microsoft.AspNetCore.Http;
+using SULL.HospitalManagement.IRepositories;
 
 namespace SULL.HospitalManagement.Services
 {
     public partial class DbConfigService
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly IDbConfigRepository _repository;//访问数据库
+        private readonly IDbConfigRepository _repository; //访问数据库
+        private readonly ICacheService _cacheService;
+        private const string CacheKey = "DB_CONFIG_CACHE";
 
         [ActivatorUtilitiesConstructor]
         public DbConfigService(
             IDbConfigRepository dbRepository,
-            IHttpContextAccessor httpContextAccessor
+            IHttpContextAccessor httpContextAccessor,
+            ICacheService cacheService
             )
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _repository = dbRepository;
-            //多租户会用到这init代码，其他情况可以不用
-            //base.Init(dbRepository);
+            _cacheService = cacheService;
+        }
+
+        private List<DbConfig> GetCacheConfigs()
+        {
+            var data = _cacheService.Get<List<DbConfig>>(CacheKey);
+            if (data == null)
+            {
+                data = _repository.Find(x => x.IsDeleted != true);
+                _cacheService.AddObject(CacheKey, data);
+            }
+            return data;
         }
 
         public override PageGridData<DbConfig> GetPageData(PageDataOptions options)
         {
-            options = ValidatePageOptions(options, out IQueryable<DbConfig> queryable);
-            //获取排序字段
-            Dictionary<string, QueryOrderBy> orderbyDic = GetPageDataSort(options, typeof(DbConfig).GetProperties());
+            // Get all configs from cache
+            var configs = GetCacheConfigs();
 
-            var pageGridData = new PageGridData<DbConfig>();
+            // Filter by categories and user
+            var userId = UserContext.Current.UserId;
+            var queryable = configs.AsQueryable()
+                .Where(x => x.Category == "G" || x.Category == "O" || x.Category == "D" || (x.Category == "U" && x.RelatedId == userId));
+
+            // Apply search conditions from options
+            options = ValidatePageOptions(options, out IQueryable<DbConfig> _);
             if (QueryRelativeExpression != null)
             {
                 queryable = QueryRelativeExpression.Invoke(queryable);
             }
-            var userId = UserContext.Current.UserId;
-            queryable = queryable.Where(x => x.Category == "G" || x.Category == "O" || x.Category == "D" || (x.Category == "U" && x.RelatedId == userId));
+
+            // Get sorting info
+            Dictionary<string, QueryOrderBy> orderbyDic = GetPageDataSort(options, typeof(DbConfig).GetProperties());
+
+            var pageGridData = new PageGridData<DbConfig>();
             if (options.Export)
             {
                 queryable = queryable.GetIQueryableOrderBy(orderbyDic);
@@ -64,7 +86,6 @@ namespace SULL.HospitalManagement.Services
             }
             else
             {
-                //查询界面统计求等字段
                 if (SummaryExpress != null)
                 {
                     pageGridData.summary = SummaryExpress.Invoke(queryable);
@@ -78,6 +99,36 @@ namespace SULL.HospitalManagement.Services
             }
             GetPageDataOnExecuted?.Invoke(pageGridData);
             return pageGridData;
+        }
+
+        public override WebResponseContent Add(SaveModel saveModel)
+        {
+            AddOnExecuted = (config, response) =>
+            {
+                _cacheService.Remove(CacheKey);
+                return new WebResponseContent(true);
+            };
+            return base.Add(saveModel);
+        }
+
+        public override WebResponseContent Update(SaveModel saveModel)
+        {
+            UpdateOnExecuted = (config, obj, x, x1) =>
+            {
+                _cacheService.Remove(CacheKey);
+                return new WebResponseContent(true);
+            };
+            return base.Update(saveModel);
+        }
+
+        public override WebResponseContent Del(object[] keys, bool delList = true)
+        {
+            DelOnExecuted = (k) =>
+            {
+                _cacheService.Remove(CacheKey);
+                return new WebResponseContent(true);
+            };
+            return base.Del(keys, delList);
         }
     }
 }

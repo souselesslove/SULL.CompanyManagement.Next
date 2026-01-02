@@ -90,29 +90,36 @@ namespace VOL.Core.ManageUser
             _userInfo = CacheService.Get<UserInfo>(key);
             if (_userInfo != null && _userInfo.User_Id > 0) return _userInfo;
 
-            _userInfo = DBServerProvider.DbContext.Set<Sys_User>()
-                .Where(x => x.User_Id == userId).Select(s => new
-                {
-                    User_Id = userId,
-                    Role_Id = s.Role_Id.GetInt(),
-                    RoleName = s.RoleName,
-                    //2022.08.15增加部门id
-                    DeptId = s.Dept_Id??0,
-                    Token = s.Token,
-                    UserName = s.UserName,
-                    UserTrueName = s.UserTrueName,
-                    Enable = s.Enable,
-                    DeptIds= s.DeptIds
-                }).ToList().Select(s => new UserInfo()
-                {
-                    User_Id = userId,
-                    Role_Id = s.Role_Id,
-                    Token = s.Token,
-                    UserName = s.UserName,
-                    UserTrueName = s.UserTrueName,
-                    Enable = 1,
-                    DeptIds = string.IsNullOrEmpty(s.DeptIds) ? new List<Guid>() : s.DeptIds.Split(",").Select(x => (Guid)x.GetGuid()).ToList(),
-                }).FirstOrDefault();
+            var db = DBServerProvider.DbContext;
+            _userInfo = (from u in db.Set<Sys_User>()
+                         join ou in db.Set<OrganizationUser>().Where(x => x.IsDeleted != true) on u.User_Id equals ou.UserId into ouList
+                         from o in ouList.DefaultIfEmpty()
+                         where u.User_Id == userId
+                         select new
+                         {
+                             User_Id = userId,
+                             Role_Id = u.Role_Id,
+                             RoleName = u.RoleName,
+                             DeptId = u.Dept_Id ?? 0,
+                             Token = u.Token,
+                             UserName = u.UserName,
+                             UserTrueName = u.UserTrueName,
+                             Enable = u.Enable,
+                             DeptIds = u.DeptIds,
+                             OrganizationId = o != null ? (o.OrganizationId ?? 0) : 0,
+                             DepartmentId = o != null ? (o.DepartmentId ?? 0) : 0
+                         }).ToList().Select(s => new UserInfo()
+                         {
+                             User_Id = userId,
+                             Role_Id = s.Role_Id,
+                             Token = s.Token,
+                             UserName = s.UserName,
+                             UserTrueName = s.UserTrueName,
+                             Enable = 1,
+                             DeptIds = string.IsNullOrEmpty(s.DeptIds) ? new List<Guid>() : s.DeptIds.Split(",").Select(x => (Guid)x.GetGuid()).ToList(),
+                             OrganizationId = s.OrganizationId,
+                             DepartmentId = s.DepartmentId
+                         }).FirstOrDefault();
 
             if (_userInfo != null && _userInfo.User_Id > 0)
             {
@@ -378,6 +385,16 @@ namespace VOL.Core.ManageUser
         public List<Guid> DeptIds
         {
             get { return UserInfo.DeptIds; }
+        }
+
+        public long OrganizationId
+        {
+            get { return UserInfo.OrganizationId; }
+        }
+
+        public long DepartmentId
+        {
+            get { return UserInfo.DepartmentId; }
         }
         /// <summary>
         /// 获取所有子部门

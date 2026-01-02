@@ -1,0 +1,1040 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全院抢救车实时监控指挥中心</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        /* =========================================
+           1. 全局与主题定义
+           ========================================= */
+        :root {
+            --bg-color: #0b1018;
+            --header-bg: rgba(16, 35, 60, 0.95);
+            --panel-bg: rgba(20, 40, 70, 0.4);
+            --border-color: rgba(64, 158, 255, 0.2);
+
+            --green: #00ffbc;
+            /* 正常 */
+            --blue: #00f2ff;
+            /* 使用中 */
+            --yellow: #ffb700;
+            /* 警示 */
+            --red: #ff3b30;
+            /* 异常 */
+
+            --text-main: #ffffff;
+            --text-sub: #8da2c5;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: "Helvetica Neue", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg-color);
+            background-image:
+                radial-gradient(ellipse at center top, rgba(0, 242, 255, 0.15) 0%, transparent 70%),
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 100% 100%, 50px 50px, 50px 50px;
+            color: var(--text-main);
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 0 20px 20px 20px;
+        }
+
+        /* =========================================
+           2. 头部样式
+           ========================================= */
+        .header {
+            position: relative;
+            width: 100%;
+            height: 90px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            flex-shrink: 0;
+            filter: drop-shadow(0 5px 15px rgba(0, 242, 255, 0.2));
+        }
+
+        .header-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #142846 0%, #0a1525 100%);
+            clip-path: polygon(0 0, 100% 0, 100% 45px, calc(50% + 240px) 45px, calc(50% + 200px) 85px, calc(50% - 200px) 85px, calc(50% - 240px) 45px, 0 45px);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -10px 30px rgba(0, 242, 255, 0.05);
+            z-index: 1;
+        }
+
+        .header-border-highlight {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--blue);
+            clip-path: polygon(0 43px, 100% 43px, 100% 45px, calc(50% + 240px) 45px, calc(50% + 200px) 85px, calc(50% - 200px) 85px, calc(50% - 240px) 45px, 0 45px);
+            z-index: 2;
+            opacity: 0.7;
+        }
+
+        .main-title {
+            position: relative;
+            z-index: 10;
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 6px;
+            color: #fff;
+            margin-top: 18px;
+            text-shadow: 0 0 20px rgba(0, 242, 255, 0.5);
+            background: linear-gradient(to bottom, #ffffff 40%, #80dfff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-info {
+            position: absolute;
+            top: 12px;
+            z-index: 10;
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--blue);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-shadow: 0 0 5px rgba(0, 242, 255, 0.6);
+        }
+
+        .info-left {
+            left: 40px;
+        }
+
+        .info-right {
+            right: 40px;
+            font-family: 'Consolas', monospace;
+        }
+
+        .header-decor {
+            position: absolute;
+            top: 18px;
+            width: 100px;
+            height: 10px;
+            z-index: 10;
+            display: flex;
+            gap: 4px;
+        }
+
+        .decor-left {
+            left: 200px;
+            transform: skewX(30deg);
+        }
+
+        .decor-right {
+            right: 200px;
+            transform: skewX(-30deg);
+            flex-direction: row-reverse;
+        }
+
+        .decor-block {
+            width: 8px;
+            height: 100%;
+            background: rgba(0, 242, 255, 0.3);
+        }
+
+        .decor-block.active {
+            background: var(--blue);
+            box-shadow: 0 0 5px var(--blue);
+        }
+
+        /* =========================================
+           3. 面板布局
+           ========================================= */
+        .main-content {
+            display: flex;
+            flex: 1;
+            gap: 20px;
+            height: calc(100% - 110px);
+            min-height: 0;
+        }
+
+        .col-left,
+        .col-right {
+            width: 25%;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .col-center {
+            width: 50%;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid rgba(100, 200, 255, 0.1);
+            position: relative;
+            padding: 15px;
+            border-radius: 2px;
+            backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 10px;
+            height: 10px;
+            border-top: 2px solid var(--blue);
+            border-left: 2px solid var(--blue);
+        }
+
+        .panel::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 10px;
+            height: 10px;
+            border-bottom: 2px solid var(--blue);
+            border-right: 2px solid var(--blue);
+        }
+
+        .panel-title {
+            font-size: 16px;
+            color: var(--text-main);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            letter-spacing: 1px;
+            background: linear-gradient(90deg, rgba(0, 242, 255, 0.1), transparent);
+            padding: 5px 10px;
+            border-left: 3px solid var(--blue);
+            flex-shrink: 0;
+        }
+
+        /* =========================================
+           4. 左侧组件 (KPI & Chart)
+           ========================================= */
+        .kpi-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .kpi-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 12px 15px;
+            border-right: 3px solid transparent;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .kpi-label {
+            font-size: 14px;
+            color: var(--text-sub);
+        }
+
+        .kpi-num {
+            font-size: 26px;
+            font-weight: bold;
+            font-family: 'Impact', sans-serif;
+        }
+
+        .kpi-unit {
+            font-size: 12px;
+            margin-left: 4px;
+            color: #666;
+        }
+
+        .kpi-green {
+            border-color: var(--green);
+            color: var(--green);
+        }
+
+        .kpi-blue {
+            border-color: var(--blue);
+            color: var(--blue);
+        }
+
+        .kpi-yellow {
+            border-color: var(--yellow);
+            color: var(--yellow);
+        }
+
+        .kpi-red {
+            border-color: var(--red);
+            color: var(--red);
+            background: linear-gradient(90deg, rgba(255, 59, 48, 0.1), transparent);
+            animation: flash 2s infinite;
+        }
+
+        @keyframes flash {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.6;
+            }
+        }
+
+        .chart-row {
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+        }
+
+        .chart-label {
+            width: 40px;
+            color: var(--text-sub);
+        }
+
+        .chart-blocks-container {
+            flex: 1;
+            display: flex;
+            gap: 3px;
+            margin: 0 10px;
+            height: 10px;
+        }
+
+        .chart-block {
+            flex: 1;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            transform: skewX(-20deg);
+        }
+
+        .block-active {
+            box-shadow: 0 0 5px currentColor;
+            opacity: 1;
+        }
+
+        .chart-val {
+            width: 30px;
+            text-align: right;
+            font-weight: bold;
+            font-family: 'Consolas', monospace;
+        }
+
+        /* =========================================
+           5. 中间组件 (科室阵列 + 重点车辆)
+           ========================================= */
+        .slider-wrapper {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .grid-box {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+            width: 100%;
+            height: 100%;
+            align-content: start;
+        }
+
+        .grid-cell {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 2px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 5px 0;
+            transition: all 0.3s;
+            height: 70px;
+        }
+
+        .gc-name {
+            font-size: 14px;
+            margin-bottom: 6px;
+            z-index: 2;
+            color: #eee;
+        }
+
+        .gc-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .st-green {
+            color: var(--green);
+            border-bottom: 2px solid var(--green);
+        }
+
+        .st-green .gc-status {
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+        }
+
+        .st-blue {
+            color: var(--blue);
+            border-bottom: 2px solid var(--blue);
+        }
+
+        .st-blue .gc-status {
+            background: var(--blue);
+            box-shadow: 0 0 8px var(--blue);
+            animation: blink 1.5s infinite;
+        }
+
+        .st-yellow {
+            color: var(--yellow);
+            border-bottom: 2px solid var(--yellow);
+        }
+
+        .st-yellow .gc-status {
+            background: var(--yellow);
+            box-shadow: 0 0 8px var(--yellow);
+            animation: blink 1s infinite;
+        }
+
+        .st-red {
+            color: var(--red);
+            border-bottom: 2px solid var(--red);
+            background: rgba(255, 59, 48, 0.1);
+        }
+
+        .st-red .gc-status {
+            background: var(--red);
+            box-shadow: 0 0 10px var(--red);
+            animation: blink 0.5s infinite;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .pagination-dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+            height: 15px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transition: all 0.3s;
+        }
+
+        .dot.active {
+            background: var(--blue);
+            width: 20px;
+            border-radius: 4px;
+            box-shadow: 0 0 5px var(--blue);
+        }
+
+        .fade-enter-active,
+        .fade-leave-active {
+            transition: opacity 0.5s ease;
+            position: absolute;
+            width: 100%;
+        }
+
+        .fade-enter-from,
+        .fade-leave-to {
+            opacity: 0;
+        }
+
+        .fade-enter-to,
+        .fade-leave-from {
+            opacity: 1;
+        }
+
+        /* --- [核心修改] 重点车辆卡片：高度增加到 350px --- */
+        .cards-panel {
+            height: 350px;
+            /* 增加高度，确保3行完整显示 */
+            flex: 0 0 auto;
+            padding: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .drum-container {
+            position: relative;
+            height: 100%;
+            overflow: hidden;
+            mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%);
+        }
+
+        .drum-track {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+            position: absolute;
+            width: 100%;
+            top: 0;
+        }
+
+        .alert-card {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid;
+            border-radius: 6px;
+            padding: 10px 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 80px;
+            position: relative;
+            backdrop-filter: blur(2px);
+        }
+
+        .ac-red {
+            border-left: 4px solid var(--red);
+            border-color: rgba(255, 59, 48, 0.3);
+            background: linear-gradient(90deg, rgba(255, 59, 48, 0.1), transparent);
+        }
+
+        .ac-yellow {
+            border-left: 4px solid var(--yellow);
+            border-color: rgba(255, 183, 0, 0.3);
+            background: linear-gradient(90deg, rgba(255, 183, 0, 0.1), transparent);
+        }
+
+        .ac-blue {
+            border-left: 4px solid var(--blue);
+            border-color: rgba(0, 242, 255, 0.3);
+            background: linear-gradient(90deg, rgba(0, 242, 255, 0.1), transparent);
+        }
+
+        .ac-head {
+            font-weight: bold;
+            font-size: 15px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #fff;
+        }
+
+        .ac-info {
+            font-size: 12px;
+            color: var(--text-sub);
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+        }
+
+        /* =========================================
+           6. 右侧组件 (日志 & 排行)
+           ========================================= */
+        .log-container {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+            height: 100%;
+            min-height: 0;
+        }
+
+        .log-container::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .log-container::-webkit-scrollbar-thumb {
+            background: var(--blue);
+        }
+
+        .log-item {
+            display: flex;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 10px 0;
+            animation: slideIn 0.3s ease;
+        }
+
+        .log-time {
+            color: var(--text-sub);
+            width: 60px;
+            flex-shrink: 0;
+        }
+
+        .log-tag {
+            padding: 1px 6px;
+            border-radius: 2px;
+            font-size: 12px;
+            margin-right: 8px;
+            border: 1px solid;
+            height: 20px;
+            line-height: 16px;
+        }
+
+        .log-msg {
+            color: #eee;
+            flex: 1;
+        }
+
+        .lt-red {
+            color: var(--red);
+            border-color: var(--red);
+            background: rgba(255, 59, 48, 0.1);
+        }
+
+        .lt-yellow {
+            color: var(--yellow);
+            border-color: var(--yellow);
+            background: rgba(255, 183, 0, 0.1);
+        }
+
+        .lt-blue {
+            color: var(--blue);
+            border-color: var(--blue);
+            background: rgba(0, 242, 255, 0.1);
+        }
+
+        .lt-green {
+            color: var(--green);
+            border-color: var(--green);
+            background: rgba(0, 255, 188, 0.1);
+        }
+
+        .rank-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
+            font-size: 13px;
+        }
+
+        .rank-idx {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            line-height: 20px;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            font-size: 12px;
+            margin-right: 10px;
+        }
+
+        .top3 {
+            background: var(--yellow);
+            color: #000;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <header class="header">
+            <div class="header-panel"></div>
+            <div class="header-border-highlight"></div>
+            <div class="header-info info-left"><span style="font-size:20px">✜</span> 护理部监控端</div>
+            <div class="header-decor decor-left">
+                <div class="decor-block active"></div>
+                <div class="decor-block active"></div>
+                <div class="decor-block"></div>
+            </div>
+            <div class="main-title">全院抢救车实时监控指挥中心</div>
+            <div class="header-decor decor-right">
+                <div class="decor-block active"></div>
+                <div class="decor-block active"></div>
+                <div class="decor-block"></div>
+            </div>
+            <div class="header-info info-right">{{ currentTime }}</div>
+        </header>
+
+        <div class="main-content">
+            <div class="col-left">
+                <div class="panel">
+                    <div class="panel-title">核心指标概览</div>
+                    <div class="kpi-container">
+                        <div class="kpi-box kpi-green"><span class="kpi-label">总车辆数</span><span class="kpi-num">{{
+                                kpis.total }}<span class="kpi-unit">台</span></span></div>
+                        <div class="kpi-box kpi-green"><span class="kpi-label">在位待命</span><span class="kpi-num">{{
+                                kpis.ready }}<span class="kpi-unit">台</span></span></div>
+                        <div class="kpi-box kpi-blue"><span class="kpi-label">使用中</span><span class="kpi-num">{{
+                                kpis.inUse }}<span class="kpi-unit">台</span></span></div>
+                        <div class="kpi-box kpi-red"><span class="kpi-label">异常/警示</span><span class="kpi-num">{{
+                                kpis.alerts }}<span class="kpi-unit">台</span></span></div>
+                        <div class="kpi-box kpi-blue"><span class="kpi-label">物品种类</span><span class="kpi-num">{{
+                                kpis.itemTypes }}<span class="kpi-unit">种</span></span></div>
+                        <div class="kpi-box kpi-yellow"><span class="kpi-label">物品价值</span><span class="kpi-num">{{
+                                kpis.itemValue }}<span class="kpi-unit">万元</span></span></div>
+                    </div>
+                </div>
+
+                <div class="panel" style="flex: 1;">
+                    <div class="panel-title">异常分类统计</div>
+                    <div class="chart-row" v-for="c in charts" :key="c.name">
+                        <div class="chart-label">{{ c.name }}</div>
+                        <div class="chart-blocks-container">
+                            <div v-for="n in 10" :key="n" class="chart-block"
+                                :class="{ 'block-active': n <= (c.pct / 10) }"
+                                :style="{ backgroundColor: n <= (c.pct / 10) ? c.color : '', color: c.color }"></div>
+                        </div>
+                        <div class="chart-val" :style="{ color: c.color }">{{ c.val }}</div>
+                    </div>
+                </div>
+
+                <div class="panel" style="flex: 1;">
+                    <div class="panel-title">管理合规排行榜 (Top 5)</div>
+                    <div v-for="(r, i) in ranks" :key="i" class="rank-item">
+                        <div><span class="rank-idx" :class="{top3: i<3}">{{ i+1 }}</span>{{ r.name }}</div>
+                        <div style="color: var(--green); font-weight:bold;">{{ r.score }}%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-center">
+                <div class="panel" style="flex: 1; min-height: 0;">
+                    <div class="panel-title">
+                        全院科室状态 (第 {{ currentPage + 1 }}/{{ totalPages }} 页)
+                    </div>
+
+                    <div class="slider-wrapper">
+                        <transition name="fade">
+                            <div class="grid-box" :key="currentPage">
+                                <div v-for="d in currentDepts" :key="d.name" class="grid-cell"
+                                    :class="'st-' + d.status">
+                                    <span class="gc-name">{{ d.name }}</span>
+                                    <div class="gc-status"></div>
+                                </div>
+                            </div>
+                        </transition>
+                    </div>
+
+                    <div class="pagination-dots">
+                        <div v-for="n in totalPages" :key="n" class="dot" :class="{active: n === currentPage + 1}"
+                            @click="setPage(n-1)"></div>
+                    </div>
+                </div>
+
+                <div class="panel cards-panel">
+                    <div class="panel-title">重点关注 (异常/使用中)</div>
+
+                    <div class="drum-container">
+                        <div class="drum-track" :style="{ transform: `translateY(-${drumOffset}px)` }">
+                            <div v-for="(car, index) in drumCars" :key="index" class="alert-card"
+                                :class="getCardColorClass(car.type)">
+                                <div class="ac-head">
+                                    {{ car.dept }}-{{ car.id }}
+                                    <span :style="{ color: getCardColorValue(car.type) }">
+                                        {{ getCardIcon(car.type) }}
+                                    </span>
+                                </div>
+                                <div class="ac-info">
+                                    <div>{{ car.msg }}</div>
+                                    <div>{{ car.loc }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-right">
+                <div class="panel" style="height: 100%;">
+                    <div class="panel-title">实时操作与报警日志流</div>
+                    <div class="log-container">
+                        <div class="log-item" v-for="(l, i) in logs" :key="i">
+                            <span class="log-time">{{ l.time }}</span>
+                            <span class="log-tag" :class="getLogClass(l.type)">{{ l.type }}</span>
+                            <span class="log-msg">{{ l.msg }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, onMounted, computed } = Vue;
+        createApp({
+            setup() {
+                const now = ref(new Date());
+                const currentTime = computed(() => now.value.toLocaleTimeString('zh-CN', { hour12: false }));
+                const kpis = reactive({ total: 0, ready: 0, inUse: 0, alerts: 0, itemTypes: 0, itemValue: 0 });
+                const charts = reactive([
+                    { name: '近效期', val: 0, pct: 0, color: 'var(--yellow)' },
+                    { name: '过期', val: 0, pct: 0, color: 'var(--red)' },
+                    { name: '库存不足', val: 0, pct: 0, color: 'var(--red)' },
+                    { name: '交接班', val: 0, pct: 0, color: 'var(--blue)' },
+                    { name: '封存', val: 0, pct: 0, color: 'var(--yellow)' },
+                    { name: '清洁保养', val: 0, pct: 0, color: 'var(--blue)' }
+                ]);
+
+                // 科室模拟数据
+                const generateDepts = () => {
+                    const base = ['ICU', '急诊', '手术室', '心内', '呼吸', '消化', '肾内', '神内', '神外', '普外', '骨科', '泌尿', '胸外', '妇科', '产房', '儿科', '新生儿', '肿瘤', '康复', '特需', '五官', '皮肤', '中医', '感染', '疼痛', '内分', '风湿', '核医', '体检'];
+                    let list = [];
+                    for (let i = 0; i < 48; i++) {
+                        const name = base[i % base.length] + ((i < base.length) ? '一区' : '二区');
+                        const r = Math.random();
+                        let s = 'green';
+                        if (r > 0.95) s = 'red'; else if (r > 0.85) s = 'blue'; else if (r > 0.75) s = 'yellow';
+                        list.push({ name: name, status: s });
+                    }
+                    return list;
+                };
+                const depts = ref([]);
+
+                const currentPage = ref(0);
+                const pageSize = 24;
+                const totalPages = computed(() => Math.ceil(depts.value.length / pageSize));
+                const currentDepts = computed(() => {
+                    const start = currentPage.value * pageSize;
+                    return depts.value.slice(start, start + pageSize);
+                });
+                const setPage = (n) => { currentPage.value = n; };
+
+                // 重点车辆
+                const activeCars = reactive([]);
+
+                const drumCars = ref([]);
+                const drumOffset = ref(0);
+                const cardHeight = 80;
+                const rowGap = 12;
+                const stepHeight = cardHeight + rowGap;
+                let currentRow = 0;
+                let totalRows = 0;
+
+                const startDrum = () => {
+                    if (drumCars.value.length === 0) return;
+                    setInterval(() => {
+                        currentRow++;
+                        drumOffset.value = currentRow * stepHeight;
+                        if (currentRow >= totalRows) {
+                            setTimeout(() => {
+                                drumOffset.value = 0;
+                                currentRow = 0;
+                            }, 800);
+                        }
+                    }, 5000); // 5秒
+                };
+
+                const logs = reactive([]);
+                const ranks = reactive([]);
+
+                // --- Data Loading Logic ---
+                const useMockData = () => {
+                    // Initialize Mock Data
+                    kpis.total = 120; kpis.ready = 105; kpis.inUse = 5; kpis.alerts = 10;
+                    kpis.itemTypes = 428; kpis.itemValue = 128.5;
+
+                    charts.splice(0, charts.length, ...[
+                        { name: '近效期', val: 12, pct: 40, color: 'var(--yellow)' },
+                        { name: '过期', val: 5, pct: 20, color: 'var(--red)' },
+                        { name: '库存', val: 8, pct: 30, color: 'var(--red)' },
+                        { name: '交接班', val: 3, pct: 15, color: 'var(--blue)' },
+                        { name: '封存', val: 2, pct: 10, color: 'var(--yellow)' },
+                        { name: '维保', val: 6, pct: 25, color: 'var(--blue)' }
+                    ]);
+
+                    // Mock Depts
+                    depts.value = generateDepts();
+
+                    // Mock Active Cars
+                    const mockActiveCars = [
+                        { id: '01', dept: '急诊A', type: 'red', msg: '肾上腺素过期', loc: '一楼抢救室' },
+                        { id: '03', dept: '呼吸1', type: 'yellow', msg: '今日未点检', loc: '住院部10楼' },
+                        { id: '05', dept: '手术1', type: 'blue', msg: '抢救使用中', loc: '手术间3' },
+                        { id: '08', dept: '普外2', type: 'blue', msg: '转运患者', loc: '电梯间' },
+                        { id: '12', dept: '心内2', type: 'red', msg: '除颤仪故障', loc: 'CCU病房' },
+                        { id: '15', dept: '儿科', type: 'blue', msg: '紧急借用', loc: '急诊儿科' },
+                        { id: '09', dept: '神外', type: 'yellow', msg: '封条破损', loc: 'ICU-B区' },
+                        { id: '22', dept: '产房', type: 'yellow', msg: '效期预警', loc: '待产室' }
+                    ];
+                    activeCars.splice(0, activeCars.length, ...mockActiveCars);
+                    drumCars.value = [...activeCars, ...activeCars];
+                    totalRows = Math.ceil(activeCars.length / 2);
+
+                    // Mock Logs
+                    logs.splice(0, logs.length, ...[
+                        { time: '10:45:12', type: '使用', msg: '普外2科-08车：离开病区，前往CT室' },
+                        { time: '10:42:30', type: '异常', msg: '急诊A-01车：系统检测到肾上腺素失效' },
+                        { time: '10:40:05', type: '正常', msg: '药剂科：补充急救药箱 x20' },
+                        { time: '10:38:00', type: '正常', msg: 'ICU区：早班完成封存交接' },
+                        { time: '10:35:10', type: '警示', msg: '手术1-05车：撕毁封条，开始抢救' }
+                    ]);
+
+                    // Mock Ranks
+                    ranks.splice(0, ranks.length, ...[
+                        { name: '重症医学科', score: 100 },
+                        { name: '心血管内科', score: 99.8 },
+                        { name: '神经外科', score: 99.5 },
+                        { name: '儿科', score: 98.2 },
+                        { name: '骨科', score: 97.0 }
+                    ]);
+
+                    // Start Mock Live Logs
+                    setInterval(() => {
+                        const types = ['正常', '使用', '异常', '警示'];
+                        const msgs = ['骨科-01车：交接正常', '急诊B-02车：取用生理盐水', '呼吸1-03车：封存条破损', '心内-05车：除颤仪自检通过'];
+                        const idx = Math.floor(Math.random() * 4);
+                        logs.unshift({ time: new Date().toLocaleTimeString('zh-CN', { hour12: false }), type: types[idx], msg: msgs[idx] });
+                        if (logs.length > 30) logs.pop();
+                    }, 2000);
+
+                    startDrum();
+                }
+
+                const fetchRealData = async () => {
+                    try {
+                        const response = await fetch('https://www.gdssbh.com/cmfv2/api/ssbh/Dashboard/Get', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                page: 1,
+                                rows: 500,
+                                wheres: JSON.stringify([{ name: 'OrganizationId', value: 379609327218757 }]),
+                                sort: 'Id',
+                                order: 'desc'
+                            })
+                        });
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        const res = await response.json();
+                        const data = res || {}; // Assuming standard structure
+
+                        // Map KPIs
+                        if (data.kpis) {
+                            kpis.total = data.kpis.total || 0;
+                            kpis.ready = data.kpis.ready || 0;
+                            kpis.inUse = data.kpis.inUse || 0;
+                            kpis.alerts = data.kpis.alerts || 0;
+                            kpis.itemTypes = data.kpis.itemTypes || 0;
+                            kpis.itemValue = data.kpis.itemValue || 0;
+                        }
+
+                        // Map Charts
+                        if (data.charts && Array.isArray(data.charts)) {
+                            // Map existing colors if possible or use default logic
+                            charts.splice(0, charts.length, ...data.charts.map(c => {
+                                let color = 'var(--blue)';
+                                if (c.name.includes('过期') || c.name.includes('不足')) color = 'var(--red)';
+                                else if (c.name.includes('近效期') || c.name.includes('封存') || c.name.includes('警示')) color = 'var(--yellow)';
+
+                                return {
+                                    name: c.name,
+                                    val: c.val,
+                                    pct: c.pct,
+                                    color: color
+                                };
+                            }));
+                        }
+                        console.log(data);
+                        // Map Depts
+                        if (data.depts && Array.isArray(data.depts)) {
+                            depts.value = data.depts.map(d => ({
+                                name: d.name,
+                                status: d.status // 'green', 'blue', 'yellow', 'red'
+                            }));
+                        }
+
+                        // Map Active Cars
+                        if (data.activeCars && Array.isArray(data.activeCars)) {
+                            activeCars.splice(0, activeCars.length, ...data.activeCars);
+                            drumCars.value = [...activeCars, ...activeCars];
+                            totalRows = Math.ceil(activeCars.length / 2);
+                            startDrum();
+                        }
+
+                        // Map Logs
+                        if (data.logs && Array.isArray(data.logs)) {
+                            logs.splice(0, logs.length, ...data.logs);
+                        }
+
+                        // Map Ranks
+                        if (data.ranks && Array.isArray(data.ranks)) {
+                            ranks.splice(0, ranks.length, ...data.ranks);
+                        }
+
+                    } catch (error) {
+                        console.error('Failed to fetch dashboard data:', error);
+                        // Fallback or error state? For now, maybe console log.
+                    }
+                }
+
+
+                const getCardColorClass = (t) => {
+                    if (t === 'red') return 'ac-red';
+                    if (t === 'blue') return 'ac-blue';
+                    if (t === 'yellow') return 'ac-yellow';
+                    return '';
+                };
+                const getCardColorValue = (t) => {
+                    if (t === 'red') return 'var(--red)';
+                    if (t === 'blue') return 'var(--blue)';
+                    if (t === 'yellow') return 'var(--yellow)';
+                    return '#fff';
+                };
+                const getCardIcon = (t) => {
+                    if (t === 'red') return '●';
+                    if (t === 'blue') return '▶';
+                    if (t === 'yellow') return '▲';
+                    return '';
+                }
+                const getLogClass = (t) => {
+                    if (t === '异常') return 'lt-red';
+                    if (t === '使用') return 'lt-blue';
+                    if (t === '警示') return 'lt-yellow';
+                    return 'lt-green';
+                }
+
+                onMounted(() => {
+                    setInterval(() => { now.value = new Date(); }, 1000);
+                    setInterval(() => { currentPage.value = (currentPage.value + 1) % totalPages.value; }, 8000);
+
+                    const params = new URLSearchParams(window.location.search);
+                    if (params.get('mock') === '1') {
+                        useMockData();
+                    } else {
+                        fetchRealData();
+                        // Optional: Refresh real data interval
+                        setInterval(fetchRealData, 10000);
+                    }
+                });
+
+                return { currentTime, kpis, charts, depts, currentDepts, currentPage, totalPages, setPage, drumCars, drumOffset, getCardColorClass, getCardColorValue, getCardIcon, logs, ranks, getLogClass };
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>

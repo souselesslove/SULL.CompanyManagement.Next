@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>药品使用说明</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            padding: 0;
+            background-color: #f9f9f9;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #009A97;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #009A97;
+            border-bottom: 2px solid #009A97;
+            padding-bottom: 10px;
+            margin-top: 40px;
+            font-size: 1.5em;
+        }
+        p {
+            margin: 15px 0;
+            text-align: justify;
+        }
+        ol, ul {
+            margin: 15px 0;
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 10px;
+        }
+        .note {
+            background-color: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        #content {
+            min-height: 200px;
+        }
+        #loading {
+            text-align: center;
+            margin-top: 50px;
+            font-style: italic;
+        }
+        #error {
+            color: red;
+            text-align: center;
+            margin-top: 50px;
+        }
+        @media (max-width: 600px) {
+            body {
+                margin: 10px;
+            }
+            h2 {
+                font-size: 1.3em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="content">
+        <div id="loading">加载中...</div>
+    </div>
+
+    <script>
+        // 解析药品信息的函数
+        function parseDrugInfo(text) {
+            // 分割文本为多个部分，以【标题】作为分隔点
+            const sections = text.split(/【([^】]+)】/g).filter(Boolean); // 过滤空字符串
+            let html = '<h1>药品使用说明</h1>'; // 页面主标题
+
+            for (let i = 0; i < sections.length; i += 2) {
+                if (i + 1 < sections.length) {
+                    const title = sections[i].trim(); // 标题，如 "急救适应症"
+                    const content = sections[i + 1].trim(); // 对应内容
+
+                    html += `<h2>【${title}】</h2>`;
+
+                    // 通用处理：如果内容中有（数字）或(数字)编号，转换为<ol>列表
+                    if (content.match(/[\uFF08(]\d+[\uFF09)]/g)) {
+                        // 分割列表项：按；分割，但仅当后面跟着（数字）时
+                        const items = content.split(/；\s*(?=[\uFF08(]\d+[\uFF09)])/).map(item => item.trim().replace(/^[\uFF08(]\d+[\uFF09)]/, ''));
+                        html += '<ol>';
+                        items.forEach(item => {
+                            html += `<li>${item.replace(/；$/, '').replace(/。$/, '')}</li>`; // 移除末尾的；或。
+                        });
+                        html += '</ol>';
+                    } else {
+                        // 否则，按句号分段处理，识别注意事项并用.note样式突出
+                        const paragraphs = content.split(/。/g).filter(Boolean); // 以句号分段
+                        paragraphs.forEach(para => {
+                            const trimmedPara = para.trim() + '。'; // 恢复句号
+                            if (trimmedPara.includes('患者对本药的个体差异很大')) {
+                                // 突出注意事项
+                                html += `<div class="note"><p>${trimmedPara}</p></div>`;
+                            } else {
+                                html += `<p>${trimmedPara}</p>`;
+                            }
+                        });
+                    }
+                }
+            }
+
+            return html;
+        }
+
+        // 从URL中提取参数
+        function getQueryParam(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+
+        // 页面加载时执行
+        window.onload = function() {
+            const code = getQueryParam('code');
+            const loadingDiv = document.getElementById('loading');
+            const contentDiv = document.getElementById('content');
+            const errorDiv = document.createElement('div');
+            errorDiv.id = 'error';
+
+            if (!code) {
+                loadingDiv.style.display = 'none';
+                errorDiv.textContent = '未提供code参数';
+                contentDiv.appendChild(errorDiv);
+                return;
+            }
+
+            // 构造后端URL
+            const apiUrl = `https://www.gdssbh.com/cmfv2/api/ssbh/Item/Remark?combinedId=${encodeURIComponent(code)}`;
+
+            // 调用后端API
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('网络响应失败');
+                    }
+                    return response.text(); // 假设返回的是纯文本
+                })
+                .then(data => {
+                    // 解析并渲染数据
+                    const renderedHtml = parseDrugInfo(data);
+                    contentDiv.innerHTML = renderedHtml;
+                })
+                .catch(error => {
+                    loadingDiv.style.display = 'none';
+                    errorDiv.textContent = '加载数据失败: ' + error.message;
+                    contentDiv.appendChild(errorDiv);
+                });
+        };
+    </script>
+</body>
+</html>

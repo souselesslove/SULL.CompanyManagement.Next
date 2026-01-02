@@ -52,7 +52,7 @@ namespace SULL.HospitalManagement.Services
             // 只要他参与过的都算它的消息，TolistDetail中AssignUserId有它的都算
             QueryRelativeExpression = (query) =>
             {
-                return query.Where(x => (x.IsDeleted ?? false) == false &&
+                return query.Where(x => x.IsDeleted != true &&
                                      db.Set<TodoListDetail>().Any(d => d.TodoListId == x.Id &&
                                                                        d.AssignUserId == userId &&
                                                                        d.IsDeleted != true));

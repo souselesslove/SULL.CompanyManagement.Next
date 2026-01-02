@@ -315,10 +315,14 @@ namespace VOL.Core.BaseProvider
         /// <returns></returns>
         public virtual PageGridData<T> GetPageData(PageDataOptions options)
         {
-            // Limit page size to 50
-            if (options.Rows > 50)
+            if (options == null)
             {
-                options.Rows = 50;
+                return new PageGridData<T>();
+            }
+            // Limit page size to 50
+            if (options.Rows > 100)
+            {
+                options.Rows = 100;
             }
 
             options = ValidatePageOptions(options, out IQueryable<T> queryable);
@@ -593,21 +597,42 @@ namespace VOL.Core.BaseProvider
             Type type = typeof(T);
             // 修改为与Update一致，先设置默认值再进行实体的校验
             //UserInfo userInfo = UserContext.Current.UserInfo;
-            // 处理一些默认字段
-            var key = "IsDeleted";
-            saveDataModel.MainData.TryAdd(key, 0);
-            key = "IsFinished";
-            saveDataModel.MainData.TryAdd(key, 0);
-            key = "IsComplete";
-            saveDataModel.MainData.TryAdd(key, 0);
-            key = "AuditStatus";
-            saveDataModel.MainData.TryAdd(key, 0);
-            key = "ResultStatus";
-            saveDataModel.MainData.TryAdd(key, 0);
-            key = "Status";
-            saveDataModel.MainData.TryAdd(key, 0);
-            key = "FinalStatus";
-            saveDataModel.MainData.TryAdd(key, 0);
+            // 处理一些状态默认字段，只要表里有这些字段，就自动初始化为0
+            Action<Dictionary<string, object>, PropertyInfo[]> InitStatusDefaultValues = (dic, properties) =>
+            {
+                string[] statusKeys = new string[] { "IsDeleted", "IsFinished", "IsComplete", "AuditStatus", "ResultStatus", "Status", "FinalStatus" };
+                foreach (var key in statusKeys)
+                {
+                    var property = properties.FirstOrDefault(x => x.Name.Equals(key, StringComparison.OrdinalIgnoreCase));
+                    if (property != null)
+                    {
+                        var existingKey = dic.Keys.FirstOrDefault(k => k.Equals(key, StringComparison.OrdinalIgnoreCase));
+                        if (string.IsNullOrEmpty(existingKey) || dic[existingKey] == null || dic[existingKey].ToString() == "")
+                        {
+                            if (!string.IsNullOrEmpty(existingKey) && existingKey != property.Name)
+                            {
+                                dic.Remove(existingKey);
+                            }
+                            dic[property.Name] = 0;
+                        }
+                    }
+                }
+            };
+
+            InitStatusDefaultValues(saveDataModel.MainData, TProperties);
+
+            if (saveDataModel.DetailData != null && saveDataModel.DetailData.Count > 0)
+            {
+                Type detailTypeInfo = GetRealDetailType();
+                if (detailTypeInfo != null)
+                {
+                    var detailProperties = detailTypeInfo.GetProperties().Where(x => x.PropertyType.Name != "List`1").ToArray();
+                    foreach (var detailRow in saveDataModel.DetailData)
+                    {
+                        InitStatusDefaultValues(detailRow, detailProperties);
+                    }
+                }
+            }
 
             saveDataModel.SetDefaultVal(AppSetting.CreateMember, userInfo);
 
@@ -1083,6 +1108,43 @@ namespace VOL.Core.BaseProvider
             //设置修改时间,修改人的默认值
             //UserInfo userInfo = UserContext.Current.UserInfo;
             saveModel.SetDefaultVal(AppSetting.ModifyMember, userInfo);
+
+            // 处理一些状态默认字段，只要表里有这些字段，如果值为null或空字符串，就自动初始化为0
+            Action<Dictionary<string, object>, PropertyInfo[]> InitStatusDefaultValues = (dic, properties) =>
+            {
+                string[] statusKeys = new string[] { "IsDeleted", "IsFinished", "IsComplete", "AuditStatus", "ResultStatus", "Status", "FinalStatus" };
+                foreach (var key in statusKeys)
+                {
+                    var property = properties.FirstOrDefault(x => x.Name.Equals(key, StringComparison.OrdinalIgnoreCase));
+                    if (property != null)
+                    {
+                        var existingKey = dic.Keys.FirstOrDefault(k => k.Equals(key, StringComparison.OrdinalIgnoreCase));
+                        if (!string.IsNullOrEmpty(existingKey) && (dic[existingKey] == null || dic[existingKey].ToString() == ""))
+                        {
+                            if (existingKey != property.Name)
+                            {
+                                dic.Remove(existingKey);
+                            }
+                            dic[property.Name] = 0;
+                        }
+                    }
+                }
+            };
+
+            InitStatusDefaultValues(saveModel.MainData, TProperties);
+
+            if (saveModel.DetailData != null && saveModel.DetailData.Count > 0)
+            {
+                Type detailTypeInfo = GetRealDetailType();
+                if (detailTypeInfo != null)
+                {
+                    var detailProperties = detailTypeInfo.GetProperties().Where(x => x.PropertyType.Name != "List`1").ToArray();
+                    foreach (var detailRow in saveModel.DetailData)
+                    {
+                        InitStatusDefaultValues(detailRow, detailProperties);
+                    }
+                }
+            }
 
 
             //判断提交的数据与实体格式是否一致

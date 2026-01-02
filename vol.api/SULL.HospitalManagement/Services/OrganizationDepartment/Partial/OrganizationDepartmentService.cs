@@ -10,6 +10,7 @@ using VOL.Core.BaseProvider;
 using VOL.Core.Extensions.AutofacManager;
 using VOL.Entity.DomainModels;
 using System.Linq;
+using System.Collections.Generic;
 using VOL.Core.Utilities;
 using System.Linq.Expressions;
 using VOL.Core.Extensions;
@@ -21,6 +22,7 @@ using SULL.HospitalManagement.IServices.Dtos;
 using VOL.Core.Enums;
 using VOL.Core.ManageUser;
 using SULL.HospitalManagement.IServices;
+using Yitter.IdGenerator;
 
 namespace SULL.HospitalManagement.Services
 {
@@ -55,76 +57,118 @@ namespace SULL.HospitalManagement.Services
 
         public override WebResponseContent Add(SaveModel saveModel)
         {
+            long orgId = UserContext.Current.OrganizationId;
+            if (orgId <= 0)
+            {
+                return new WebResponseContent().Error("请先选择或加入一个机构");
+            }
+            string name = saveModel.MainData["Name"]?.ToString();
+            
             base.AddOnExecute = model =>
             {
-                //校验邀请码
-                if (!saveModel.MainData.ContainsKey("Code") || string.IsNullOrEmpty(saveModel.MainData["Code"]?.ToString()))
-                {
-                    return new WebResponseContent().Error("请输入邀请码");
-                }
-                string code = saveModel.MainData["Code"].ToString();
-                var registerCode = _registerCodeRepository.FindFirst(x => x.Code == code);
-                if (registerCode == null)
-                {
-                    return new WebResponseContent().Error("邀请码不存在");
-                }
-                if (registerCode.RelatedId != null || registerCode.UseTime != null)
-                {
-                    return new WebResponseContent().Error("邀请码已被使用");
-                }
-
-                var exist = _repository.FindFirst(x => x.Name == saveModel.MainData["Name"].ToString());
-                return exist == null ? new WebResponseContent(true) : new WebResponseContent().Error("部门已存在");
+                var exist = _repository.FindFirst(x => x.OrganizationId == orgId && x.Name == name && x.IsDeleted != true);
+                return exist == null ? new WebResponseContent(true) : new WebResponseContent().Error($"在本机构中部门名称[{name}]已存在");
             };
-            var user = _organizationUserRepository.FindFirst(x => x.UserId == UserContext.Current.UserId);
+
             base.AddOnExecuting = (department, o) =>
             {
+                department.OrganizationId = orgId;
                 department.UserCounter = 1;
-                department.OrganizationId = user.OrganizationId;
+                // 默认将创建者设为部门负责人
+                department.DutyUserId = UserContext.Current.UserId;
+                department.DutyUser = UserContext.Current.UserTrueName;
                 return new WebResponseContent(true);
             };
-            base.AddOnExecuted = (organization, obj) =>
+
+            base.AddOnExecuted = (dept, obj) =>
             {
-                user.DepartmentId = organization.Id;
-                user.LastModifierId = UserContext.Current.UserId;
-                user.LastModifier = UserContext.Current.UserName;
-                user.LastModificationTime = DateTime.Now;
-                _organizationUserRepository.Update(user, true);
-
-                var o = _organizationRepository.FindFirst(x => x.Id == user.OrganizationId);
-                o.DepartmentCounter = o.DepartmentCounter + 1;
-                o.LastModifierId = UserContext.Current.UserId;
-                o.LastModifier = UserContext.Current.UserName;
-                o.LastModificationTime = DateTime.Now;
-                _organizationRepository.Update(o, true);
-
-                //更新邀请码使用状态
-                if (saveModel.MainData.ContainsKey("Code"))
+                var user = _organizationUserRepository.FindFirst(x => x.UserId == UserContext.Current.UserId);
+                if (user != null)
                 {
-                    string code = saveModel.MainData["Code"].ToString();
-                    var registerCode = _registerCodeRepository.FindFirst(x => x.Code == code);
-                    if (registerCode != null)
+                    long? oldDeptId = user.DepartmentId;
+                    
+                    // 1. 将当前人员加入到该部门
+                    user.DepartmentId = dept.Id;
+                    user.LastModifierId = UserContext.Current.UserId;
+                    user.LastModifier = UserContext.Current.UserName;
+                    user.LastModificationTime = DateTime.Now;
+                    _organizationUserRepository.Update(user, true);
+
+                    // 2. 如果人员之前属于其他部门，更新旧部门的人数
+                    if (oldDeptId.HasValue && oldDeptId.Value > 0 && oldDeptId.Value != dept.Id)
                     {
-                        registerCode.RelatedId = (int)organization.Id;
-                        registerCode.UseTime = DateTime.Now;
-                        _registerCodeRepository.Update(registerCode, true);
+                        var oldDept = _repository.FindFirst(x => x.Id == oldDeptId.Value);
+                        if (oldDept != null)
+                        {
+                            oldDept.UserCounter = Math.Max(0, (oldDept.UserCounter ?? 0) - 1);
+                            _repository.Update(oldDept, true);
+                        }
                     }
                 }
 
-                // Log to Dashboard
-                if (organization.OrganizationId > 0)
+                // 3. 更新机构的部门数量
+                if (dept.OrganizationId > 0)
                 {
-                     _dashboardService.AddLog(organization.OrganizationId.Value, "系统消息", $"系统消息：部门[{organization.Name}]由 {UserContext.Current.UserTrueName} 创建成功");
+                    var o = _organizationRepository.FindFirst(x => x.Id == dept.OrganizationId);
+                    if (o != null)
+                    {
+                        o.DepartmentCounter = (o.DepartmentCounter ?? 0) + 1;
+                        o.LastModifierId = UserContext.Current.UserId;
+                        o.LastModifier = UserContext.Current.UserName;
+                        o.LastModificationTime = DateTime.Now;
+                        _organizationRepository.Update(o, true);
+                    }
                 }
+
+                // 4. 记录日志
+                if (dept.OrganizationId > 0)
+                {
+                    _dashboardService.AddLog(dept.OrganizationId.Value, "系统消息", $"系统消息：部门[{dept.Name}]由 {UserContext.Current.UserTrueName} 创建成功");
+                }
+
+                // 5. 刷新缓存
+                UserContext.Current.LogOut(UserContext.Current.UserId);
 
                 return new WebResponseContent(true).OK(ResponseType.SaveSuccess);
             };
+
             // 使用细粒度锁防止重复添加部门
-            string key = $"OrganizationDepartment_Add_{saveModel.MainData["Name"]}";
+            string key = $"OrganizationDepartment_Add_{orgId}_{name}";
             return KeyLock.Lock(key, () =>
             {
                 return base.Add(saveModel);
             });
+        }
+
+        public override WebResponseContent Del(object[] keys, bool delList = true)
+        {
+            var depts = new List<OrganizationDepartment>();
+            if (keys != null && keys.Length > 0)
+            {
+                var longKeys = keys.Select(x => x.ToString().GetLong()).ToList();
+                depts = _repository.Find(x => longKeys.Contains(x.Id)).ToList();
+            }
+
+            DelOnExecuted = (k) =>
+            {
+                foreach (var dept in depts)
+                {
+                    if (dept.OrganizationId > 0)
+                    {
+                        var org = _organizationRepository.FindFirst(x => x.Id == dept.OrganizationId);
+                        if (org != null)
+                        {
+                            org.DepartmentCounter = Math.Max(0, (org.DepartmentCounter ?? 0) - 1);
+                            org.LastModifierId = UserContext.Current.UserId;
+                            org.LastModifier = UserContext.Current.UserTrueName;
+                            org.LastModificationTime = DateTime.Now;
+                            _organizationRepository.Update(org, true);
+                        }
+                    }
+                }
+                return new WebResponseContent(true);
+            };
+            return base.Del(keys, delList);
         }
 
         public override WebResponseContent Update(SaveModel saveModel)
@@ -160,6 +204,16 @@ namespace SULL.HospitalManagement.Services
                     }
                 }
             }
+
+            UpdateOnExecuted = (department, obj, list, list2) =>
+            {
+                // 如果修改涉及到了某些关键信息（虽然部门修改通常不改变当前人的部门，但如果是后台管理修改了人员部门，建议刷新）
+                // 考虑到这里是部门服务，如果是用户切换了部门，通常是在 OrganizationUserService 处理
+                // 但为了保险，如果当前用户操作了部门相关的更新，触一次刷新也是安全的
+                UserContext.Current.LogOut(UserContext.Current.UserId);
+                return new WebResponseContent(true);
+            };
+
             return base.Update(saveModel);
         }
 
@@ -171,7 +225,7 @@ namespace SULL.HospitalManagement.Services
             var qry = from a in db.Set<OrganizationDepartment>()
                 join b in db.Set<OrganizationUser>() on a.Id equals b.DepartmentId
                 where b.UserId == userId
-                && b.IsDeleted != true
+                && a.IsDeleted != true
                 select a;
             pageGridData.total = await qry.CountAsync(cancellationToken);
             pageGridData.rows = await qry.ToListAsync(cancellationToken);
@@ -187,7 +241,7 @@ namespace SULL.HospitalManagement.Services
             join c in db.Set<Organization>() on a.OrganizationId equals c.Id
             join b in db.Set<OrganizationUser>() on c.Id equals b.OrganizationId
             where b.UserId == userId
-                  && b.IsDeleted != true
+                  && a.IsDeleted != true
                 select a;
             pageGridData.total = await qry.CountAsync(cancellationToken);
             pageGridData.rows = await qry.ToListAsync(cancellationToken);

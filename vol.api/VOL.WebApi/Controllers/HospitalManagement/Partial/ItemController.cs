@@ -7,10 +7,13 @@ using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
 using VOL.Entity.DomainModels;
 using SULL.HospitalManagement.IServices;
+using VOL.Core.Filters;
+using VOL.Core.Utilities;
 
 namespace SULL.HospitalManagement.Controllers
 {
@@ -28,6 +31,21 @@ namespace SULL.HospitalManagement.Controllers
         {
             _service = service;
             _httpContextAccessor = httpContextAccessor;
+        }
+
+        [HttpGet, Route("CheckItemWarnings")]
+        [AllowAnonymous]
+        [LocalNetworkOnly]
+        public WebResponseContent CheckItemWarnings(long id = 0)
+        {
+            return _service.CheckItemWarnings(id);
+        }
+
+        [HttpGet, Route("Remark")]
+        [AllowAnonymous]
+        public async Task<string> GetItemRemark(string combinedId)
+        {
+            return await _service.GetItemRemarkAsync(combinedId);
         }
     }
 }

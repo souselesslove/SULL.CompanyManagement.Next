@@ -1,0 +1,44 @@
+{
+  "History": [
+    {
+      "Version": "1216",
+      "Force": 0,
+      "Date": "2025-12-30 12:19:00",
+      "Description": "功能优化",
+      "Url": "https://www.gdssbh.com/cmfv2//app/ssbh-rcms1230121900.apk",
+      "MD5": "20d7ac947e8e32b8b1db89e7c88430a9"
+    },
+    {
+      "Version": "1216",
+      "Force": 0,
+      "Date": "2025-12-30 12:19:00",
+      "Description": "功能优化",
+      "Url": "http://10.0.0.1:64624/app/ssbh-rcms1230121900.apk",
+      "MD5": "20d7ac947e8e32b8b1db89e7c88430a9"
+    },
+    {
+      "Version": "1215",
+      "Force": 0,
+      "Date": "2025-12-31 01:01:00",
+      "Description": "升级修复了修改部门后换成你未实时刷新的问题",
+      "Url": "http://10.0.0.1:64624/app/ssbh-rcms1231010100.apk",
+      "MD5": "8aeb37d3911478a214a1ea790acdbe9b"
+    },
+    {
+      "Version": "1212",
+      "Force": 0,
+      "Date": "2025-12-29 04:29:00",
+      "Description": "更新说明",
+      "Url": "http://10.0.0.1:64624/app/ssbh-rcms1229042859.apk",
+      "MD5": "a5380af217105a7ea20f21fe077c094e"
+    },
+    {
+      "Version": "1320",
+      "Force": 0,
+      "Date": "2025-12-29 04:29:00",
+      "Description": "更新说明",
+      "Url": "https://www.gdssbh.com/res/app/a.apk",
+      "MD5": "720a4e2d1de9765c41872a255d2110e5"
+    }
+  ]
+}

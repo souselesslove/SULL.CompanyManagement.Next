@@ -21,6 +21,10 @@ using SULL.HospitalManagement.IServices;
 using VOL.Core.ManageUser;
 using VOL.Core.RabbitMQ;
 using Yitter.IdGenerator;
+using VOL.Core.CacheManager;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System;
 
 namespace SULL.HospitalManagement.Services
 {
@@ -31,20 +35,28 @@ namespace SULL.HospitalManagement.Services
         private readonly IHandoverRepository _repository; //访问数据库
         private readonly IMessageProducer _messageProducer;
         private readonly IDashboardService _dashboardService;
+        private readonly IUserAccountRepository _userAccountRepository;
+        private readonly ICacheService _cache;
+        private readonly IUniPushService _uniPushService;
 
         [ActivatorUtilitiesConstructor]
         public HandoverService(
             IHandoverRepository dbRepository,
-            IHttpContextAccessor httpContextAccessor, IMessageProducer messageProducer,
-            IDashboardService dashboardService)
+            IHttpContextAccessor httpContextAccessor, 
+            IMessageProducer messageProducer,
+            IDashboardService dashboardService,
+            IUserAccountRepository userAccountRepository,
+            ICacheService cache,
+            IUniPushService uniPushService)
             : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _messageProducer = messageProducer;
             _repository = dbRepository;
             _dashboardService = dashboardService;
-            //多租户会用到这init代码，其他情况可以不用
-            //base.Init(dbRepository);
+            _userAccountRepository = userAccountRepository;
+            _cache = cache;
+            _uniPushService = uniPushService;
         }
 
         public override WebResponseContent Add(SaveModel saveModel)
@@ -87,7 +99,7 @@ namespace SULL.HospitalManagement.Services
                               && p.WarehouseId == relatedId
                               && p.Category == 110 // 绑定物品的层级/位置
                               && p.IsDeleted != true
-                              && p.ItemId != null
+                              && p.ItemId > 0
                         select new
                         {
                             ItemId = p.ItemId ?? 0,
@@ -115,11 +127,17 @@ namespace SULL.HospitalManagement.Services
                             ItemRealCounter = x.ItemCounter ?? 0, // 默认为系统数量
                             ExpirationDate = x.ExpirationDate,
                             IsDeleted = false
-                        }).ToList();
+                        }).Where(x => x.ItemId > 0).ToList();
 
                         db.Set<HandoverItemCheck>().AddRange(detailsToAdd);
                         db.SaveChanges();
                     }
+                }
+
+                // 向接班人推送通知
+                if (handover.ReceiverId > 0)
+                {
+                    _ = NotifyReceiverAsync(handover);
                 }
 
                 return new WebResponseContent(true);
@@ -132,6 +150,7 @@ namespace SULL.HospitalManagement.Services
 
         public override WebResponseContent Update(SaveModel saveModel)
         {
+            // TODO 可能存在数据不一致问题
             if (saveModel.MainData.TryGetValue("AuditStatus", out object status) && status != null)
             {
                 string statusStr = status.ToString();
@@ -159,6 +178,30 @@ namespace SULL.HospitalManagement.Services
                                 .GetResult();
 
                             // Log to Dashboard
+                            if (entity.CreationTime != null)
+                            {
+                                var endTime = DateTime.Now;
+                                var duration = (int)(endTime - entity.CreationTime.Value).TotalSeconds;
+                                var durationStat = new DurationStatistics
+                                {
+                                    Id = YitIdHelper.NextId(),
+                                    OrganizationId = entity.OrganizationId,
+                                    DepartmentId = entity.DepartmentId,
+                                    Category = 10,
+                                    RelatedId = handoverId,
+                                    CreatorId = UserContext.Current.UserId,
+                                    Creator = UserContext.Current.UserTrueName,
+                                    CreationTime = endTime,
+                                    StartTime = entity.CreationTime,
+                                    EndTime = endTime,
+                                    Duration = duration,
+                                    Remark = ""
+                                };
+                                _repository.DbContext.Set<DurationStatistics>().Add(durationStat);
+                                _repository.DbContext.SaveChanges();
+                            }
+                            
+                            // Log to Dashboard
                             if (entity.OrganizationId > 0)
                             {
                                 var db = _repository.DbContext;
@@ -180,6 +223,15 @@ namespace SULL.HospitalManagement.Services
 
                                 string logMsg = $"[{deptName}]-[{carName}] 由 {operatorName} 完成交接班";
                                 _dashboardService.AddLog(entity.OrganizationId.Value, "交接班", logMsg);
+
+                                // 向交接班创建人推送通知
+                                if (entity.CreatorId > 0 && entity.CreatorId != UserContext.Current.UserId)
+                                {
+                                    string notifyTitle = "交接班完成通知";
+                                    string notifyContent = $"您提交的[{carName}]交接班已由 {operatorName} 确认完成。";
+                                    var notifyPayload = new { Id = entity.Id, Category = entity.Category, RelatedId = entity.RelatedId };
+                                    _ = NotifyUserAsync(entity.CreatorId.Value, notifyTitle, notifyContent, notifyPayload);
+                                }
                             }
                         }
                         else if (statusStr == "20")
@@ -197,8 +249,104 @@ namespace SULL.HospitalManagement.Services
                     }
                 }
             }
-
             return base.Update(saveModel);
+        }
+        public WebResponseContent GetMissingShifts(IServices.Handover.Dtos.MissingShiftInputDto input)
+        {
+            if (string.IsNullOrWhiteSpace(input.ShiftNames) || input.RelatedId <= 0)
+            {
+                return new WebResponseContent(false);
+            }
+
+            var targetDate = input.ShiftTime.Date;
+            var nextDate = targetDate.AddDays(1);
+
+            // 查询当天已存在的班次
+            // RelatedId=抢救车编号
+            var existingShifts = _repository.Find(x => x.RelatedId == input.RelatedId
+                                                       && x.ShiftTime >= targetDate
+                                                       && x.ShiftTime < nextDate)
+                .Select(x => x.ShiftName)
+                .ToList();
+
+            var inputShiftList = input.ShiftNames.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+            // 找出不存在的班次
+            var missingShifts = inputShiftList.Where(s => !existingShifts.Contains(s)).ToList();
+
+            if (missingShifts.Any())
+            {
+                var db = _repository.DbContext;
+                var position = db.Set<Position>().FirstOrDefault(x => x.Id == input.RelatedId);
+                if (position != null)
+                {
+                    foreach (var shiftName in missingShifts)
+                    {
+                        var desc = $"[{targetDate:yyyy-MM-dd}][{shiftName}]交接班缺失";
+                        db.Set<WarningLogs>().Add(new WarningLogs
+                            {
+                                Id = YitIdHelper.NextId(),
+                                Category = 10,
+                                Description = desc,
+                                OrganizationId = position.OrganizationId,
+                                DepartmentId = position.DepartmentId,
+                                RelatedId = input.RelatedId,
+                                CreationTime = DateTime.Now,
+                                Remark = "",
+                                IsFinished = false
+                            });
+                    }
+                    db.SaveChanges();
+                }
+            }
+
+            return new WebResponseContent(true);
+        }
+
+        private async Task NotifyReceiverAsync(Handover handover)
+        {
+            if (handover.ReceiverId == null || handover.ReceiverId <= 0) return;
+
+            string carName = "";
+            var position = await _repository.DbContext.Set<Position>().FirstOrDefaultAsync(x => x.Id == handover.RelatedId);
+            if (position != null) carName = $"[{position.DisplayName}]";
+
+            string title = "交接班确认提醒";
+            string content = $"{handover.Creator} 已向您提交了{carName}交接班，请进入系统确认。";
+            var payload = new { Id = handover.Id, Category = handover.Category, RelatedId = handover.RelatedId };
+
+            await NotifyUserAsync(handover.ReceiverId.Value, title, content, payload);
+        }
+
+        private async Task NotifyUserAsync(int userId, string title, string content, object payload = null)
+        {
+            if (userId <= 0) return;
+
+            string accountCacheKey = $"UserAccount_{userId}_10_Account";
+            string userAccount = null;
+
+            // 1. 尝试从缓存获取
+            var cachedAccount = _cache.Get<UserAccount>(accountCacheKey);
+            if (cachedAccount != null)
+            {
+                userAccount = cachedAccount.Account;
+            }
+            else
+            {
+                // 2. 查库
+                var account = await _userAccountRepository.DbContext.Set<UserAccount>()
+                    .FirstOrDefaultAsync(x => x.UserId == userId && x.IsDeleted != true && x.Category == 10);
+                if (account != null)
+                {
+                    userAccount = account.Account;
+                    _cache.AddObject(accountCacheKey, account);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(userAccount))
+            {
+                await _uniPushService.SendAsync(new List<string> { userAccount }, title, content, payload);
+            }
         }
     }
 }

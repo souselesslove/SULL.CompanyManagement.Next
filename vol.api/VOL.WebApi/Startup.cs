@@ -23,6 +23,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -41,6 +43,8 @@ using VOL.WebApi.Utils;
 using SULL.HospitalManagement.Services.Consumers;
 using VOL.Core.RabbitMQ;
 using static VOL.Core.RabbitMQ.IMQDeclarator;
+using SULL.HospitalManagement.Jobs;
+using Microsoft.AspNetCore.StaticFiles;
 
 namespace VOL.WebApi
 {
@@ -59,16 +63,16 @@ namespace VOL.WebApi
             // 限制上传或请求内容大小
             services.Configure<KestrelServerOptions>(options =>
             {
-                options.Limits.MaxRequestBodySize = 1073741824;//1GB
+                options.Limits.MaxRequestBodySize = 1073741824; //1GB
             });
             services.Configure<FormOptions>(x =>
             {
-                x.ValueLengthLimit = 1073741824;//1GB
-                x.MultipartBodyLengthLimit = 1073741824;//1GB
+                x.ValueLengthLimit = 1073741824; //1GB
+                x.MultipartBodyLengthLimit = 1073741824; //1GB
             });
             services.Configure<IISServerOptions>(options =>
             {
-                options.MaxRequestBodySize = 1073741824;//1GB
+                options.MaxRequestBodySize = 1073741824; //1GB
             });
 
             //初始化模型验证配置
@@ -86,58 +90,61 @@ namespace VOL.WebApi
                 //  options.SuppressAsyncSuffixInActionNames = false;
             });
             services.AddControllers()
-              .AddNewtonsoftJson(op =>
-              {
-                  op.SerializerSettings.ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver();
-                  op.SerializerSettings.DateFormatString = "yyyy-MM-dd HH:mm:ss";
-              });
+                .AddNewtonsoftJson(op =>
+                {
+                    op.SerializerSettings.ContractResolver =
+                        new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver();
+                    op.SerializerSettings.DateFormatString = "yyyy-MM-dd HH:mm:ss";
+                });
 
             Services.AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            })
-             .AddJwtBearer(options =>
-             {
-                 options.TokenValidationParameters = new TokenValidationParameters
-                 {
-                     SaveSigninToken = true,//保存token,后台验证token是否生效(重要)
-                     ValidateIssuer = true,//是否验证Issuer
-                     ValidateAudience = true,//是否验证Audience
-                     ValidateLifetime = true,//是否验证失效时间
-                     ValidateIssuerSigningKey = true,//是否验证SecurityKey
-                     ValidAudience = AppSetting.Secret.Audience,//Audience
-                     ValidIssuer = AppSetting.Secret.Issuer,//Issuer，这两项和前面签发jwt的设置一致
-                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(AppSetting.Secret.JWT))
-                 };
-                 options.Events = new JwtBearerEvents()
-                 {
-                     OnChallenge = context =>
-                     {
-                         context.HandleResponse();
-                         context.Response.Clear();
-                         context.Response.ContentType = "application/json";
-                         context.Response.StatusCode = 401;
-                         context.Response.WriteAsync(new { message = "授权未通过", status = false, code = 401 }.Serialize());
-                         return Task.CompletedTask;
-                     }
-                 };
-             });
+                {
+                    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                })
+                .AddJwtBearer(options =>
+                {
+                    options.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        SaveSigninToken = true, //保存token,后台验证token是否生效(重要)
+                        ValidateIssuer = true, //是否验证Issuer
+                        ValidateAudience = true, //是否验证Audience
+                        ValidateLifetime = true, //是否验证失效时间
+                        ValidateIssuerSigningKey = true, //是否验证SecurityKey
+                        ValidAudience = AppSetting.Secret.Audience, //Audience
+                        ValidIssuer = AppSetting.Secret.Issuer, //Issuer，这两项和前面签发jwt的设置一致
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(AppSetting.Secret.JWT))
+                    };
+                    options.Events = new JwtBearerEvents()
+                    {
+                        OnChallenge = context =>
+                        {
+                            context.HandleResponse();
+                            context.Response.Clear();
+                            context.Response.ContentType = "application/json";
+                            context.Response.StatusCode = 401;
+                            context.Response.WriteAsync(
+                                new { message = "授权未通过", status = false, code = 401 }.Serialize());
+                            return Task.CompletedTask;
+                        }
+                    };
+                });
             //必须appsettings.json中配置
             string corsUrls = Configuration["CorsUrls"];
             if (string.IsNullOrEmpty(corsUrls))
             {
                 throw new Exception("请配置跨请求的前端Url");
             }
+
             services.AddCors(options =>
             {
                 options.AddDefaultPolicy(
-                        builder =>
-                        {
-                            builder.AllowAnyOrigin()
-                           .SetPreflightMaxAge(TimeSpan.FromSeconds(2520))
+                    builder =>
+                    {
+                        builder.AllowAnyOrigin()
+                            .SetPreflightMaxAge(TimeSpan.FromSeconds(2520))
                             .AllowAnyHeader().AllowAnyMethod();
-                        });
+                    });
             });
             services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
             // 配置RabbitMQ
@@ -146,55 +153,63 @@ namespace VOL.WebApi
             services.AddSingleton<IMessageProducer, RabbitMessageProducer>();
             services.AddHostedService<TodoConsumer>(); // 注册消息消费者
 
+            // 注册后台定时任务
+            services.AddSingleton<IBackgroundJob, CheckWarningsJob>();
+            services.AddHostedService<SchedulerHostedService>();
+
 
             services.AddControllers();
             services.AddSwaggerGen(c =>
-            {
-                //分为2份接口文档
-                //控制器里使用[ApiExplorerSettings(GroupName = "v2")]              
-                //启用中文注释功能
-                // var basePath = PlatformServices.Default.Application.ApplicationBasePath;
-                //  var xmlPath = Path.Combine(basePath, "VOL.WebApi.xml");
-                //   c.IncludeXmlComments(xmlPath, true);//显示控制器xml注释内容
-                //添加过滤器 可自定义添加对控制器的注释描述 如：添加url过滤
-                c.DocumentFilter<SwaggerFilter>();
-                c.SwaggerDoc("v1", new OpenApiInfo { Title = "VOL.Core后台Api", Version = "v1", Description = "这是对文档的描述。。" });
-                c.SwaggerDoc("v2", new OpenApiInfo { Title = "VOL.Core对外三方Api", Version = "v2", Description = "xxx接口文档" });  
-                var security = new Dictionary<string, IEnumerable<string>> { { AppSetting.Secret.Issuer, new string[] { } } };
-                c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme()
                 {
-                    Description = "JWT授权token前面需要加上字段Bearer与一个空格,如Bearer token",
-                    Name = "Authorization",
-                    In = ParameterLocation.Header,
-                    Type = SecuritySchemeType.ApiKey,
-                    BearerFormat = "JWT",
-                    Scheme = "Bearer"
-                });
-
-                c.AddSecurityRequirement(new OpenApiSecurityRequirement
-                {
+                    //分为2份接口文档
+                    //控制器里使用[ApiExplorerSettings(GroupName = "v2")]              
+                    //启用中文注释功能
+                    // var basePath = PlatformServices.Default.Application.ApplicationBasePath;
+                    //  var xmlPath = Path.Combine(basePath, "VOL.WebApi.xml");
+                    //   c.IncludeXmlComments(xmlPath, true);//显示控制器xml注释内容
+                    //添加过滤器 可自定义添加对控制器的注释描述 如：添加url过滤
+                    c.DocumentFilter<SwaggerFilter>();
+                    c.SwaggerDoc("v1",
+                        new OpenApiInfo { Title = "VOL.Core后台Api", Version = "v1", Description = "这是对文档的描述。。" });
+                    c.SwaggerDoc("v2",
+                        new OpenApiInfo { Title = "VOL.Core对外三方Api", Version = "v2", Description = "xxx接口文档" });
+                    var security = new Dictionary<string, IEnumerable<string>>
+                        { { AppSetting.Secret.Issuer, new string[] { } } };
+                    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme()
                     {
-                        new OpenApiSecurityScheme
+                        Description = "JWT授权token前面需要加上字段Bearer与一个空格,如Bearer token",
+                        Name = "Authorization",
+                        In = ParameterLocation.Header,
+                        Type = SecuritySchemeType.ApiKey,
+                        BearerFormat = "JWT",
+                        Scheme = "Bearer"
+                    });
+
+                    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+                    {
                         {
-                            Reference = new OpenApiReference {
-                                Type = ReferenceType.SecurityScheme,
-                                Id = "Bearer"
-                            }
-                        },
-                        new string[] { } 
-                    }
+                            new OpenApiSecurityScheme
+                            {
+                                Reference = new OpenApiReference
+                                {
+                                    Type = ReferenceType.SecurityScheme,
+                                    Id = "Bearer"
+                                }
+                            },
+                            new string[] { }
+                        }
+                    });
+                })
+                .AddControllers()
+                .ConfigureApiBehaviorOptions(options =>
+                {
+                    options.SuppressConsumesConstraintForFormFileParameters = true;
+                    options.SuppressInferBindingSourcesForParameters = true;
+                    options.SuppressModelStateInvalidFilter = true;
+                    options.SuppressMapClientErrors = true;
+                    options.ClientErrorMapping[404].Link =
+                        "https://*/404";
                 });
-            })
-             .AddControllers()
-            .ConfigureApiBehaviorOptions(options =>
-            {
-                options.SuppressConsumesConstraintForFormFileParameters = true;
-                options.SuppressInferBindingSourcesForParameters = true;
-                options.SuppressModelStateInvalidFilter = true;
-                options.SuppressMapClientErrors = true;
-                options.ClientErrorMapping[404].Link =
-                    "https://*/404";
-            });
             services.AddSignalR();
             //services.AddSingleton(typeof(IConverter), new SynchronizedConverter(new PdfTools()));
             //services.AddTransient<IPDFService, PDFService>();
@@ -204,7 +219,33 @@ namespace VOL.WebApi
             Services.AddSingleton<ISchedulerFactory, StdSchedulerFactory>();
             Services.AddSingleton<Quartz.Spi.IJobFactory, IOCJobFactory>();
             Services.AddSerilog();
+
+            #region UniPush
+
+            Services.AddHttpClient<IUniPushService, UniPushService>((serviceProvider, client) =>
+                {
+                    var config = serviceProvider.GetRequiredService<IConfiguration>();
+                    client.BaseAddress = new Uri(config["UniPush:BaseUrl"]);
+                    client.Timeout = TimeSpan.FromSeconds(30);
+                })
+                .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+                {
+                    AutomaticDecompression =
+                        DecompressionMethods.GZip | DecompressionMethods.Deflate
+                });
+            Services.AddSingleton<IUniPushService, UniPushService>(sp =>
+            {
+                var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+                var httpClient = httpClientFactory.CreateClient(typeof(UniPushService).FullName); // 专用客户端
+                var logger = sp.GetRequiredService<ILogger<UniPushService>>();
+                var url = sp.GetRequiredService<IConfiguration>()["UniPush:Url"]; // 完整 URL
+
+                return new UniPushService(httpClient, logger, url);
+            });
+
+            #endregion
         }
+
         public void ConfigureContainer(ContainerBuilder builder)
         {
             Services.AddModule(builder, Configuration);
@@ -239,9 +280,13 @@ namespace VOL.WebApi
 
             app.UseMiddleware<ExceptionHandlerMiddleWare>();
             app.UseDefaultFiles();
+
+            var provider = new FileExtensionContentTypeProvider();
+            provider.Mappings[".apk"] = "application/vnd.android.package-archive";
             app.UseStaticFiles().UseStaticFiles(new StaticFileOptions
             {
-                ServeUnknownFileTypes = true
+                ServeUnknownFileTypes = true,
+                ContentTypeProvider = provider
             });
             app.Use(HttpRequestMiddleware.Context);
 

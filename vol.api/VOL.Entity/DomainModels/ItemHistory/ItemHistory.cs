@@ -1,6 +1,6 @@
 /*
- *ä»£ç ç”±æ¡†æ¶ç”Ÿæˆ,ä»»ä½•æ›´æ”¹éƒ½å¯èƒ½å¯¼è‡´è¢«ä»£ç ç”Ÿæˆå™¨è¦†ç›–
- *å¦‚æœæ•°æ®åº“å­—æ®µå‘ç”Ÿå˜åŒ–ï¼Œè¯·åœ¨ä»£ç ç”Ÿå™¨é‡æ–°ç”Ÿæˆæ­¤Model
+ *´úÂëÓÉ¿ò¼ÜÉú³É,ÈÎºÎ¸ü¸Ä¶¼¿ÉÄÜµ¼ÖÂ±»´úÂëÉú³ÉÆ÷¸²¸Ç
+ *Èç¹ûÊı¾İ¿â×Ö¶Î·¢Éú±ä»¯£¬ÇëÔÚ´úÂëÉúÆ÷ÖØĞÂÉú³É´ËModel
  */
 using System;
 using System.Collections.Generic;
@@ -13,87 +13,97 @@ using VOL.Entity.SystemModels;
 
 namespace VOL.Entity.DomainModels
 {
-    [Entity(TableCnName = "ç‰©å“ä½¿ç”¨è®°å½•",TableName = "ItemHistory")]
-    public partial class ItemHistory:BaseEntity
+    [Entity(TableCnName = "ÎïÆ·Ê¹ÓÃ¼ÇÂ¼", TableName = "ItemHistory")]
+    public partial class ItemHistory : BaseEntity
     {
         /// <summary>
-       ///ç¼–å·
-       /// </summary>
-       [Key]
-       [Display(Name ="ç¼–å·")]
-       [Column(TypeName="bigint")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public long Id { get; set; }
+        ///±àºÅ
+        /// </summary>
+        [Key]
+        [Display(Name = "±àºÅ")]
+        [Column(TypeName = "bigint")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public long Id { get; set; }
 
-       /// <summary>
-       ///ç‰©å“ç¼–å·
-       /// </summary>
-       [Display(Name ="ç‰©å“ç¼–å·")]
-       [Column(TypeName="bigint")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public long ItemId { get; set; }
+        /// <summary>
+        ///ÎïÆ·±àºÅ
+        /// </summary>
+        [Display(Name = "ÎïÆ·±àºÅ")]
+        [Column(TypeName = "bigint")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public long ItemId { get; set; }
 
-       /// <summary>
-       ///ç‰©å“æ˜ç»†ç¼–å·
-       /// </summary>
-       [Display(Name ="ç‰©å“æ˜ç»†ç¼–å·")]
-       [Column(TypeName="bigint")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public long ItemDetailId { get; set; }
+        /// <summary>
+        ///ÎïÆ·Ã÷Ï¸±àºÅ
+        /// </summary>
+        [Display(Name = "ÎïÆ·Ã÷Ï¸±àºÅ")]
+        [Column(TypeName = "bigint")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public long ItemDetailId { get; set; }
 
-       /// <summary>
-       ///å˜åŒ–æ•°é‡
-       /// </summary>
-       [Display(Name ="å˜åŒ–æ•°é‡")]
-       [Column(TypeName="int")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public int ChangeCounter { get; set; }
+        /// <summary>
+        ///±ä»¯ÊıÁ¿
+        /// </summary>
+        [Display(Name = "±ä»¯ÊıÁ¿")]
+        [Column(TypeName = "int")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public int ChangeCounter { get; set; }
 
-       /// <summary>
-       ///åº“å­˜
-       /// </summary>
-       [Display(Name ="åº“å­˜")]
-       [Column(TypeName="int")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public int Stock { get; set; }
+        /// <summary>
+        ///¿â´æ
+        /// </summary>
+        [Display(Name = "¿â´æ")]
+        [Column(TypeName = "int")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public int Stock { get; set; }
 
-       /// <summary>
-       ///åˆ›å»ºäºº
-       /// </summary>
-       [Display(Name ="åˆ›å»ºäºº")]
-       [MaxLength(128)]
-       [Column(TypeName="nvarchar(128)")]
-       [Editable(true)]
-       public string Creator { get; set; }
+        /// <summary>
+        ///´´½¨ÈË
+        /// </summary>
+        [Display(Name = "´´½¨ÈË")]
+        [MaxLength(128)]
+        [Column(TypeName = "nvarchar(128)")]
+        [Editable(true)]
+        public string Creator { get; set; }
 
-       /// <summary>
-       ///å¤‡æ³¨
-       /// </summary>
-       [Display(Name ="å¤‡æ³¨")]
-       [MaxLength(128)]
-       [Column(TypeName="nvarchar(128)")]
-       [Editable(true)]
-       public string Remark { get; set; }
+        /// <summary>
+        ///±¸×¢
+        /// </summary>
+        [Display(Name = "±¸×¢")]
+        [MaxLength(128)]
+        [Column(TypeName = "nvarchar(128)")]
+        [Editable(true)]
+        public string Remark { get; set; }
 
-       /// <summary>
-       ///åˆ›å»ºæ—¶é—´
-       /// </summary>
-       [Display(Name ="åˆ›å»ºæ—¶é—´")]
-       [Column(TypeName="datetime")]
-       public DateTime? CreationTime { get; set; }
+        /// <summary>
+        ///´´½¨Ê±¼ä
+        /// </summary>
+        [Display(Name = "´´½¨Ê±¼ä")]
+        [Column(TypeName = "datetime")]
+        [Editable(true)]
+        public DateTime? CreationTime { get; set; }
 
-       /// <summary>
-       ///åˆ›å»ºäººç¼–å·
-       /// </summary>
-       [Display(Name ="åˆ›å»ºäººç¼–å·")]
-       [Column(TypeName="int")]
-       public int? CreatorId { get; set; }
+        /// <summary>
+        ///´´½¨ÈË±àºÅ
+        /// </summary>
+        [Display(Name = "´´½¨ÈË±àºÅ")]
+        [Column(TypeName = "int")]
+        [Editable(true)]
+        public int? CreatorId { get; set; }
 
-       
+        /// <summary>
+        ///ÇÀ¾È³µ±àºÅ
+        /// </summary>
+        [Display(Name = "ÇÀ¾È³µ±àºÅ")]
+        [Column(TypeName = "bigint")]
+        [Editable(true)]
+        public long? CartId { get; set; }
+
+
     }
 }

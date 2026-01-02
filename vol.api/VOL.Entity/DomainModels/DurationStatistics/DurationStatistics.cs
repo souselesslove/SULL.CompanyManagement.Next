@@ -1,0 +1,124 @@
+/*
+ *代码由框架生成,任何更改都可能导致被代码生成器覆盖
+ *如果数据库字段发生变化，请在代码生器重新生成此Model
+ */
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using VOL.Entity.SystemModels;
+
+namespace VOL.Entity.DomainModels
+{
+    [Entity(TableCnName = "耗时统计",TableName = "DurationStatistics")]
+    public partial class DurationStatistics:BaseEntity
+    {
+        /// <summary>
+       ///编号
+       /// </summary>
+       [Key]
+       [Display(Name ="编号")]
+       [Column(TypeName="bigint")]
+       [Editable(true)]
+       [Required(AllowEmptyStrings=false)]
+       public long Id { get; set; }
+
+       /// <summary>
+       ///机构编号
+       /// </summary>
+       [Display(Name ="机构编号")]
+       [Column(TypeName="bigint")]
+       [Editable(true)]
+       public long? OrganizationId { get; set; }
+
+       /// <summary>
+       ///部门编号
+       /// </summary>
+       [Display(Name ="部门编号")]
+       [Column(TypeName="bigint")]
+       [Editable(true)]
+       [Required(AllowEmptyStrings=false)]
+       public long DepartmentId { get; set; }
+
+       /// <summary>
+       ///类型
+       /// </summary>
+       [Display(Name ="类型")]
+       [Column(TypeName="tinyint")]
+       [Editable(true)]
+       [Required(AllowEmptyStrings=false)]
+       public byte Category { get; set; }
+
+       /// <summary>
+       ///关联编号
+       /// </summary>
+       [Display(Name ="关联编号")]
+       [Column(TypeName="bigint")]
+       [Editable(true)]
+       [Required(AllowEmptyStrings=false)]
+       public long RelatedId { get; set; }
+
+       /// <summary>
+       ///创建人编号
+       /// </summary>
+       [Display(Name ="创建人编号")]
+       [Column(TypeName="int")]
+       [Editable(true)]
+       public int? CreatorId { get; set; }
+
+       /// <summary>
+       ///创建人
+       /// </summary>
+       [Display(Name ="创建人")]
+       [MaxLength(128)]
+       [Column(TypeName="nvarchar(128)")]
+       [Editable(true)]
+       public string Creator { get; set; }
+
+       /// <summary>
+       ///创建时间
+       /// </summary>
+       [Display(Name ="创建时间")]
+       [Column(TypeName="datetime")]
+       [Editable(true)]
+       public DateTime? CreationTime { get; set; }
+
+       /// <summary>
+       ///备注
+       /// </summary>
+       [Display(Name ="备注")]
+       [MaxLength(128)]
+       [Column(TypeName="nvarchar(128)")]
+       [Editable(true)]
+       public string Remark { get; set; }
+
+       /// <summary>
+       ///消耗时间
+       /// </summary>
+       [Display(Name ="消耗时间")]
+       [Column(TypeName="int")]
+       [Editable(true)]
+       public int? Duration { get; set; }
+
+       /// <summary>
+       ///开始时间
+       /// </summary>
+       [Display(Name ="开始时间")]
+       [Column(TypeName="datetime")]
+       [Editable(true)]
+       public DateTime? StartTime { get; set; }
+
+       /// <summary>
+       ///结束时间
+       /// </summary>
+       [Display(Name ="结束时间")]
+       [Column(TypeName="datetime")]
+       [Editable(true)]
+       public DateTime? EndTime { get; set; }
+
+       
+    }
+}

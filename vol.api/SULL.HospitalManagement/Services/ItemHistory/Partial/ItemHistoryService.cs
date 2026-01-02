@@ -22,13 +22,15 @@ using VOL.Core.RabbitMQ;
 using Newtonsoft.Json;
 using Yitter.IdGenerator;
 using SULL.HospitalManagement.IServices;
+using VOL.Core.CacheManager;
 
 namespace SULL.HospitalManagement.Services
 {
     public partial class ItemHistoryService
     {
+        private readonly ICacheService _cache;
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly IItemHistoryRepository _repository;//访问数据库
+        private readonly IItemHistoryRepository _repository;
         private readonly IMessageProducer _messageProducer;
         private readonly IDashboardService _dashboardService;
 
@@ -37,7 +39,8 @@ namespace SULL.HospitalManagement.Services
             IItemHistoryRepository dbRepository,
             IHttpContextAccessor httpContextAccessor,
             IMessageProducer messageProducer,
-            IDashboardService dashboardService
+            IDashboardService dashboardService,
+            ICacheService cache
             )
         : base(dbRepository)
         {
@@ -45,11 +48,22 @@ namespace SULL.HospitalManagement.Services
             _repository = dbRepository;
             _messageProducer = messageProducer;
             _dashboardService = dashboardService;
+            _cache = cache;
             //多租户会用到这init代码，其他情况可以不用
             //base.Init(dbRepository);
         }
         public override WebResponseContent Add(SaveModel saveModel)
         {
+            long cartId = 0;
+            if (saveModel.MainData.TryGetValue("CartId", out object cartIdObj) && cartIdObj != null)
+            {
+                cartId = cartIdObj.ToString().GetLong();
+                if (cartId <= 0)
+                {
+                    return new WebResponseContent().Error("请选择抢救车");
+                }
+            }
+            
             AddOnExecuting = (itemHistory, context) =>
             {
                 var db = _repository.DbContext;
@@ -84,12 +98,60 @@ namespace SULL.HospitalManagement.Services
                 if (item != null)
                 {
                     item.AvailableStock = (item.AvailableStock ?? 0) + itemHistory.ChangeCounter;
+                    if (itemDetail != null && itemDetail.ExpirationDate != null)
+                    {
+                        if (item.LatestExpirationDate == null || itemDetail.ExpirationDate < item.LatestExpirationDate)
+                        {
+                            item.LatestExpirationDate = itemDetail.ExpirationDate;
+                        }
+                    }
                     
                     // 更新修改信息
                     item.LastModificationTime = DateTime.Now;
                     item.LastModifier = UserContext.Current.UserTrueName;
                     
                     db.Entry(item).State = EntityState.Modified;
+
+                    // 3. 抢救中使用物品逻辑
+                    if (itemHistory.ChangeCounter < 0 && cartId > 0)
+                    {
+                        // 优化：直接从缓存获取抢救状态
+                        string key = $"Rescue_Cart_{cartId}";
+                        var rescue = _cache.Get<Rescue>(key);
+                        
+                        if (rescue != null && rescue.Status == 0)
+                        {
+                            var rescueItem = db.Set<RescueItem>().FirstOrDefault(x => x.RescueId == rescue.Id && x.ItemId == item.Id && x.ItemDetailId == itemDetail.Id);
+                            int qty = Math.Abs(itemHistory.ChangeCounter);
+                            if (rescueItem != null)
+                            {
+                                rescueItem.Qty = (rescueItem.Qty ?? 0) + qty;
+                                rescueItem.CreationTime = DateTime.Now;
+                                rescueItem.Creator = UserContext.Current.UserTrueName;
+                                rescueItem.CreatorId = UserContext.Current.UserId;
+                                rescueItem.ItemDetailId = itemDetail.Id;
+                                rescueItem.ItemName = item.Name;
+                                db.Entry(rescueItem).State = EntityState.Modified;
+                            }
+                            else
+                            {
+                                rescueItem = new RescueItem
+                                {
+                                    Id = YitIdHelper.NextId(),
+                                    RescueId = rescue.Id,
+                                    ItemId = item.Id,
+                                    ItemDetailId = itemDetail.Id,
+                                    Qty = qty,
+                                    CreationTime = DateTime.Now,
+                                    Creator = UserContext.Current.UserTrueName,
+                                    CreatorId = UserContext.Current.UserId,
+                                    ItemName = item.Name
+                                };
+                                db.Set<RescueItem>().Add(rescueItem);
+                                db.SaveChanges();
+                            }
+                        }
+                    }
                     
                     // Log to Dashboard
                     if (item.OrganizationId > 0)
@@ -105,28 +167,34 @@ namespace SULL.HospitalManagement.Services
                         }
 
                         // Find Rescue Car info
-                        // Item is bound to a Position(Slot) which has WarehouseId pointing to the Car(Position)
-                        var slotPosition = db.Set<Position>().FirstOrDefault(x => x.ItemId == item.Id);
-                        if (slotPosition != null && slotPosition.WarehouseId != null)
-                        {
-                            var carPosition = db.Set<Position>().FirstOrDefault(x => x.Id == slotPosition.WarehouseId);
-                            if (carPosition != null) carName = carPosition.DisplayName;
-                        }
+                        var carNames = (from p in db.Set<Position>()
+                                        join w in db.Set<Position>() on p.WarehouseId equals w.Id
+                                        where p.ItemId == item.Id && p.Category == 110 && p.IsDeleted != true
+                                        select w.DisplayName).Distinct().ToList();
+                        string carInfo = carNames.Any() ? $"[{string.Join(",", carNames)}]" : "";
+                        if (carNames.Any()) carName = carNames.First();
 
                         string type = itemHistory.ChangeCounter > 0 ? "入库" : "出库";
-                        string logMsg = $"[{deptName}]-[{carName}] 由 {operatorName} {type}{Math.Abs(itemHistory.ChangeCounter)}，当前库存{item.AvailableStock}";
+                        string logMsg = $"[{deptName}]-{carInfo} 由 {operatorName} {type}{Math.Abs(itemHistory.ChangeCounter)}，当前库存{item.AvailableStock}";
                         _dashboardService.AddLog(item.OrganizationId.Value, type, logMsg);
                     }
 
                     // 检查库存是否充足
                     if ((item.AvailableStock ?? 0) < item.Cardinality)
                     {
+                        // 查找关联的抢救车信息（如果上面没查过的话，这里复用上面的结果）
+                        var carNames = (from p in db.Set<Position>()
+                                        join w in db.Set<Position>() on p.WarehouseId equals w.Id
+                                        where p.ItemId == item.Id && p.Category == 110 && p.IsDeleted != true
+                                        select w.DisplayName).Distinct().ToList();
+                        string carInfo = carNames.Any() ? $"[{string.Join(",", carNames)}]" : "";
+
                         var todo = new SaveModel
                         {
                             MainData = new Dictionary<string, object>
                             {
                                 { "Category", 20 }, // 库存预警Category=20
-                                { "Description", $"物品[{item.Name}]规格[{item.Specification}]发生{(itemHistory.ChangeCounter > 0 ? "入库" : "出库")}{Math.Abs(itemHistory.ChangeCounter)}，当前库存[{item.AvailableStock}]，低于基数[{item.Cardinality}]，请及时补货" },
+                                { "Description", $"{carInfo}物品[{item.Name}]规格[{item.Specification}]发生{(itemHistory.ChangeCounter > 0 ? "入库" : "出库")}{Math.Abs(itemHistory.ChangeCounter)}，当前库存[{item.AvailableStock}]，低于基数[{item.Cardinality}]，请及时补货" },
                                 { "RelatedId", itemDetail.Id },
                             }
                         };
@@ -155,35 +223,31 @@ namespace SULL.HospitalManagement.Services
         public WebResponseContent Statistics(PageDataOptions options)
         {
             // 1. 必填参数校验：OrganizationId 和 DepartmentId
-            if (string.IsNullOrEmpty(options.Wheres))
-            {
-                 return new WebResponseContent().OK(null, new { rows = new List<object>(), total = 0 });
-            }
-
-            var wheres = JsonConvert.DeserializeObject<List<SearchParameters>>(options.Wheres);
-            long orgId = 0;
-            long deptId = 0;
-
-            if (wheres != null)
-            {
-                var orgParam = wheres.FirstOrDefault(x => x.Name == "OrganizationId");
-                if (orgParam != null && long.TryParse(orgParam.Value?.ToString(), out long oid)) orgId = oid;
-
-                var deptParam = wheres.FirstOrDefault(x => x.Name == "DepartmentId");
-                if (deptParam != null && long.TryParse(deptParam.Value?.ToString(), out long did)) deptId = did;
-            }
+            long orgId = UserContext.Current.OrganizationId;
+            long deptId = UserContext.Current.DepartmentId;
 
             if (orgId <= 0 || deptId <= 0)
             {
-                 return new WebResponseContent().OK(null, new { rows = new List<object>(), total = 0 });
+                return new WebResponseContent().Error("非法操作");
+            }
+
+            // 2. 解析查询条件并应用到 ItemHistory 基础过滤
+            ValidatePageOptions(options, out IQueryable<ItemHistory> historyQuery);
+
+            // 3. 安全校验：确保查询条件中指定的机构和部门与当前用户一致
+            if (options.Filter != null && (options.Filter.Any(x => x.Name == "OrganizationId" && x.Value != orgId.ToString()) ||
+                                         options.Filter.Any(x => x.Name == "DepartmentId" && x.Value != deptId.ToString())))
+            {
+                return new WebResponseContent().Error("非法操作");
             }
 
             var db = _repository.DbContext;
-            var query = from history in db.Set<ItemHistory>()
+            // 4. 组装连接查询逻辑
+            var query = from history in historyQuery
                         join item in db.Set<Item>() on history.ItemId equals item.Id
                         join detail in db.Set<ItemDetail>() on history.ItemDetailId equals detail.Id
                         where item.OrganizationId == orgId && item.DepartmentId == deptId
-                        select new
+                        select new ItemHistoryStatistics
                         {
                             ItemId = item.Id,
                             ItemName = item.Name,
@@ -195,29 +259,30 @@ namespace SULL.HospitalManagement.Services
                             CreationTime = history.CreationTime
                         };
 
-            if (wheres != null)
+            // 5. 应用未被 historyQuery 处理的其他条件（主要是针对连接表的条件，如 Name 匹配 ItemName）
+            if (options.Filter != null && options.Filter.Count > 0)
             {
-                foreach (var condition in wheres)
+                var resultProperties = typeof(ItemHistoryStatistics).GetProperties();
+                var itemHistoryProperties = typeof(ItemHistory).GetProperties();
+                foreach (var x in options.Filter)
                 {
-                    if (string.IsNullOrEmpty(condition.Value)) continue;
+                    if (string.IsNullOrEmpty(x.Value)) continue;
 
-                    if (condition.Name == "Name")
+                    // 映射特殊字段：前端传 Name -> 匹配结果集的 ItemName
+                    string targetName = x.Name;
+                    if (targetName == "Name") targetName = "ItemName";
+
+                    // 检查该属性是否在结果集中且未在 ItemHistory 级别处理过
+                    if (resultProperties.Any(p => p.Name == targetName) && 
+                        !itemHistoryProperties.Any(p => p.Name == targetName))
                     {
-                        query = query.Where(x => x.ItemName.Contains(condition.Value));
-                    }
-                    else if (condition.Name == "CreationTime")
-                    {
-                        var times = condition.Value.Split(',');
-                        if (times.Length >= 2 &&
-                            DateTime.TryParse(times[0], out DateTime start) &&
-                            DateTime.TryParse(times[1], out DateTime end))
-                        {
-                            query = query.Where(x => x.CreationTime >= start && x.CreationTime < end);
-                        }
+                        var expressionType = x.DisplayType.GetLinqCondition();
+                        query = query.Where(targetName.CreateExpression<ItemHistoryStatistics>(x.Value, expressionType));
                     }
                 }
             }
 
+            // 获取数据并返回
             var list = query.OrderByDescending(x => x.CreationTime).Take(50).ToList();
 
             return new WebResponseContent().OK(null, new
@@ -225,6 +290,21 @@ namespace SULL.HospitalManagement.Services
                 rows = list,
                 total = list.Count
             });
+        }
+
+        /// <summary>
+        /// 统计查询结果模型
+        /// </summary>
+        public class ItemHistoryStatistics
+        {
+            public long ItemId { get; set; }
+            public string ItemName { get; set; }
+            public string Specification { get; set; }
+            public string RegisterCode { get; set; }
+            public DateTime? ExpirationDate { get; set; }
+            public int ChangeCounter { get; set; }
+            public int Stock { get; set; }
+            public DateTime? CreationTime { get; set; }
         }
 
         public WebResponseContent SetAllStock(SaveModel saveModel)
@@ -278,8 +358,10 @@ namespace SULL.HospitalManagement.Services
 
                         if (detail == null)
                         {
-                            // Create new ItemDetail if not found
-                            var expireDate = DateTime.Now.AddMonths(6);
+                            // 物品过期时间设置：设备按3年，药品耗材等其他按6个月
+                            int addMonths = (item.Category == 30) ? 36 : 6;
+                            var expireDate = DateTime.Now.AddMonths(addMonths);
+                            
                             detail = new ItemDetail
                             {
                                 Id = YitIdHelper.NextId(),

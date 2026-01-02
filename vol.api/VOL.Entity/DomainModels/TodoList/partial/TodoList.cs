@@ -16,6 +16,10 @@ namespace VOL.Entity.DomainModels
     
     public partial class TodoList
     {
+        public TodoList()
+        {
+            IsFinished = false;
+        }
         //此处配置字段(字段配置见此model的另一个partial),如果表中没有此字段请加上 [NotMapped]属性，否则会异常
         // Category: 10=效期；20=库存；30=异常；40=其他
         // RelatedId: 比如提醒交接班，那么关联的就是交接班单的编号

@@ -6,7 +6,7 @@ using VOL.Entity.DomainModels;
 
 namespace SULL.HospitalManagement.IServices
 {
-    public partial interface IHandoverService : IService<Handover>
+    public partial interface IHandoverService : IService<VOL.Entity.DomainModels.Handover>
     {
     }
 }

@@ -20,6 +20,11 @@ using SULL.HospitalManagement.IRepositories;
 using VOL.Core.ManageUser;
 using VOL.Core.RabbitMQ;
 using SULL.HospitalManagement.IServices;
+using Yitter.IdGenerator;
+using VOL.Core.CacheManager;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System;
 
 namespace SULL.HospitalManagement.Services
 {
@@ -30,12 +35,19 @@ namespace SULL.HospitalManagement.Services
 
         private readonly IMessageProducer _messageProducer;
         private readonly IDashboardService _dashboardService;
+        private readonly IUserAccountRepository _userAccountRepository;
+        private readonly ICacheService _cache;
+        private readonly IUniPushService _uniPushService;
 
         [ActivatorUtilitiesConstructor]
         public SealHistoryService(
             ISealHistoryRepository dbRepository,
-            IHttpContextAccessor httpContextAccessor, IMessageProducer messageProducer,
-            IDashboardService dashboardService
+            IHttpContextAccessor httpContextAccessor, 
+            IMessageProducer messageProducer,
+            IDashboardService dashboardService,
+            IUserAccountRepository userAccountRepository,
+            ICacheService cache,
+            IUniPushService uniPushService
             )
         : base(dbRepository)
         {
@@ -43,8 +55,9 @@ namespace SULL.HospitalManagement.Services
             _repository = dbRepository;
             _messageProducer = messageProducer;
             _dashboardService = dashboardService;
-            //多租户会用到这init代码，其他情况可以不用
-            //base.Init(dbRepository);
+            _userAccountRepository = userAccountRepository;
+            _cache = cache;
+            _uniPushService = uniPushService;
         }
 
         public override WebResponseContent Add(SaveModel saveModel)
@@ -75,6 +88,13 @@ namespace SULL.HospitalManagement.Services
                     todo.MainData.Add("UserInfo", UserContext.Current.UserInfo);
                     todo.MainData.Add("IsSuperAdmin", UserContext.Current.IsSuperAdmin);
                     _messageProducer.PublishAsync(todo, Define.ExchangeName, Define.TodoQueue).GetAwaiter().GetResult();
+
+                    // 发送推送通知
+                    string actionType = sealHistory.Category == 10 ? "封存" : (sealHistory.Category == 20 ? "启封" : "申请");
+                    string notifyTitle = $"{actionType}确认提醒";
+                    string notifyContent = $"{sealHistory.Creator} 向您提交了电子{actionType}申请，请确认。";
+                    var payload = new { Id = sealHistory.Id, Category = sealHistory.Category, RelatedId = sealHistory.RelatedId };
+                    _ = NotifyUserAsync(sealHistory.AssignUserId.Value, notifyTitle, notifyContent, payload);
                 }
                 return new WebResponseContent(true);
             };
@@ -117,11 +137,72 @@ namespace SULL.HospitalManagement.Services
                             
                             string logMsg = $"[{deptName}]-[{carName}] 由 {operatorName} 完成封存";
                             _dashboardService.AddLog(car.OrganizationId.Value, "封存", logMsg);
+
+                            // 向申请人推送通知
+                            if (entity.CreatorId > 0 && entity.CreatorId != UserContext.Current.UserId)
+                            {
+                                string actionType = entity.Category == 10 ? "封存" : (entity.Category == 20 ? "启封" : "申请");
+                                string notifyTitle = $"{actionType}完成通知";
+                                string notifyContent = $"您提交的电子{actionType}申请已由 {operatorName} 确认完成。";
+                                var notifyPayload = new { Id = entity.Id, Category = entity.Category, RelatedId = entity.RelatedId };
+                                _ = NotifyUserAsync(entity.CreatorId.Value, notifyTitle, notifyContent, notifyPayload);
+                            }
+
+                            var endTime = DateTime.Now;
+                            var duration = (int)(endTime - entity.CreationTime.Value).TotalSeconds;
+                            var durationStat = new DurationStatistics
+                            {
+                                Id = YitIdHelper.NextId(),
+                                OrganizationId = car.OrganizationId,
+                                DepartmentId = car.DepartmentId,
+                                Category = 20,
+                                RelatedId = entity.Id,
+                                CreatorId = UserContext.Current.UserId,
+                                Creator = UserContext.Current.UserTrueName,
+                                CreationTime = endTime,
+                                StartTime = entity.CreationTime,
+                                EndTime = endTime,
+                                Duration = duration,
+                                Remark = ""
+                            };
+                            db.Set<DurationStatistics>().Add(durationStat);
+                            db.SaveChanges();
                         }
                     }
                 }
             }
             return base.Update(saveModel);
         }
-  }
+
+        private async Task NotifyUserAsync(int userId, string title, string content, object payload = null)
+        {
+            if (userId <= 0) return;
+
+            string accountCacheKey = $"UserAccount_{userId}_10_Account";
+            string userAccount = null;
+
+            // 1. 尝试从缓存获取
+            var cachedAccount = _cache.Get<UserAccount>(accountCacheKey);
+            if (cachedAccount != null)
+            {
+                userAccount = cachedAccount.Account;
+            }
+            else
+            {
+                // 2. 查库
+                var account = await _userAccountRepository.DbContext.Set<UserAccount>()
+                    .FirstOrDefaultAsync(x => x.UserId == userId && x.IsDeleted != true && x.Category == 10);
+                if (account != null)
+                {
+                    userAccount = account.Account;
+                    _cache.AddObject(accountCacheKey, account);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(userAccount))
+            {
+                await _uniPushService.SendAsync(new List<string> { userAccount }, title, content, payload);
+            }
+        }
+    }
 }

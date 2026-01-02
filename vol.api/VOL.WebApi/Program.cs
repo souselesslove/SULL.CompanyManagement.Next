@@ -27,10 +27,11 @@ namespace VOL.WebApi
                 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
                 AppContext.SetSwitch("Npgsql.DisableDateTimeInfinityConversions", true);
 
-                // 配置日志开始
                 var configuration = new ConfigurationBuilder()
                     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                     .AddJsonFile("printerMap.json", optional: false, reloadOnChange: true)
+                    .AddJsonFile("upgrade.json", optional: false, reloadOnChange: true)
+                    .AddJsonFile("upgradeHistory.json", optional: false, reloadOnChange: true)
                     .AddJsonFile(
                         $"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")}.json",
                         optional: true)

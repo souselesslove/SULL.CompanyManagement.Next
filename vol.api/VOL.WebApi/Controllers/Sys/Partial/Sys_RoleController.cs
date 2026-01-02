@@ -25,6 +25,12 @@ namespace VOL.Sys.Controllers
     [Route("api/role")]
     public partial class Sys_RoleController
     {
+        /*
+         * 1. 新增菜单
+         * 2. 新增角色
+         * 3. 角色绑定菜单（修改后也需要再次操作）
+         */
+
         private readonly ISys_RoleService _service;//访问业务代码
         private readonly ISys_RoleRepository _repository;
         private readonly IHttpContextAccessor _httpContextAccessor;

@@ -9,5 +9,6 @@ namespace SULL.HospitalManagement.IServices
 {
     public partial interface IHandoverService
     {
+        WebResponseContent GetMissingShifts(Handover.Dtos.MissingShiftInputDto input);
     }
  }

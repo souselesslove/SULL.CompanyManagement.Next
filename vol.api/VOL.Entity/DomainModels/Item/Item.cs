@@ -1,6 +1,6 @@
 /*
- *ä»£ç ç”±æ¡†æ¶ç”Ÿæˆ,ä»»ä½•æ›´æ”¹éƒ½å¯èƒ½å¯¼è‡´è¢«ä»£ç ç”Ÿæˆå™¨è¦†ç›–
- *å¦‚æœæ•°æ®åº“å­—æ®µå‘ç”Ÿå˜åŒ–ï¼Œè¯·åœ¨ä»£ç ç”Ÿå™¨é‡æ–°ç”Ÿæˆæ­¤Model
+ *´úÂëÓÉ¿ò¼ÜÉú³É,ÈÎºÎ¸ü¸Ä¶¼¿ÉÄÜµ¼ÖÂ±»´úÂëÉú³ÉÆ÷¸²¸Ç
+ *Èç¹ûÊı¾İ¿â×Ö¶Î·¢Éú±ä»¯£¬ÇëÔÚ´úÂëÉúÆ÷ÖØĞÂÉú³É´ËModel
  */
 using System;
 using System.Collections.Generic;
@@ -13,295 +13,312 @@ using VOL.Entity.SystemModels;
 
 namespace VOL.Entity.DomainModels
 {
-    [Entity(TableCnName = "ç‰©å“ä¿¡æ¯",TableName = "Item")]
-    public partial class Item:BaseEntity
+    [Entity(TableCnName = "ÎïÆ·ĞÅÏ¢", TableName = "Item")]
+    public partial class Item : BaseEntity
     {
         /// <summary>
-       ///ç¼–å·
-       /// </summary>
-       [Key]
-       [Display(Name ="ç¼–å·")]
-       [Column(TypeName="bigint")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public long Id { get; set; }
+        ///±àºÅ
+        /// </summary>
+        [Key]
+        [Display(Name = "±àºÅ")]
+        [Column(TypeName = "bigint")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public long Id { get; set; }
 
-       /// <summary>
-       ///ç‰©å“åç§°
-       /// </summary>
-       [Display(Name ="ç‰©å“åç§°")]
-       [MaxLength(255)]
-       [Column(TypeName="varchar(255)")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public string Name { get; set; }
+        /// <summary>
+        ///ÎïÆ·Ãû³Æ
+        /// </summary>
+        [Display(Name = "ÎïÆ·Ãû³Æ")]
+        [MaxLength(64)]
+        [Column(TypeName = "nvarchar(64)")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public string Name { get; set; }
 
-       /// <summary>
-       ///å®Œæ•´åç§°
-       /// </summary>
-       [Display(Name ="å®Œæ•´åç§°")]
-       [MaxLength(256)]
-       [Column(TypeName="nvarchar(256)")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public string FullName { get; set; }
+        /// <summary>
+        ///ÍêÕûÃû³Æ
+        /// </summary>
+        [Display(Name = "ÍêÕûÃû³Æ")]
+        [MaxLength(128)]
+        [Column(TypeName = "nvarchar(128)")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public string FullName { get; set; }
 
-       /// <summary>
-       ///æ¥å£ä»£ç 
-       /// </summary>
-       [Display(Name ="æ¥å£ä»£ç ")]
-       [MaxLength(32)]
-       [Column(TypeName="nvarchar(32)")]
-       [Editable(true)]
-       public string InterfaceCode { get; set; }
+        /// <summary>
+        ///½Ó¿Ú´úÂë
+        /// </summary>
+        [Display(Name = "½Ó¿Ú´úÂë")]
+        [MaxLength(32)]
+        [Column(TypeName = "nvarchar(32)")]
+        [Editable(true)]
+        public string InterfaceCode { get; set; }
 
-       /// <summary>
-       ///ç±»å‹
-       /// </summary>
-       [Display(Name ="ç±»å‹")]
-       [Column(TypeName="tinyint")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public byte Category { get; set; }
+        /// <summary>
+        ///ÀàĞÍ
+        /// </summary>
+        [Display(Name = "ÀàĞÍ")]
+        [Column(TypeName = "tinyint")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public byte Category { get; set; }
 
-       /// <summary>
-       ///è§„æ ¼
-       /// </summary>
-       [Display(Name ="è§„æ ¼")]
-       [MaxLength(255)]
-       [Column(TypeName="varchar(255)")]
-       [Editable(true)]
-       public string Specification { get; set; }
+        /// <summary>
+        ///¹æ¸ñ
+        /// </summary>
+        [Display(Name = "¹æ¸ñ")]
+        [MaxLength(32)]
+        [Column(TypeName = "nvarchar(32)")]
+        [Editable(true)]
+        public string Specification { get; set; }
 
-       /// <summary>
-       ///å•ä½
-       /// </summary>
-       [Display(Name ="å•ä½")]
-       [MaxLength(8)]
-       [Column(TypeName="nvarchar(8)")]
-       [Editable(true)]
-       public string Unit { get; set; }
+        /// <summary>
+        ///µ¥Î»
+        /// </summary>
+        [Display(Name = "µ¥Î»")]
+        [MaxLength(32)]
+        [Column(TypeName = "nvarchar(32)")]
+        [Editable(true)]
+        public string Unit { get; set; }
 
-       /// <summary>
-       ///å‰‚å‹
-       /// </summary>
-       [Display(Name ="å‰‚å‹")]
-       [MaxLength(8)]
-       [Column(TypeName="nvarchar(8)")]
-       [Editable(true)]
-       public string Form { get; set; }
+        /// <summary>
+        ///¼ÁĞÍ
+        /// </summary>
+        [Display(Name = "¼ÁĞÍ")]
+        [MaxLength(32)]
+        [Column(TypeName = "nvarchar(32)")]
+        [Editable(true)]
+        public string Form { get; set; }
 
-       /// <summary>
-       ///æ‰¹å‡†æ–‡å·
-       /// </summary>
-       [Display(Name ="æ‰¹å‡†æ–‡å·")]
-       [MaxLength(32)]
-       [Column(TypeName="nvarchar(32)")]
-       [Editable(true)]
-       public string RegisterCode { get; set; }
+        /// <summary>
+        ///Åú×¼ÎÄºÅ
+        /// </summary>
+        [Display(Name = "Åú×¼ÎÄºÅ")]
+        [MaxLength(32)]
+        [Column(TypeName = "nvarchar(32)")]
+        [Editable(true)]
+        public string RegisterCode { get; set; }
 
-       /// <summary>
-       ///ç”Ÿäº§å‚å®¶
-       /// </summary>
-       [Display(Name ="ç”Ÿäº§å‚å®¶")]
-       [MaxLength(128)]
-       [Column(TypeName="nvarchar(128)")]
-       [Editable(true)]
-       public string Factory { get; set; }
+        /// <summary>
+        ///Éú²ú³§¼Ò
+        /// </summary>
+        [Display(Name = "Éú²ú³§¼Ò")]
+        [MaxLength(128)]
+        [Column(TypeName = "nvarchar(128)")]
+        [Editable(true)]
+        public string Factory { get; set; }
 
-       /// <summary>
-       ///åŸºæ•°
-       /// </summary>
-       [Display(Name ="åŸºæ•°")]
-       [Column(TypeName="int")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public int Cardinality { get; set; }
+        /// <summary>
+        ///»ùÊı
+        /// </summary>
+        [Display(Name = "»ùÊı")]
+        [Column(TypeName = "int")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public int Cardinality { get; set; }
 
-       /// <summary>
-       ///æ¡ç å·
-       /// </summary>
-       [Display(Name ="æ¡ç å·")]
-       [MaxLength(128)]
-       [Column(TypeName="nvarchar(128)")]
-       [Editable(true)]
-       public string Barcode { get; set; }
+        /// <summary>
+        ///ÌõÂëºÅ
+        /// </summary>
+        [Display(Name = "ÌõÂëºÅ")]
+        [MaxLength(128)]
+        [Column(TypeName = "nvarchar(128)")]
+        [Editable(true)]
+        public string Barcode { get; set; }
 
-       /// <summary>
-       ///æ’åº
-       /// </summary>
-       [Display(Name ="æ’åº")]
-       [Column(TypeName="int")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public int OrderBy { get; set; }
+        /// <summary>
+        ///ÅÅĞò
+        /// </summary>
+        [Display(Name = "ÅÅĞò")]
+        [Column(TypeName = "int")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public int OrderBy { get; set; }
 
-       /// <summary>
-       ///åº“å­˜
-       /// </summary>
-       [Display(Name ="åº“å­˜")]
-       [Column(TypeName="int")]
-       [Editable(true)]
-       public int? AvailableStock { get; set; }
+        /// <summary>
+        ///¿â´æ
+        /// </summary>
+        [Display(Name = "¿â´æ")]
+        [Column(TypeName = "int")]
+        [Editable(true)]
+        public int? AvailableStock { get; set; }
 
-       /// <summary>
-       ///æ£€ç´¢ç 
-       /// </summary>
-       [Display(Name ="æ£€ç´¢ç ")]
-       [MaxLength(16)]
-       [Column(TypeName="nvarchar(16)")]
-       [Editable(true)]
-       public string SearchCode { get; set; }
+        /// <summary>
+        ///¼ìË÷Âë
+        /// </summary>
+        [Display(Name = "¼ìË÷Âë")]
+        [MaxLength(16)]
+        [Column(TypeName = "nvarchar(16)")]
+        [Editable(true)]
+        public string SearchCode { get; set; }
 
-       /// <summary>
-       ///æ‰¹æ¬¡æ•°é‡
-       /// </summary>
-       [Display(Name ="æ‰¹æ¬¡æ•°é‡")]
-       [Column(TypeName="int")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public int KindCounter { get; set; }
+        /// <summary>
+        ///Åú´ÎÊıÁ¿
+        /// </summary>
+        [Display(Name = "Åú´ÎÊıÁ¿")]
+        [Column(TypeName = "int")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public int KindCounter { get; set; }
 
-       /// <summary>
-       ///åˆ›å»ºäºº
-       /// </summary>
-       [Display(Name ="åˆ›å»ºäºº")]
-       [MaxLength(128)]
-       [Column(TypeName="nvarchar(128)")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public string Creator { get; set; }
+        /// <summary>
+        ///´´½¨ÈË
+        /// </summary>
+        [Display(Name = "´´½¨ÈË")]
+        [MaxLength(128)]
+        [Column(TypeName = "nvarchar(128)")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public string Creator { get; set; }
 
-       /// <summary>
-       ///åˆ é™¤äººç¼–å·
-       /// </summary>
-       [Display(Name ="åˆ é™¤äººç¼–å·")]
-       [Column(TypeName="int")]
-       [Editable(true)]
-       public int? DeleterId { get; set; }
+        /// <summary>
+        ///É¾³ıÈË±àºÅ
+        /// </summary>
+        [Display(Name = "É¾³ıÈË±àºÅ")]
+        [Column(TypeName = "int")]
+        [Editable(true)]
+        public int? DeleterId { get; set; }
 
-       /// <summary>
-       ///åˆ é™¤äºº
-       /// </summary>
-       [Display(Name ="åˆ é™¤äºº")]
-       [MaxLength(128)]
-       [Column(TypeName="nvarchar(128)")]
-       [Editable(true)]
-       public string Deleter { get; set; }
+        /// <summary>
+        ///É¾³ıÈË
+        /// </summary>
+        [Display(Name = "É¾³ıÈË")]
+        [MaxLength(128)]
+        [Column(TypeName = "nvarchar(128)")]
+        [Editable(true)]
+        public string Deleter { get; set; }
 
-       /// <summary>
-       ///åˆ é™¤æ—¶é—´
-       /// </summary>
-       [Display(Name ="åˆ é™¤æ—¶é—´")]
-       [Column(TypeName="datetime")]
-       [Editable(true)]
-       public DateTime? DeletionTime { get; set; }
+        /// <summary>
+        ///É¾³ıÊ±¼ä
+        /// </summary>
+        [Display(Name = "É¾³ıÊ±¼ä")]
+        [Column(TypeName = "datetime")]
+        [Editable(true)]
+        public DateTime? DeletionTime { get; set; }
 
-       /// <summary>
-       ///åˆ é™¤
-       /// </summary>
-       [Display(Name ="åˆ é™¤")]
-       [Column(TypeName="bit")]
-       [Editable(true)]
-       public bool? IsDeleted { get; set; }
+        /// <summary>
+        ///É¾³ı
+        /// </summary>
+        [Display(Name = "É¾³ı")]
+        [Column(TypeName = "bit")]
+        [Editable(true)]
+        public bool? IsDeleted { get; set; }
 
-       /// <summary>
-       ///çŠ¶æ€
-       /// </summary>
-       [Display(Name ="çŠ¶æ€")]
-       [Column(TypeName="tinyint")]
-       [Editable(true)]
-       public byte? Status { get; set; }
+        /// <summary>
+        ///×´Ì¬
+        /// </summary>
+        [Display(Name = "×´Ì¬")]
+        [Column(TypeName = "tinyint")]
+        [Editable(true)]
+        public byte? Status { get; set; }
 
-       /// <summary>
-       ///å¤‡æ³¨
-       /// </summary>
-       [Display(Name ="å¤‡æ³¨")]
-       [MaxLength(1024)]
-       [Column(TypeName="nvarchar(1024)")]
-       [Editable(true)]
-       public string Remark { get; set; }
+        /// <summary>
+        ///±¸×¢
+        /// </summary>
+        [Display(Name = "±¸×¢")]
+        [MaxLength(1024)]
+        [Column(TypeName = "nvarchar(1024)")]
+        [Editable(true)]
+        public string Remark { get; set; }
 
-       /// <summary>
-       ///æœ€è¿‘è¿‡æœŸæ—¥æœŸ
-       /// </summary>
-       [Display(Name ="æœ€è¿‘è¿‡æœŸæ—¥æœŸ")]
-       [Column(TypeName="datetime")]
-       [Editable(true)]
-       public DateTime? LatestExpirationDate { get; set; }
+        /// <summary>
+        ///×î½ü¹ıÆÚÈÕÆÚ
+        /// </summary>
+        [Display(Name = "×î½ü¹ıÆÚÈÕÆÚ")]
+        [Column(TypeName = "datetime")]
+        [Editable(true)]
+        public DateTime? LatestExpirationDate { get; set; }
 
-       /// <summary>
-       ///æœºæ„ç¼–å·
-       /// </summary>
-       [Display(Name ="æœºæ„ç¼–å·")]
-       [Column(TypeName="bigint")]
-       [Editable(true)]
-       public long? OrganizationId { get; set; }
+        /// <summary>
+        ///»ú¹¹±àºÅ
+        /// </summary>
+        [Display(Name = "»ú¹¹±àºÅ")]
+        [Column(TypeName = "bigint")]
+        [Editable(true)]
+        public long? OrganizationId { get; set; }
 
-       /// <summary>
-       ///éƒ¨é—¨ç¼–å·
-       /// </summary>
-       [Display(Name ="éƒ¨é—¨ç¼–å·")]
-       [Column(TypeName="bigint")]
-       [Editable(true)]
-       [Required(AllowEmptyStrings=false)]
-       public long DepartmentId { get; set; }
+        /// <summary>
+        ///×´Ì¬±àºÅ
+        /// </summary>
+        [Display(Name = "×´Ì¬±àºÅ")]
+        [Column(TypeName = "bigint")]
+        [Editable(true)]
+        public long? StatusId { get; set; }
 
-       /// <summary>
-       ///ä»·æ ¼
-       /// </summary>
-       [Display(Name ="ä»·æ ¼")]
-       [Column(TypeName="int")]
-       [Editable(true)]
-       public int? Price { get; set; }
+        /// <summary>
+        ///²¿ÃÅ±àºÅ
+        /// </summary>
+        [Display(Name = "²¿ÃÅ±àºÅ")]
+        [Column(TypeName = "bigint")]
+        [Editable(true)]
+        [Required(AllowEmptyStrings = false)]
+        public long DepartmentId { get; set; }
 
-       /// <summary>
-       ///æ ‡è®°
-       /// </summary>
-       [Display(Name ="æ ‡è®°")]
-       [MaxLength(128)]
-       [Column(TypeName="nvarchar(128)")]
-       [Editable(true)]
-       public string Tag { get; set; }
+        /// <summary>
+        ///¼Û¸ñ
+        /// </summary>
+        [Display(Name = "¼Û¸ñ")]
+        [Column(TypeName = "int")]
+        [Editable(true)]
+        public int? Price { get; set; }
 
-       /// <summary>
-       ///åˆ›å»ºæ—¶é—´
-       /// </summary>
-       [Display(Name ="åˆ›å»ºæ—¶é—´")]
-       [Column(TypeName="datetime")]
-       [Required(AllowEmptyStrings=false)]
-       public DateTime CreationTime { get; set; }
+        /// <summary>
+        ///±ê¼Ç
+        /// </summary>
+        [Display(Name = "±ê¼Ç")]
+        [MaxLength(128)]
+        [Column(TypeName = "nvarchar(128)")]
+        [Editable(true)]
+        public string Tag { get; set; }
 
-       /// <summary>
-       ///ä¿®æ”¹äººç¼–å·
-       /// </summary>
-       [Display(Name ="ä¿®æ”¹äººç¼–å·")]
-       [Column(TypeName="int")]
-       public int? LastModifierId { get; set; }
+        /// <summary>
+        ///×´Ì¬±¸×¢
+        /// </summary>
+        [Display(Name = "×´Ì¬±¸×¢")]
+        [MaxLength(256)]
+        [Column(TypeName = "nvarchar(256)")]
+        [Editable(true)]
+        public string StatusRemark { get; set; }
 
-       /// <summary>
-       ///ä¿®æ”¹äºº
-       /// </summary>
-       [Display(Name ="ä¿®æ”¹äºº")]
-       [MaxLength(128)]
-       [Column(TypeName="nvarchar(128)")]
-       public string LastModifier { get; set; }
+        /// <summary>
+        ///´´½¨Ê±¼ä
+        /// </summary>
+        [Display(Name = "´´½¨Ê±¼ä")]
+        [Column(TypeName = "datetime")]
+        [Required(AllowEmptyStrings = false)]
+        public DateTime CreationTime { get; set; }
 
-       /// <summary>
-       ///ä¿®æ”¹æ—¶é—´
-       /// </summary>
-       [Display(Name ="ä¿®æ”¹æ—¶é—´")]
-       [Column(TypeName="datetime")]
-       public DateTime? LastModificationTime { get; set; }
+        /// <summary>
+        ///ĞŞ¸ÄÈË±àºÅ
+        /// </summary>
+        [Display(Name = "ĞŞ¸ÄÈË±àºÅ")]
+        [Column(TypeName = "int")]
+        public int? LastModifierId { get; set; }
 
-       /// <summary>
-       ///åˆ›å»ºäººç¼–å·
-       /// </summary>
-       [Display(Name ="åˆ›å»ºäººç¼–å·")]
-       [Column(TypeName="int")]
-       [Required(AllowEmptyStrings=false)]
-       public int CreatorId { get; set; }
+        /// <summary>
+        ///ĞŞ¸ÄÈË
+        /// </summary>
+        [Display(Name = "ĞŞ¸ÄÈË")]
+        [MaxLength(128)]
+        [Column(TypeName = "nvarchar(128)")]
+        public string LastModifier { get; set; }
 
-       
+        /// <summary>
+        ///ĞŞ¸ÄÊ±¼ä
+        /// </summary>
+        [Display(Name = "ĞŞ¸ÄÊ±¼ä")]
+        [Column(TypeName = "datetime")]
+        public DateTime? LastModificationTime { get; set; }
+
+        /// <summary>
+        ///´´½¨ÈË±àºÅ
+        /// </summary>
+        [Display(Name = "´´½¨ÈË±àºÅ")]
+        [Column(TypeName = "int")]
+        [Required(AllowEmptyStrings = false)]
+        public int CreatorId { get; set; }
+
+
     }
 }

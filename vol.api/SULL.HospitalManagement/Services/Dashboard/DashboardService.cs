@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using System;
 using Newtonsoft.Json;
 using VOL.Core.CacheManager;
+using VOL.Core.ManageUser;
 
 namespace SULL.HospitalManagement.Services
 {
@@ -40,14 +41,23 @@ namespace SULL.HospitalManagement.Services
         public object GetDashboardData(PageDataOptions options)
         {
             long orgId = 0;
-            if (options != null && !string.IsNullOrEmpty(options.Wheres))
+            // 尝试从入参获取 OrganizationId
+            if (!string.IsNullOrEmpty(options.Wheres))
             {
                 var wheres = JsonConvert.DeserializeObject<List<SearchParameters>>(options.Wheres);
-                var orgParam = wheres?.FirstOrDefault(x => x.Name == "OrganizationId");
-                if (orgParam != null && long.TryParse(orgParam.Value?.ToString(), out long oid))
+                if (wheres != null)
                 {
-                    orgId = oid;
+                     var orgParam = wheres.FirstOrDefault(x => x.Name == "OrganizationId");
+                     if (orgParam != null && long.TryParse(orgParam.Value, out long oid))
+                     {
+                         orgId = oid;
+                     }
                 }
+            }
+
+            if (orgId <= 0)
+            {
+                orgId = UserContext.Current.OrganizationId;
             }
 
             if (orgId <= 0)
@@ -76,7 +86,7 @@ namespace SULL.HospitalManagement.Services
                 query = query.Where(x => x.OrganizationId == orgId);
             }
 
-            var cars = (from p in query
+            var rawCars = (from p in query
                         join d in db.Set<OrganizationDepartment>() on p.DepartmentId equals d.Id into pd
                         from dept in pd.DefaultIfEmpty()
                         select new
@@ -89,6 +99,28 @@ namespace SULL.HospitalManagement.Services
                             DepartmentName = dept != null ? dept.Name : "未知科室",
                             p.DepartmentId
                         }).ToList();
+
+            var cars = rawCars.Select(c =>
+            {
+                byte? status = c.Status;
+                string key = $"Rescue_Cart_{c.Id}";
+                var rescue = _cacheService.Get<Rescue>(key);
+                // Status=0 means Rescuing/In Use based on user request
+                if (rescue != null && rescue.Status == 0)
+                {
+                    status = 2; // Map to Dashboard "In Use" (Blue)
+                }
+                return new 
+                {
+                    c.Id,
+                    c.ItemId,
+                    c.DisplayName,
+                    Status = status,
+                    c.Remark,
+                    c.DepartmentName,
+                    c.DepartmentId
+                };
+            }).ToList();
 
             // 2. KPIs
             int total = cars.Count;
@@ -143,12 +175,42 @@ namespace SULL.HospitalManagement.Services
 
             // 5. Mock Charts (Can be refined with real data later)
             // 5. Abnormal Classification Charts
-            // TODO: Implement real logic for calculating these counts
-            int nearExpiry = alerts; 
-            int expired = 0;
-            int stockout = 0;
+            // 5. Abnormal Classification Charts
+            // 效期预警：当前机构下所有抢救车内，近效期 <= 30天的物品数量
+            var rescueCarIds = db.Set<Position>()
+                .Where(x => x.OrganizationId == orgId && x.Category == 10 && x.IsDeleted != true)
+                .Select(x => x.Id)
+                .ToList();
+
+            var now = DateTime.Now;
+            var warningLimit = now.AddDays(30);
+
+            int nearExpiry = (from p in db.Set<Position>()
+                              join i in db.Set<Item>() on p.ItemId equals i.Id
+                              where p.OrganizationId == orgId
+                                 && p.IsDeleted != true
+                                 && rescueCarIds.Contains(p.WarehouseId.Value)
+                                 && i.LatestExpirationDate != null
+                                 && i.LatestExpirationDate <= warningLimit
+                                 && i.LatestExpirationDate > now
+                              select p.Id).Count(); 
+            int expired = (from p in db.Set<Position>()
+                              join i in db.Set<Item>() on p.ItemId equals i.Id
+                              where p.OrganizationId == orgId
+                                 && p.IsDeleted != true
+                                 && rescueCarIds.Contains(p.WarehouseId.Value)
+                                 && i.LatestExpirationDate != null
+                                 && i.LatestExpirationDate <= now
+                              select p.Id).Count();
+            int stockout = (from p in db.Set<Position>()
+                              join i in db.Set<Item>() on p.ItemId equals i.Id
+                              where p.OrganizationId == orgId
+                                 && p.IsDeleted != true
+                                 && rescueCarIds.Contains(p.WarehouseId.Value)
+                                 && (i.AvailableStock ?? 0) < i.Cardinality
+                              select p.Id).Count();
             int handover = 0;
-            int sealed_count = 0; // 'sealed' is a keyword in C# (sealed class), using sealed_count
+            int sealed_count = 0; 
             int maintain = 0;
 
             var charts = new List<object>
@@ -162,27 +224,20 @@ namespace SULL.HospitalManagement.Services
             };
 
             // 6. Mock Ranks
-            var ranks = new List<object>
-            {
-                new { name = "重症医学科", score = 100 },
-                new { name = "心血管内科", score = 99.8 },
-                new { name = "神经外科", score = 99.5 },
-                new { name = "儿科", score = 98.2 },
-                new { name = "骨科", score = 97.0 }
-            };
+            // 6. Ranks - Fetch all departments
+            var ranks = db.Set<OrganizationDepartment>()
+                .Where(x => x.OrganizationId == orgId && x.IsDeleted != true)
+                .Select(x => new 
+                { 
+                    name = x.Name, 
+                    score = 100 
+                })
+                .ToList();
 
             // 7. Logs from Cache
+            // 7. Logs from Cache
             string logCacheKey = $"Dashboard_Logs_{orgId}";
-            var logs = _cacheService.Get<List<object>>(logCacheKey) ?? new List<object>();
-
-            // Mock Logs (Fall back if empty for demo, remove later)
-            if (logs.Count == 0)
-            {
-               logs = new List<object>
-               {
-                   new { time = DateTime.Now.AddMinutes(-5).ToString("HH:mm:ss"), type = "正常", msg = "系统自动巡检完成" } 
-               };
-            }
+            var logs = _cacheService.Get<List<Dictionary<string, string>>>(logCacheKey) ?? new List<Dictionary<string, string>>();
 
             var result = new
             {
@@ -200,19 +255,36 @@ namespace SULL.HospitalManagement.Services
             return result;
         }
 
+        private static readonly object _logLock = new object();
+
         public void AddLog(long orgId, string type, string msg)
         {
-            string logCacheKey = $"Dashboard_Logs_{orgId}";
-            var logs = _cacheService.Get<List<object>>(logCacheKey) ?? new List<object>();
-            
-            logs.Insert(0, new { time = DateTime.Now.ToString("HH:mm:ss"), type, msg });
-            
-            if (logs.Count > 50)
+            try
             {
-                logs = logs.Take(50).ToList();
+                lock (_logLock)
+                {
+                    string logCacheKey = $"Dashboard_Logs_{orgId}";
+                    // Use List<Dictionary<string, string>> to avoid anonymous type serialization issues
+                    var logs = _cacheService.Get<List<Dictionary<string, string>>>(logCacheKey) ?? new List<Dictionary<string, string>>();
+
+                    logs.Insert(0, new Dictionary<string, string> {
+                        { "time", DateTime.Now.ToString("HH:mm:ss") },
+                        { "type", type },
+                        { "msg", msg }
+                    });
+
+                    if (logs.Count > 50)
+                    {
+                        logs = logs.Take(50).ToList();
+                    }
+
+                    _cacheService.AddObject(logCacheKey, logs);
+                }
             }
-            
-            _cacheService.Add(logCacheKey, JsonConvert.SerializeObject(logs));
+            catch (Exception)
+            {
+                // Ignore log errors to prevent blocking main business logic
+            }
         }
 
         private string GetDeptStatus(IEnumerable<byte> statuses)

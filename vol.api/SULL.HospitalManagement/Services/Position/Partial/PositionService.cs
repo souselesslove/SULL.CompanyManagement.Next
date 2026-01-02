@@ -221,6 +221,7 @@ namespace SULL.HospitalManagement.Services
             // 2. 检查是否存在Category和ParentId
             var catParam = wheres.FirstOrDefault(x => x.Name == "Category" && !string.IsNullOrEmpty(x.Value));
             var parentParam = wheres.FirstOrDefault(x => x.Name == "ParentId" && !string.IsNullOrEmpty(x.Value));
+            var warehouseParam = wheres.FirstOrDefault(x => x.Name == "WarehouseId" && !string.IsNullOrEmpty(x.Value));
 
             // 3. 处理Category存在的特殊情况
             // 当Category存在时，允许不传ParentId，但必须有OrganizationId和DepartmentId
@@ -236,7 +237,7 @@ namespace SULL.HospitalManagement.Services
             }
 
             // 查询条件必须要有主键Id或Category和ParentId(查询仓库除外)
-            if (catParam == null || (parentParam == null && !isWarehouseQuery))
+            if (catParam == null || (parentParam == null && warehouseParam == null && !isWarehouseQuery))
             {
                 return new PageGridData<Position> { rows = new List<Position>(), total = 0 };
             }
