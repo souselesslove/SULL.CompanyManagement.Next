@@ -1,25 +1,28 @@
 <template>
     <view class="container">
         <!-- Custom Header -->
-        <view class="header-section" :style="{ paddingTop: statusBarHeight + 'px' }">
-            <view class="header-content">
-                <view class="nav-left">
-                    <BackButton class="header-back-btn" @click="goBack" />
-                </view>
-                <text class="page-title">{{ $t('index.pendingTasks') }}</text>
-                <view class="nav-right"></view>
-            </view>
-        </view>
-
         <scroll-view class="main-scroll" scroll-y :enable-back-to-top="true" :refresher-enabled="true"
-            :refresher-triggered="isRefreshing" @refresherrefresh="onRefresh" @scrolltolower="onLoadMore"
-            @scroll="onScroll" :scroll-top="scrollTopValue" refresher-default-style="none"
-            refresher-background="#f0f5ff" :style="{ marginTop: (statusBarHeight + 44) + 'px' }">
-            <view slot="refresher" class="custom-refresher">
+            :refresher-triggered="isRefreshing" :refresher-threshold="60" @refresherrefresh="onRefresh"
+            @refresherpulling="onPulling" @refresherrestore="onRestore" @refresherabort="onRestore"
+            @scrolltolower="onLoadMore" @scroll="onScroll" :scroll-top="scrollTopValue" refresher-default-style="none"
+            refresher-background="#f0f5ff">
+            <view slot="refresher" class="custom-refresher"
+                :style="{ transform: (isPulling || isRefreshing) ? 'translateY(120rpx)' : 'translateY(0)' }">
                 <view class="refresher-content">
                     <view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
                     <text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
                         }}</text>
+                </view>
+            </view>
+
+            <!-- Custom Header (Inside Scroll) -->
+            <view class="custom-nav" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
+                <view class="header-content">
+                    <view class="nav-left">
+                        <BackButton class="header-back-btn" @click="goBack" />
+                    </view>
+                    <text class="page-title">{{ $t('index.pendingTasks') }}</text>
+                    <view class="nav-right"></view>
                 </view>
             </view>
 
@@ -99,7 +102,7 @@
                 </view>
 
                 <!-- Footer -->
-                <FooterInfo />
+                <FooterInfo :showFinished="allTodoList.length > 0 && allTodoList.length >= total" />
                 <view class="bottom-spacer"></view>
             </view>
         </scroll-view>
@@ -163,6 +166,8 @@ import BackButton from '@/components/BackButton/BackButton.vue';
 import BackToTop from '@/components/BackToTop/BackToTop.vue';
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
+import dayjs from 'dayjs';
 
 const NotifyStatus = {
     Completed: 200,
@@ -182,6 +187,7 @@ export default {
             scrollTop: 0,
             scrollTopValue: 0,
             isRefreshing: false,
+            isPulling: false,
             loading: false, // Loading more state
             searchKeyword: '',
             userInfo: {},
@@ -227,7 +233,7 @@ export default {
     onLoad(options) {
         const sysInfo = uni.getSystemInfoSync();
         this.statusBarHeight = sysInfo.statusBarHeight || 20;
-        this.userInfo = uni.getStorageSync('userOrgInfo').User || {};
+        this.userInfo = (storage.get('userOrgInfo') || {}).User || {};
 
         // Optional: pre-filter if passed from home e.g. ?filter=expired
         if (options.filter) {
@@ -250,11 +256,20 @@ export default {
                 this.scrollTopValue = 0;
             });
         },
+        onPulling() {
+            this.isPulling = true;
+        },
+        onRestore() {
+            this.isPulling = false;
+        },
         onRefresh() {
             this.isRefreshing = true;
+            this.isPulling = true;
             this.page = 1;
             this.fetchData(() => {
                 this.isRefreshing = false;
+                this.isPulling = false;
+                uni.showToast({ title: this.$t('index.refreshed'), icon: 'none' });
             });
         },
         onLoadMore() {
@@ -471,14 +486,9 @@ export default {
         },
         formatTime(timeStr) {
             if (!timeStr) return '';
-            const date = new Date(timeStr);
-            if (isNaN(date.getTime())) return timeStr;
-            const Y = date.getFullYear();
-            const M = (date.getMonth() + 1).toString().padStart(2, '0');
-            const D = date.getDate().toString().padStart(2, '0');
-            const h = date.getHours().toString().padStart(2, '0');
-            const m = date.getMinutes().toString().padStart(2, '0');
-            return `${Y}-${M}-${D} ${h}:${m}`;
+            const date = dayjs(timeStr);
+            if (!date.isValid()) return timeStr;
+            return date.format('YYYY-MM-DD HH:mm');
         },
         getStatusText(status) {
             if (status == 200) return this.$t('index.timeline.completed');
@@ -499,26 +509,22 @@ export default {
 }
 
 .header-section {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    z-index: 999;
+    /* Removed fixed positioning */
     background: #fff;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.03);
 }
 
 .header-content {
-    height: 44px;
+    height: 88rpx;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px;
+    padding: 0 32rpx;
 }
 
 .nav-left,
 .nav-right {
-    width: 40px;
+    width: 80rpx;
     display: flex;
     align-items: center;
 }
@@ -529,7 +535,7 @@ export default {
 }
 
 .page-title {
-    font-size: 18px;
+    font-size: 34rpx;
     font-weight: bold;
     color: $sull-text-main;
 }
@@ -540,63 +546,63 @@ export default {
 }
 
 .content {
-    padding: 16px;
+    padding: 32rpx;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 32rpx;
 }
 
 /* Search */
 .search-section {
-    padding: 10px 16px;
+    padding: 20rpx 32rpx;
     background: #fff;
 }
 
 .search-box {
     background: $sull-color-background;
     border-radius: 999px;
-    height: 36px;
+    height: 72rpx;
     display: flex;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 24rpx;
 }
 
 .search-icon {
-    font-size: 14px;
-    margin-right: 8px;
+    font-size: 28rpx;
+    margin-right: 16rpx;
     color: $sull-text-secondary;
 }
 
 .search-input {
     flex: 1;
-    font-size: 14px;
+    font-size: 28rpx;
 }
 
 .clear-icon {
     color: $sull-text-secondary;
-    font-size: 12px;
+    font-size: 24rpx;
 }
 
 /* Stats */
 .stats-grid {
     display: flex;
     justify-content: space-between;
-    gap: 10px;
+    gap: 20rpx;
 }
 
 .stat-card {
     flex: 1;
     background: #fff;
-    border-radius: 12px;
-    padding: 12px 8px;
+    border-radius: 24rpx;
+    padding: 24rpx 16rpx;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
-    gap: 4px;
+    box-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.02);
+    gap: 8rpx;
     transition: all 0.2s;
-    border: 1px solid transparent;
+    border: 2rpx solid transparent;
 }
 
 .stat-card.active {
@@ -605,13 +611,13 @@ export default {
 }
 
 .stat-value {
-    font-size: 20px;
+    font-size: 40rpx;
     font-weight: bold;
     color: $sull-text-main;
 }
 
 .stat-label {
-    font-size: 11px;
+    font-size: 22rpx;
     color: $sull-text-secondary;
 }
 
@@ -635,21 +641,21 @@ export default {
 .category-tabs {
     display: flex;
     background: #fff;
-    border-radius: 25px;
-    padding: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+    border-radius: 50rpx;
+    padding: 8rpx;
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
 }
 
 .tab-item {
     flex: 1;
-    height: 32px;
+    height: 64rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
+    font-size: 24rpx;
     color: $sull-text-secondary;
     font-weight: 500;
-    border-radius: 16px;
+    border-radius: 32rpx;
     transition: all 0.3s;
 }
 
@@ -657,33 +663,33 @@ export default {
     background: $sull-color-primary;
     color: #fff;
     font-weight: 600;
-    box-shadow: 0 2px 6px rgba(0, 154, 151, 0.3);
+    box-shadow: 0 4rpx 12rpx rgba(0, 154, 151, 0.3);
 }
 
 /* Alert List (Reused from index but scoped here) */
 .alert-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 24rpx;
 }
 
 .alert-card {
     background: #fff;
-    border-radius: 12px;
-    padding: 16px;
+    border-radius: 24rpx;
+    padding: 32rpx;
     display: flex;
     align-items: center;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
 }
 
 .alert-left {
-    margin-right: 12px;
+    margin-right: 24rpx;
 }
 
 .alert-type-tag {
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
+    padding: 8rpx 16rpx;
+    border-radius: 8rpx;
+    font-size: 22rpx;
     font-weight: bold;
 }
 
@@ -694,7 +700,7 @@ export default {
 
 .tag-warning {
     background: #FDF6EC;
-    color: #E6A23C;
+    color: #E89310;
 }
 
 .tag-info {
@@ -709,9 +715,9 @@ export default {
 }
 
 .alert-msg {
-    font-size: 14px;
+    font-size: 28rpx;
     color: $sull-text-main;
-    margin-bottom: 4px;
+    margin-bottom: 8rpx;
     line-height: 1.4;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -722,19 +728,19 @@ export default {
 }
 
 .alert-time {
-    font-size: 11px;
+    font-size: 22rpx;
     color: $sull-text-secondary;
 }
 
 .alert-action {
-    margin-left: 12px;
+    margin-left: 24rpx;
     display: flex;
-    gap: 8px;
+    gap: 16rpx;
 }
 
 .icon-action-btn {
-    width: 32px;
-    height: 32px;
+    width: 64rpx;
+    height: 64rpx;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -743,17 +749,17 @@ export default {
 
 .process-btn {
     background: #EAF2FF;
-    border: 1px solid #D0E7FF;
+    border: 2rpx solid #D0E7FF;
 }
 
 .ignore-btn {
     background: #F4F4F5;
-    border: 1px solid #E9E9EB;
+    border: 2rpx solid #E9E9EB;
 }
 
 .action-icon-svg {
-    width: 16px;
-    height: 16px;
+    width: 32rpx;
+    height: 32rpx;
     background-color: $sull-color-primary;
     -webkit-mask-size: contain;
     mask-size: contain;
@@ -780,69 +786,75 @@ export default {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 40px 0;
+    padding: 80rpx 0;
 }
 
 .empty-icon-simple {
-    width: 48px;
-    height: 48px;
+    width: 96rpx;
+    height: 96rpx;
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23DCDFE6'%3E%3Cpath d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z'/%3E%3C/svg%3E");
     background-size: contain;
     background-repeat: no-repeat;
-    margin-bottom: 8px;
+    margin-bottom: 16rpx;
     opacity: 0.5;
 }
 
 .empty-text-simple {
-    font-size: 14px;
+    font-size: 28rpx;
     color: $sull-text-secondary;
 }
 
 .bottom-spacer {
-    height: 40px;
+    height: 80rpx;
 }
 
 /* Custom Refresher */
 .custom-refresher {
-    height: 60px;
+    height: 120rpx;
     width: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
+    position: absolute;
+    top: -120rpx;
+    left: 0;
+    transition: transform 0.2s linear;
 }
 
 .refresher-content {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 8rpx;
 }
 
 .refresher-icon {
-    width: 32px;
-    height: 32px;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23009A97'%3E%3Cpath d='M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z'/%3E%3C/svg%3E");
+    width: 64rpx;
+    height: 64rpx;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
     background-size: contain;
     background-repeat: no-repeat;
     transition: transform 0.3s ease;
 }
 
 .refresher-icon.animating {
-    animation: rotate 1s infinite linear;
+    animation: ambulance-bounce 0.8s infinite ease-in-out;
 }
 
-@keyframes rotate {
-    0% {
-        transform: rotate(0deg);
+@keyframes ambulance-bounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
     }
 
-    100% {
-        transform: rotate(360deg);
+    50% {
+        transform: translateY(-12rpx);
     }
 }
 
 .refresher-text {
-    font-size: 10px;
+    font-size: 20rpx;
     color: $sull-color-primary;
 }
 
@@ -869,42 +881,42 @@ export default {
 .modal-content {
     width: 80%;
     background: #fff;
-    border-radius: 12px;
+    border-radius: 24rpx;
     overflow: hidden;
 }
 
 .modal-header {
-    padding: 16px;
-    border-bottom: 1px solid #EBEEF5;
+    padding: 32rpx;
+    border-bottom: 2rpx solid #EBEEF5;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 .modal-title {
-    font-size: 16px;
+    font-size: 32rpx;
     font-weight: bold;
 }
 
 .close-btn {
-    font-size: 20px;
+    font-size: 40rpx;
     color: #999;
 }
 
 .timeline-body {
     flex: 1;
-    padding: 20px;
+    padding: 40rpx;
     box-sizing: border-box;
 }
 
 .timeline-list {
-    padding-left: 10px;
+    padding-left: 20rpx;
 }
 
 .timeline-item {
     position: relative;
-    padding-left: 20px;
-    padding-bottom: 24px;
+    padding-left: 40rpx;
+    padding-bottom: 48rpx;
 }
 
 .timeline-item:last-child {
@@ -915,25 +927,25 @@ export default {
     position: absolute;
     left: 0;
     top: 0;
-    width: 20px;
+    width: 40rpx;
     height: 100%;
     display: flex;
     justify-content: center;
 }
 
 .timeline-dot {
-    width: 8px;
-    height: 8px;
+    width: 16rpx;
+    height: 16rpx;
     border-radius: 50%;
     background-color: $sull-color-primary;
-    margin-top: 16px;
+    margin-top: 32rpx;
     z-index: 1;
 }
 
 .node-icon {
-    width: 16px;
-    height: 16px;
-    margin-top: 12px;
+    width: 32rpx;
+    height: 32rpx;
+    margin-top: 24rpx;
     z-index: 1;
     background-color: $sull-color-primary;
     -webkit-mask-size: contain;
@@ -957,10 +969,10 @@ export default {
 
 .timeline-line {
     position: absolute;
-    left: 9px;
-    top: 24px;
-    bottom: -10px;
-    width: 2px;
+    left: 18rpx;
+    top: 48rpx;
+    bottom: -20rpx;
+    width: 4rpx;
     background-color: #E4E7ED;
 }
 
@@ -969,37 +981,37 @@ export default {
 }
 
 .timeline-node.is-start~.timeline-line {
-    top: 28px;
+    top: 56rpx;
 }
 
 .timeline-content {
     background: #F8F9FB;
-    padding: 12px;
-    border-radius: 8px;
-    margin-left: 10px;
+    padding: 24rpx;
+    border-radius: 16rpx;
+    margin-left: 20rpx;
 }
 
 .timeline-header {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 6px;
-    font-size: 12px;
+    margin-bottom: 12rpx;
+    font-size: 24rpx;
     color: #909399;
 }
 
 .timeline-desc {
-    font-size: 14px;
+    font-size: 28rpx;
     color: #303133;
-    margin-bottom: 6px;
+    margin-bottom: 12rpx;
     line-height: 1.4;
 }
 
 .timeline-footer {
-    font-size: 12px;
+    font-size: 24rpx;
     color: #606266;
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 16rpx;
 }
 
 .timeline-status {
@@ -1008,7 +1020,7 @@ export default {
 
 .loading-state {
     text-align: center;
-    padding: 20px;
+    padding: 40rpx;
     color: #999;
 }
 </style>

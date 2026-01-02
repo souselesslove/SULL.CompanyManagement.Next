@@ -1,8 +1,8 @@
 <template>
-    <view class="container">
+    <view class="container" @click="hideAllMenus">
         <!-- Navigation Bar -->
         <!-- Navigation Bar -->
-        <view class="header-section" :style="{ paddingTop: statusBarHeight + 'px' }">
+        <view class="header-section" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
             <view class="header-content">
                 <view class="nav-left">
                     <BackButton class="header-back-btn" @click="goBack" />
@@ -16,15 +16,16 @@
 
         <!-- List -->
         <scroll-view class="main-scroll" scroll-y :enable-back-to-top="true" :refresher-enabled="true"
-            :refresher-triggered="isRefreshing" @refresherrefresh="onRefresh" @scrolltolower="onLoadMore"
-            @scroll="onScroll" :scroll-top="scrollTop" refresher-default-style="none" refresher-background="#f0f5ff"
-            :style="{ marginTop: (statusBarHeight + 44) + 'px' }">
+            :refresher-triggered="isRefreshing" @refresherrefresh="onRefresh" @refresherpulling="onPulling"
+            @refresherrestore="onRestore" @scrolltolower="onLoadMore" @scroll="onScroll" :scroll-top="scrollTop"
+            refresher-default-style="none" refresher-background="#f0f5ff"
+            :style="{ marginTop: (statusBarHeight * 2 + 88) + 'rpx' }">
 
             <view slot="refresher" class="custom-refresher">
                 <view class="refresher-content">
                     <view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
                     <text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
-                        }}</text>
+                    }}</text>
                 </view>
             </view>
 
@@ -56,11 +57,29 @@
                             <view class="name-section">
                                 <text class="item-name">{{ item.Name }}</text>
                                 <text class="item-code text-gray" v-if="item.InterfaceCode">({{ item.InterfaceCode
-                                    }})</text>
+                                }})</text>
                             </view>
-                            <view class="status-tag" :class="getExpiryStatus(item.ExpiryDate).class"
-                                v-if="item.ExpiryDate && getExpiryStatus(item.ExpiryDate)">
-                                <text>{{ getExpiryStatus(item.ExpiryDate).text }}</text>
+                            <view class="card-actions">
+                                <view class="status-tag" :class="getExpiryStatus(item).class"
+                                    v-if="getExpiryStatus(item)">
+                                    <text>{{ getExpiryStatus(item).text }}</text>
+                                </view>
+                                <view class="action-btn" @click.stop="toggleMoreMenu(item)">
+                                    <text class="action-icon">⋮</text>
+                                </view>
+
+                                <!-- 下拉菜单 -->
+                                <view class="more-menu" v-if="activeMenuId === item.Id" @click.stop>
+                                    <view class="menu-item" @click="goToBatchManage(item)">
+                                        <text class="menu-icon-small">📦</text>
+                                        <text class="menu-text">{{ $t('itemManage.batch_manage') }}</text>
+                                    </view>
+                                    <view class="menu-divider"></view>
+                                    <view class="menu-item" @click="goToUsageRecords(item)">
+                                        <text class="menu-icon-small">📋</text>
+                                        <text class="menu-text">{{ $t('itemManage.usage_records') }}</text>
+                                    </view>
+                                </view>
                             </view>
                         </view>
 
@@ -76,8 +95,7 @@
                                 <text class="stock-val">{{ item.AvailableStock || 0 }}</text>
                                 <text class="unit" v-if="item.Unit">{{ item.Unit }}</text>
                             </view>
-                            <text class="expiry-date">过期日期: {{ item.ExpiryDate ? formatDate(item.ExpiryDate) : '-'
-                                }}</text>
+                            <text class="expiry-date">过期日期: {{ getExpiryDateDisplay(item) }}</text>
                         </view>
                     </view>
 
@@ -95,7 +113,7 @@
         </scroll-view>
 
         <!-- Expanded Actions -->
-        <view class="fab-actions" v-if="showActions">
+        <view class="fab-actions" v-if="showActions" @click.stop>
             <view class="action-item" @click="goToPage('/pages/item-manage/item-import')"
                 :style="{ animationDelay: '0ms' }">
                 <text class="action-text">{{ $t('itemManage.import') }}</text>
@@ -107,14 +125,14 @@
                 :style="{ animationDelay: '50ms' }">
                 <text class="action-text">{{ $t('itemManage.add') }}</text>
                 <view class="action-btn add-btn">
-                    <text class="action-icon">➕</text>
+                    <text class="action-icon">+</text>
                 </view>
             </view>
         </view>
 
         <!-- Floating Action Button -->
-        <view class="fab-btn" @click="toggleActions" :class="{ active: showActions }" v-if="!selectMode">
-            <text class="main-icon">➕</text>
+        <view class="fab-btn" @click.stop="toggleActions" :class="{ active: showActions }" v-if="!selectMode">
+            <text class="main-icon">+</text>
         </view>
 
         <!-- Selection Footer -->
@@ -134,6 +152,8 @@ import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import BackButton from '@/components/BackButton/BackButton.vue';
 import BackToTop from '@/components/BackToTop/BackToTop.vue';
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
+import dayjs from 'dayjs';
 
 export default {
     components: {
@@ -158,6 +178,7 @@ export default {
             selectMode: false,
             selectedItem: null,
             currentCategory: null,
+            activeMenuId: null,
             categories: [
                 { label: '全部', value: null },
                 { label: '药品', value: 10 },
@@ -173,13 +194,11 @@ export default {
 
         if (options && options.mode === 'select') {
             this.selectMode = true;
-            // Optional: set title
-            uni.setNavigationBarTitle({ title: '选择物品' });
         }
 
-        const uInfo = uni.getStorageSync('userOrgInfo');
+        const uInfo = storage.get('userOrgInfo');
         if (uInfo) {
-            this.userOrgInfo = uInfo.User;
+            this.userOrgInfo = uInfo;
         }
 
         this.fetchItems();
@@ -192,16 +211,22 @@ export default {
         getDaysUntil(dateStr) {
             if (!dateStr) return 9999;
             const now = new Date();
-            const target = new Date(dateStr);
+            const target = dayjs(dateStr).toDate();
             const diff = target.getTime() - now.getTime();
             return Math.ceil(diff / (1000 * 3600 * 24));
         },
-        getExpiryClass(dateStr) {
+        getExpiryStatus(item) {
+            const dateStr = item.LatestExpirationDate || item.ExpiryDate;
+            if (!dateStr) return null;
             const days = this.getDaysUntil(dateStr);
-            if (days < 0) return 'text-black';
-            if (days < 30) return 'text-red';
-            if (days <= 90) return 'text-yellow';
-            return 'text-normal';
+            if (days < 0) return { text: '已过期', class: 'tag-expired' };
+            if (days < 30) return { text: `剩${days}天`, class: 'tag-urgent' };
+            if (days <= 90) return { text: `剩${days}天`, class: 'tag-warning' };
+            return null;
+        },
+        getExpiryDateDisplay(item) {
+            const dateStr = item.LatestExpirationDate || item.ExpiryDate;
+            return dateStr ? this.formatDate(dateStr) : '-';
         },
         goBack() {
             uni.navigateBack();
@@ -219,11 +244,19 @@ export default {
             this.currentCategory = val;
             this.onSearch();
         },
+        onPulling() {
+            // Can be used for visual feedback
+        },
+        onRestore() {
+            this.isRefreshing = false;
+        },
         onRefresh() {
             this.isRefreshing = true;
             this.page = 1;
-            this.fetchItems().then(() => {
-                this.isRefreshing = false;
+            return this.fetchItems().then(() => {
+                setTimeout(() => {
+                    this.isRefreshing = false;
+                }, 800);
             });
         },
         onLoadMore() {
@@ -232,28 +265,21 @@ export default {
                 this.fetchItems();
             }
         },
-        formatDate(dateStr) {
-            if (!dateStr) return '';
-            return dateStr.substring(0, 10);
-        },
-        getDaysUntil(dateStr) {
-            if (!dateStr) return 9999;
-            const now = new Date();
-            const target = new Date(dateStr);
-            const diff = target.getTime() - now.getTime();
-            return Math.ceil(diff / (1000 * 3600 * 24));
-        },
-        getExpiryStatus(dateStr) {
-            const days = this.getDaysUntil(dateStr);
-            if (days < 0) return { text: '已过期', class: 'tag-expired' };
-            if (days < 30) return { text: `剩${days}天`, class: 'tag-urgent' };
-            if (days <= 90) return { text: `剩${days}天`, class: 'tag-warning' };
-            return null;
-        },
         editItem(item) {
             uni.navigateTo({
                 url: `/pages/item-manage/item-add?item=${encodeURIComponent(JSON.stringify(item))}`
             });
+        },
+        toggleMoreMenu(item) {
+            if (this.activeMenuId === item.Id) {
+                this.activeMenuId = null;
+            } else {
+                this.activeMenuId = item.Id;
+            }
+        },
+        hideAllMenus() {
+            this.activeMenuId = null;
+            this.showActions = false;
         },
         handleItemClick(item) {
             if (this.selectMode) {
@@ -274,11 +300,11 @@ export default {
             const wheres = [
             ];
 
-            if (this.userOrgInfo && this.userOrgInfo.OrganizationId) {
-                wheres.push({ name: 'OrganizationId', value: this.userOrgInfo.OrganizationId });
+            if (this.userOrgInfo && this.userOrgInfo.Organization && this.userOrgInfo.Organization.Id) {
+                wheres.push({ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id });
             }
-            if (this.userOrgInfo && this.userOrgInfo.DepartmentId) {
-                wheres.push({ name: 'DepartmentId', value: this.userOrgInfo.DepartmentId });
+            if (this.userOrgInfo && this.userOrgInfo.Department && this.userOrgInfo.Department.Id) {
+                wheres.push({ name: 'DepartmentId', value: this.userOrgInfo.Department.Id });
             }
 
             if (this.searchText) {
@@ -318,15 +344,27 @@ export default {
             this.oldScrollTop = e.detail.scrollTop;
         },
         goTop() {
-            // Must toggle value to trigger scroll view update if it's already 0 (rare but safe)
             this.scrollTop = this.oldScrollTop;
             this.$nextTick(() => {
                 this.scrollTop = 0;
             });
         },
+
         goToPage(url) {
-            this.showActions = false;
+            this.hideAllMenus();
             uni.navigateTo({ url });
+        },
+        goToBatchManage(item) {
+            this.hideAllMenus();
+            uni.navigateTo({
+                url: `/pages/item-manage/item-batch?itemId=${item.Id}&itemName=${encodeURIComponent(item.Name)}`
+            });
+        },
+        goToUsageRecords(item) {
+            this.hideAllMenus();
+            uni.navigateTo({
+                url: `/pages/statistics/statistics?category=consumption&itemName=${encodeURIComponent(item.Name)}&itemId=${item.Id}`
+            });
         }
     }
 }
@@ -360,17 +398,114 @@ export default {
         padding: 0 16px;
 
         .nav-left {
-            width: 40px;
+            width: 100rpx;
+            display: flex;
+            align-items: center;
         }
 
         .page-title {
-            font-size: $font-size-h6;
-            font-weight: $font-weight-semibold;
+            flex: 1;
+            text-align: center;
+            font-size: 34rpx;
+            font-weight: 600;
             color: $sull-text-main;
         }
 
         .nav-right {
-            width: 40px;
+            width: 100rpx;
+            height: 44px;
+            position: relative;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+
+            .header-btn {
+                width: 72rpx;
+                height: 72rpx;
+                background: #f0f7ff;
+                border-radius: 12rpx;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+
+                .header-icon {
+                    font-size: 36rpx;
+                }
+
+                &:active {
+                    opacity: 0.7;
+                }
+            }
+        }
+    }
+}
+
+.item-card {
+    .card-actions {
+        display: flex;
+        align-items: center;
+        gap: 16rpx;
+        position: relative;
+
+        .action-btn {
+            width: 60rpx;
+            height: 60rpx;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+
+            &:active {
+                background-color: rgba(0, 0, 0, 0.05);
+            }
+
+            .action-icon {
+                font-size: 36rpx;
+                color: #999;
+                font-weight: bold;
+            }
+        }
+
+        .more-menu {
+            position: absolute;
+            top: 70rpx;
+            right: 0;
+            width: 240rpx;
+            background: #ffffff;
+            border-radius: 12rpx;
+            box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.15);
+            z-index: 100;
+            padding: 8rpx 0;
+            overflow: hidden;
+            animation: fadeInDown 0.2s ease-out;
+
+            .menu-item {
+                display: flex;
+                align-items: center;
+                padding: 24rpx 32rpx;
+                gap: 16rpx;
+
+                &:active {
+                    background-color: #f5f7fa;
+                }
+
+                .menu-icon-small {
+                    font-size: 28rpx;
+                }
+
+                .menu-text {
+                    font-size: 28rpx;
+                    color: #333;
+                    font-weight: 500;
+                }
+            }
+
+            .menu-divider {
+                height: 1rpx;
+                background-color: #eee;
+                margin: 0 24rpx;
+            }
         }
     }
 }
@@ -396,22 +531,34 @@ export default {
     color: $sull-text-secondary;
 }
 
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10rpx);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .search-input {
     flex: 1;
-    font-size: 14px;
+    font-size: 28rpx;
 }
 
 .clear-icon {
     color: $sull-text-secondary;
-    font-size: 12px;
+    font-size: 24rpx;
 }
 
 .category-tabs {
     display: flex;
     background: #fff;
-    border-radius: 25px;
-    padding: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+    border-radius: 50rpx;
+    padding: 8rpx;
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
     margin: 0;
     overflow: visible;
 
@@ -422,14 +569,14 @@ export default {
 
     .tab-item {
         flex: 1;
-        height: 32px;
+        height: 64rpx;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 12px;
+        font-size: 24rpx;
         color: $sull-text-secondary;
         font-weight: 500;
-        border-radius: 16px;
+        border-radius: 32rpx;
         transition: all 0.3s;
 
         // Reset previous card styles
@@ -442,7 +589,7 @@ export default {
             background: $sull-color-primary;
             color: #fff;
             font-weight: 600;
-            box-shadow: 0 2px 6px rgba(0, 154, 151, 0.3);
+            box-shadow: 0 4rpx 12rpx rgba(0, 154, 151, 0.3);
             border: none;
         }
     }
@@ -451,8 +598,8 @@ export default {
 .content {
     display: flex;
     flex-direction: column;
-    padding: 16px;
-    gap: 16px;
+    padding: 32rpx;
+    gap: 32rpx;
 }
 
 .main-scroll {
@@ -462,21 +609,21 @@ export default {
 
 .list-content {
     /* Padding removed as .content already handles it */
-    min-height: 300px;
+    min-height: 600rpx;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 24rpx;
 }
 
 .item-card {
     background: $sull-color-white;
     border-radius: $radius-lg;
-    padding: 12px 16px;
-    margin-bottom: 12px;
-    margin-bottom: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+    padding: 24rpx 32rpx;
+    margin-bottom: 24rpx;
+    margin-bottom: 24rpx;
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
     transition: all 0.2s;
-    border: 2px solid transparent;
+    border: 4rpx solid transparent;
 }
 
 .item-card.selected {
@@ -485,7 +632,7 @@ export default {
 }
 
 .list-content.with-footer {
-    padding-bottom: 100px;
+    padding-bottom: 200rpx;
     /* Space for footer */
 }
 
@@ -496,11 +643,11 @@ export default {
 
 .top-row {
     justify-content: space-between;
-    margin-bottom: 6px;
+    margin-bottom: 12rpx;
 }
 
 .mid-row {
-    margin-bottom: 8px;
+    margin-bottom: 16rpx;
     align-items: baseline;
 }
 
@@ -513,15 +660,15 @@ export default {
     flex: 1;
     display: flex;
     align-items: baseline;
-    padding-right: 8px;
+    padding-right: 16rpx;
     overflow: hidden;
 }
 
 .item-name {
-    font-size: 16px;
+    font-size: 32rpx;
     font-weight: bold;
     color: $sull-text-main;
-    margin-right: 6px;
+    margin-right: 12rpx;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -529,15 +676,15 @@ export default {
 }
 
 .item-code {
-    font-size: 12px;
+    font-size: 24rpx;
     color: #999;
     flex-shrink: 0;
 }
 
 .status-tag {
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
+    padding: 4rpx 16rpx;
+    border-radius: 8rpx;
+    font-size: 22rpx;
     font-weight: 500;
     flex-shrink: 0;
 }
@@ -559,14 +706,14 @@ export default {
 
 .tag-normal {
     background: #f0f9eb;
-    color: #67c23a;
+    color: #E89310;
 }
 
 .spec-text {
-    font-size: 12px;
+    font-size: 24rpx;
     font-weight: bold;
     color: $sull-text-main;
-    margin-right: 4px;
+    margin-right: 8rpx;
     max-width: 45%;
     overflow: hidden;
     white-space: nowrap;
@@ -574,13 +721,13 @@ export default {
 }
 
 .info-divider {
-    margin: 0 4px;
+    margin: 0 8rpx;
     color: #eee;
 }
 
 .factory-text {
     flex: 1;
-    font-size: 12px;
+    font-size: 24rpx;
     color: #999;
     overflow: hidden;
     white-space: nowrap;
@@ -593,27 +740,27 @@ export default {
 }
 
 .stock-box .label {
-    font-size: 12px;
+    font-size: 24rpx;
     color: #999;
-    margin-right: 4px;
+    margin-right: 8rpx;
 }
 
 .stock-box .stock-val {
-    font-size: 18px;
+    font-size: 36rpx;
     font-weight: bold;
     color: $sull-text-main;
     font-family: 'Roboto', sans-serif;
 }
 
 .stock-box .unit {
-    font-size: 12px;
+    font-size: 24rpx;
     color: #606266;
-    margin-left: 2px;
+    margin-left: 4rpx;
     font-weight: normal;
 }
 
 .expiry-date {
-    font-size: 12px;
+    font-size: 24rpx;
     color: #999;
 }
 
@@ -626,38 +773,38 @@ export default {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding-top: 60px;
+    padding-top: 120rpx;
 }
 
 .empty-icon-bg {
-    width: 120px;
-    height: 120px;
+    width: 240rpx;
+    height: 240rpx;
     background-color: #FFF5EE;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 24px;
+    margin-bottom: 48rpx;
 }
 
 .empty-icon {
-    font-size: 60px;
+    font-size: 120rpx;
 }
 
 .empty-title {
-    font-size: 18px;
+    font-size: 36rpx;
     font-weight: bold;
     color: $sull-text-main;
-    margin-bottom: 8px;
+    margin-bottom: 16rpx;
 }
 
 .empty-desc {
-    font-size: 14px;
+    font-size: 28rpx;
     color: $sull-text-secondary;
 }
 
 .bottom-spacer {
-    height: 80px;
+    height: 160rpx;
 }
 
 /* FAB & Actions */
@@ -670,38 +817,38 @@ export default {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 16px;
+    gap: 32rpx;
 }
 
 .action-item {
     display: flex;
     align-items: center;
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(40rpx);
     animation: slideUp 0.3s forwards;
 }
 
 .action-text {
     background: rgba(0, 0, 0, 0.7);
     color: #fff;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    margin-right: 8px;
+    padding: 8rpx 16rpx;
+    border-radius: 8rpx;
+    font-size: 24rpx;
+    margin-right: 16rpx;
     opacity: 0.8;
 }
 
 .action-btn {
-    width: 48px;
-    height: 48px;
+    width: 96rpx;
+    height: 96rpx;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.2);
 
     .action-icon {
-        font-size: 24px;
+        font-size: 48rpx;
     }
 }
 
@@ -719,20 +866,20 @@ export default {
     position: fixed;
     bottom: calc(80px + env(safe-area-inset-bottom));
     right: 24px;
-    width: 56px;
-    height: 56px;
+    width: 112rpx;
+    height: 112rpx;
     background: $sull-color-primary;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+    box-shadow: 0 8rpx 24rpx rgba(0, 122, 255, 0.3);
     z-index: 1000;
     transition: transform 0.3s;
 
     .main-icon {
         color: #fff;
-        font-size: 28px;
+        font-size: 56rpx;
     }
 
     &.active {
@@ -754,23 +901,27 @@ export default {
 /* Refresher */
 /* Refresher */
 .custom-refresher {
-    height: 60px;
+    height: 120rpx;
     width: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
+    position: absolute;
+    top: -120rpx;
+    left: 0;
+    transition: transform 0.2s linear;
 }
 
 .refresher-content {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 8rpx;
 }
 
 .refresher-icon {
-    width: 32px;
-    height: 32px;
+    width: 64rpx;
+    height: 64rpx;
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
     background-size: contain;
     background-repeat: no-repeat;
@@ -782,7 +933,7 @@ export default {
 }
 
 .refresher-text {
-    font-size: 10px;
+    font-size: 20rpx;
     color: $sull-color-primary;
     opacity: 0.8;
 }
@@ -795,7 +946,7 @@ export default {
     }
 
     50% {
-        transform: translateY(-6px);
+        transform: translateY(-12rpx);
     }
 }
 
@@ -805,24 +956,24 @@ export default {
     left: 0;
     width: 100%;
     background: #fff;
-    padding: 16px 24px;
-    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+    padding: 32rpx 48rpx;
+    box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.05);
     z-index: 1001;
     box-sizing: border-box;
-    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
 }
 
 .confirm-btn {
     background: $sull-color-primary;
     color: #fff;
-    height: 48px;
-    border-radius: 24px;
-    font-size: 16px;
+    height: 96rpx;
+    border-radius: 48rpx;
+    font-size: 32rpx;
     font-weight: bold;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 12px rgba(64, 158, 255, 0.4);
+    box-shadow: 0 8rpx 24rpx rgba(64, 158, 255, 0.4);
 
     &[disabled] {
         background: #ccc;

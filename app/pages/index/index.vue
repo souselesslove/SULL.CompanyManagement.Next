@@ -1,17 +1,8 @@
 <template>
 	<view class="container">
-		<scroll-view scroll-y class="main-scroll" :scroll-top="scrollTopValue" @scroll="onScroll"
-			refresher-enabled="true" :refresher-triggered="isRefreshing" @refresherrefresh="onRefresh"
-			refresher-default-style="none" refresher-background="#f0f5ff">
-			<view slot="refresher" class="custom-refresher">
-				<view class="refresher-content">
-					<view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
-					<text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
-					}}</text>
-				</view>
-			</view>
-			<!-- Header (Now inside scroll-view) -->
-			<view class="header">
+		<!-- Fixed Header -->
+		<view class="header-fixed" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
+			<view class="header-content">
 				<view class="header-left">
 					<text class="greeting">{{ greetingText }}</text>
 					<text class="subtitle">{{ userOrgInfo.Department ? userOrgInfo.Department.Name : $t('index.dept')
@@ -19,18 +10,41 @@
 				</view>
 				<view class="header-right">
 					<view class="icon-btn search-btn" @click="onSearch">
-						<text class="icon">🔍</text>
+						<image class="icon-img" src="/static/imgs/search.png" mode="aspectFit"></image>
 					</view>
-					<view class="icon-btn notification-btn" @click="navToTodoList">
+					<!-- Message Icon -->
+					<view class="icon-btn" @click="navTo('/pages/todo-list/todo-list')">
 						<text class="icon">🔔</text>
-						<view class="badge" v-if="todoTotal > 0">{{ todoTotal }}</view>
+						<view class="badge" v-if="dashboardStats.TotalPending > 0">{{ dashboardStats.TotalPending > 99
+							? '99+' : dashboardStats.TotalPending }}</view>
+					</view>
+					<!-- One-click Rescue -->
+					<view class="icon-btn rescue-btn" :class="{ 'rescuing': isRescuing }" @click="handleRescueClick">
+						<image class="icon-img" src="/static/imgs/First-aid.png" mode="aspectFit"
+							style="width: 44rpx; height: 44rpx;"></image>
 					</view>
 				</view>
 			</view>
+		</view>
 
-			<view class="scroll-content">
+		<scroll-view scroll-y class="main-scroll" :scroll-top="scrollTopValue" @scroll="onScroll"
+			refresher-enabled="true" :refresher-triggered="isRefreshing" :refresher-threshold="60"
+			@refresherrefresh="onRefresh" @refresherpulling="onPulling" @refresherrestore="onRestore"
+			@refresherabort="onRestore" refresher-default-style="none" refresher-background="#f0f5ff"
+			:style="{ height: `calc(100vh - ${statusBarHeight * 2}rpx - 88rpx)`, marginTop: `calc(${statusBarHeight * 2}rpx + 88rpx)` }">
+			<view slot="refresher" class="custom-refresher"
+				:style="{ transform: (isPulling || isRefreshing) ? 'translateY(120rpx)' : 'translateY(0)' }">
+				<view class="refresher-content">
+					<view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
+					<text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
+					}}</text>
+				</view>
+			</view>
+
+			<view class="scroll-content" style="padding-top: 20rpx;">
 				<!-- Status Overview (Data Big Screen Concept) -->
-				<view class="overview-card" :class="[currentStatus, { 'empty-frosted': rescueCars.length === 0 }]">
+				<view class="overview-card"
+					:class="[isRescuing ? 'status-rescuing' : statusConfig.class, { 'empty-frosted': rescueCars.length === 0 }]">
 					<template v-if="rescueCars.length > 0">
 						<view class="overview-header">
 							<view class="status-left">
@@ -49,9 +63,13 @@
 									}}</text>
 								</view>
 							</view>
-							<view class="status-tag" :class="statusTagClass">
+							<view class="status-container" v-if="isRescuing">
+								<text class="rescue-timer">{{ rescueDuration }}</text>
+								<view class="rescuing-tag">抢救中</view>
+							</view>
+							<view class="status-tag" v-else @click="showStatusRemark">
 								<text class="status-text">{{ rescueCars[currentRescueCarIndex] ?
-									rescueCars[currentRescueCarIndex].FloorId + '层' : '' }}</text>
+									getRescueCarStatusText(rescueCars[currentRescueCarIndex].Status) : '' }}</text>
 							</view>
 						</view>
 						<view class="stats-row">
@@ -105,7 +123,7 @@
 							<view class="action-item" v-for="(action, index) in pageActions" :key="index"
 								@click="handleAction(action)">
 								<view class="action-icon-box">
-									<text class="action-icon">{{ action.icon }}</text>
+									<image class="action-icon-img" :src="action.iconPath" mode="aspectFit"></image>
 									<view v-if="action.reminder" class="reminder-bell"></view>
 								</view>
 								<text class="action-label">{{ $t(action.labelKey) }}</text>
@@ -121,12 +139,8 @@
 				</view>
 
 				<!-- Todo Tabs -->
-				<view class="todo-tabs">
-					<view class="todo-tab-item" v-for="(tab, index) in todoTabs" :key="index"
-						:class="{ active: currentTodoTab === tab.key }" @click="currentTodoTab = tab.key">
-						<text>{{ $t(tab.label) }}</text>
-					</view>
-				</view>
+				<CapsuleTabs :tabs="todoTabs" v-model:current="currentTodoTab"
+					container-style="padding: 16rpx 0 32rpx 0;" />
 
 				<view class="alert-list">
 					<view class="alert-card" v-for="(alert, index) in filteredAlerts" :key="index"
@@ -230,6 +244,10 @@
 				</scroll-view>
 			</view>
 		</view>
+		<!-- Warning Modal -->
+		<WarningModal v-model:visible="warningModal.visible" :title="warningModal.title" :message="warningModal.message"
+			:buttonText="warningModal.buttonText" :showCancel="warningModal.showCancel" @confirm="onWarningConfirm"
+			@cancel="onWarningCancel" />
 	</view>
 
 </template>
@@ -238,8 +256,15 @@
 import BackToTop from '@/components/BackToTop/BackToTop.vue';
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import BottomNav from '@/components/BottomNav/BottomNav.vue';
+import WarningModal from '@/components/WarningModal/WarningModal.vue';
+import CapsuleTabs from '@/components/CapsuleTabs/CapsuleTabs.vue';
 import config from '@/config.js';
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
+import dayjs from 'dayjs';
+import { formatMessage } from '@/utils/i18n.js';
+import { getRescueCarStatusText } from '@/utils/rescueCarUtils.js';
+
 
 const NotifyStatus = {
 	Completed: 200,
@@ -251,30 +276,66 @@ export default {
 	components: {
 		BackToTop,
 		FooterInfo,
-		BottomNav
+		BottomNav,
+		WarningModal,
+		CapsuleTabs
 	},
 	data() {
 		return {
+			positionData: [
+				{
+					"title": "分管院长", "level": 50, "group": 50, menus: ['index.actions.handover', 'index.actions.stockIn', 'index.actions.itemOutbound',
+						'index.actions.virtualPos', 'index.actions.sealing', 'index.actions.records', 'index.actions.itemManage',
+						'index.actions.schedule'
+					]
+				},
+				{
+					"title": "护理部主任", "level": 40, "group": 40, menus: ['index.actions.handover', 'index.actions.stockIn', 'index.actions.itemOutbound',
+						'index.actions.virtualPos', 'index.actions.sealing', 'index.actions.records', 'index.actions.itemManage',
+						'index.actions.schedule']
+				},
+				{
+					"title": "科主任", "level": 31, "group": 30, menus: ['index.actions.handover', 'index.actions.stockIn', 'index.actions.itemOutbound',
+						'index.actions.virtualPos', 'index.actions.sealing', 'index.actions.records', 'index.actions.itemManage',
+						'index.actions.schedule']
+				},
+				{
+					"title": "护士长", "level": 30, "group": 30, menus: ['index.actions.handover', 'index.actions.stockIn', 'index.actions.itemOutbound',
+						'index.actions.virtualPos', 'index.actions.sealing', 'index.actions.records', 'index.actions.itemManage',
+						'index.actions.schedule']
+				},
+				{ "title": "医生", "level": 22, "group": 20, menus: ['index.actions.virtualPos', 'index.actions.records', 'index.actions.schedule'] },
+				{ "title": "护士", "level": 20, "group": 20, menus: ['index.actions.handover', 'index.actions.stockIn', 'index.actions.itemOutbound', 'index.actions.virtualPos', 'index.actions.records', 'index.actions.itemManage', 'index.actions.schedule'] },
+				{ "title": "技师", "level": 21, "group": 20, menus: ['index.actions.handover', 'index.actions.stockIn', 'index.actions.itemOutbound', 'index.actions.virtualPos', 'index.actions.records', 'index.actions.itemManage', 'index.actions.schedule'] },
+				{ "title": "护工", "level": 11, "group": 10, menus: ['index.actions.cleaning'] },
+				{ "title": "后勤", "level": 10, "group": 10, menus: ['index.actions.cleaning'] },
+				{
+					"title": "其他", "level": 1, "group": 1, menus: ['index.actions.schedule']
+				}
+			],
+			statusBarHeight: 20, // Default fallback
 			scrollTop: 0,
 			scrollTopValue: 0, // Controlled scroll position
 			isRefreshing: false, // Pull-to-refresh state
-			currentStatus: 'normal', // normal, warning, abnormal
+			isPulling: false,
+			// currentStatus removed, using computed logic
 			version: config.version,
 			companyName: config.company,
 			currentYear: new Date().getFullYear(),
 			// Actions - Unified background
-			actions: [
-				{ labelKey: 'index.actions.handover', icon: '🤝', reminder: true },
-				{ labelKey: 'index.actions.stockIn', icon: '📥' },
-				{ labelKey: 'index.actions.itemOutbound', icon: '📤' },
-				{ labelKey: 'index.actions.virtualPos', icon: '📍' },
-				{ labelKey: 'index.actions.sealing', icon: '🔒' },
-				// { labelKey: 'index.actions.inventory', icon: '📋', reminder: true },
-				{ labelKey: 'index.actions.records', icon: '📝' },
-				{ labelKey: 'index.actions.cleaning', icon: '🧹' },
+			allActions: [
+				{ labelKey: 'index.actions.handover', iconPath: '/static/imgs/handover.png', reminder: true },
+				{ labelKey: 'index.actions.stockIn', iconPath: '/static/imgs/inbound.png' },
+				{ labelKey: 'index.actions.itemOutbound', iconPath: '/static/imgs/outbound.png' },
+				{ labelKey: 'index.actions.virtualPos', iconPath: '/static/imgs/position.png' },
+				{ labelKey: 'index.actions.sealing', iconPath: '/static/imgs/seal.png' },
+				// { labelKey: 'index.actions.inventory', iconPath: '/static/imgs/item.png', reminder: true },
+				{ labelKey: 'index.actions.records', iconPath: '/static/imgs/rescue.png' },
+				{ labelKey: 'index.actions.schedule', iconPath: '/static/imgs/schedule.png' },
 				// { labelKey: 'index.actions.report', icon: '🔧' },
 				// { labelKey: 'index.actions.learning', icon: '📖' },
-				{ labelKey: 'index.actions.itemManage', icon: '📦' },
+				{ labelKey: 'index.actions.itemManage', iconPath: '/static/imgs/item.png' },
+				{ labelKey: 'index.actions.cleaning', iconPath: '/static/imgs/clean.png' },
 			],
 			alerts: [],
 			todoTotal: 0,
@@ -302,11 +363,29 @@ export default {
 			timelineData: [],
 			currentTimelineTask: {},
 			dashboardStats: {},
-		}
+			warningModal: {
+				visible: false,
+				title: '',
+				message: '',
+				buttonText: '',
+				showCancel: false,
+				type: ''
+			},
+			currentRescueInfo: null, // Store latest rescue info
+			rescueDuration: '', // Formatted duration string
+			rescueTimer: null
+		};
+	},
+	onUnload() {
+		if (this.rescueTimer) clearInterval(this.rescueTimer);
+	},
+	onLoad() {
+		const sysInfo = uni.getSystemInfoSync();
+		this.statusBarHeight = sysInfo.statusBarHeight || 20;
 	},
 	onShow() {
 		// Check if user is logged in
-		const token = uni.getStorageSync('token');
+		const token = storage.getToken();
 		if (!token) {
 			// Redirect to profile page if not logged in
 			uni.reLaunch({
@@ -314,13 +393,60 @@ export default {
 			});
 			return;
 		}
-		this.userInfo = uni.getStorageSync('userInfo') || {};
-		this.userOrgInfo = uni.getStorageSync('userOrgInfo') || {};
+
+		// #ifdef APP-PLUS
+		if (uni.getSystemInfoSync().platform === 'android') {
+			plus.navigator.setStatusBarBackground('transparent');
+		}
+		// #endif
+
+		this.userInfo = storage.get('userInfo') || {};
+		this.userOrgInfo = storage.get('userOrgInfo') || {};
 		this.fetchRescueCars();
 		this.fetchTodoData();
 
+		// Check for mandatory updates if not checked yet
+		// #ifdef APP-PLUS
+		getApp().checkUpdate();
+		// #endif
+
+	},
+	onBackPress(options) {
+		// #ifdef APP-PLUS
+		if (options.from === 'navigateBack') {
+			return false;
+		}
+		const now = Date.now();
+		if (!this.lastBackPressTime || now - this.lastBackPressTime > 2000) {
+			this.lastBackPressTime = now;
+			uni.showToast({
+				title: '再按一次退出应用',
+				icon: 'none'
+			});
+		} else {
+			uni.showModal({
+				title: '提示',
+				content: '确定要退出程序吗？',
+				success: (res) => {
+					if (res.confirm) {
+						plus.runtime.quit();
+					}
+				}
+			});
+		}
+		return true;
+		// #endif
 	},
 	computed: {
+		actions() {
+			const userOrgInfo = storage.get('userOrgInfo');
+			const title = (userOrgInfo && userOrgInfo.User && userOrgInfo.User.Title) || (userOrgInfo && userOrgInfo.Title) || '';
+			const position = this.positionData.find(p => p.title === title);
+			if (!position || !position.menus) {
+				return [{ labelKey: 'index.actions.schedule', iconPath: '/static/imgs/schedule.png' },];
+			}
+			return this.allActions.filter(action => position.menus.includes(action.labelKey));
+		},
 		actionPages() {
 			const pages = [];
 			const pageSize = 8;
@@ -329,14 +455,33 @@ export default {
 			}
 			return pages;
 		},
-		statusText() {
-			if (this.currentStatus === 'normal') return this.$t('index.normal');
-			if (this.currentStatus === 'warning') return this.$t('index.warning');
-			if (this.currentStatus === 'abnormal') return this.$t('index.abnormal');
-			return '';
+		currentRescueCar() {
+			if (this.rescueCars && this.rescueCars.length > 0) {
+				return this.rescueCars[this.currentRescueCarIndex];
+			}
+			return null;
+		},
+		statusConfig() {
+			const car = this.currentRescueCar;
+			const status = car ? car.Status : 0; // Default to normal if no car or unknown
+
+			// Configuration Map
+			// 0: Normal, 10: Abnormal, 11: Confirming, 20: Dirty, 21: Cleaning, 30: Repair, 31: Fixing
+			const map = {
+				0: { class: 'status-normal', text: this.$t('bigScreen.rescueCar.statusNormal') || '正常' },
+				10: { class: 'status-abnormal', text: this.$t('bigScreen.rescueCar.statusAbnormal') || '异常' },
+				11: { class: 'status-confirming', text: this.$t('bigScreen.rescueCar.statusConfirming') || '异常待确认' },
+				20: { class: 'status-dirty', text: this.$t('bigScreen.rescueCar.statusDirty') || '脏污' },
+				21: { class: 'status-cleaning', text: this.$t('bigScreen.rescueCar.statusCleaning') || '清洁中' },
+				30: { class: 'status-repair', text: this.$t('bigScreen.rescueCar.statusRepair') || '报修' },
+				31: { class: 'status-fixing', text: this.$t('bigScreen.rescueCar.statusFixing') || '维修中' }
+			};
+
+			return map[status] || map[0];
 		},
 		statusTagClass() {
-			return `tag-${this.currentStatus}-bg`;
+			// Deprecated usage in template, mapped via CSS selectors now
+			return '';
 		},
 		filteredAlerts() {
 			if (this.currentTodoTab === 'all') return this.alerts;
@@ -350,10 +495,21 @@ export default {
 			});
 		},
 		greetingText() {
-			const name = this.userInfo.userTrueName || '';
+			const userInfo = storage.get('userInfo');
+			const name = (userInfo && userInfo.userTrueName) || '';
+			// #ifdef H5
+			return this.$t('index.greeting', { name: name });
+			// #endif
+			// #ifndef H5
 			const template = this.$t('index.greeting');
-			// Manually replace if interpolation fails or for safety
-			return template.replace('[name]', name);
+			return formatMessage(template, { name: name });
+			// #endif
+		},
+		isRescuing() {
+			if (this.currentRescueInfo && this.currentRescueInfo.Status == 0) {
+				return true;
+			}
+			return false;
 		}
 	},
 	methods: {
@@ -361,16 +517,29 @@ export default {
 			console.log('Search clicked');
 			// Navigate to search page or show search modal
 		},
+		onPulling() {
+			this.isPulling = true;
+		},
+		onRestore() {
+			this.isPulling = false;
+		},
 		onRefresh() {
 			this.isRefreshing = true;
-			// Simulate data refresh
-			setTimeout(() => {
+			this.isPulling = true;
+			// Refresh actual data
+			Promise.all([this.fetchRescueCars(), this.fetchTodoData()]).then(() => {
+				setTimeout(() => {
+					this.isRefreshing = false;
+					this.isPulling = false;
+					uni.showToast({
+						title: this.$t('index.refreshed'),
+						icon: 'none'
+					});
+				}, 800);
+			}).catch(() => {
 				this.isRefreshing = false;
-				uni.showToast({
-					title: this.$t('index.refreshed'),
-					icon: 'none'
-				});
-			}, 1500);
+				this.isPulling = false;
+			});
 		},
 		onScroll(e) {
 			this.scrollTop = e.detail.scrollTop;
@@ -392,7 +561,9 @@ export default {
 			});
 		},
 		navTo(page) {
-			// Navigation handled by BottomNav component
+			uni.navigateTo({
+				url: page
+			});
 		},
 		handleAction(action) {
 			if (action.labelKey === 'index.actions.handover') {
@@ -433,6 +604,19 @@ export default {
 				uni.navigateTo({
 					url: '/pages/position-manage/position-manage'
 				});
+			} else if (action.labelKey === 'index.actions.schedule') {
+				uni.navigateTo({
+					url: '/pages/schedule/schedule'
+				});
+			} else if (action.labelKey === 'index.actions.records') {
+				let carId = '';
+				if (this.rescueCars && this.rescueCars.length > 0) {
+					const car = this.rescueCars[this.currentRescueCarIndex];
+					carId = car.Id;
+				}
+				uni.navigateTo({
+					url: `/pages/rescue/rescue-list?carId=${carId}`
+				});
 			} else {
 				uni.showToast({
 					title: this.$t(action.labelKey),
@@ -451,11 +635,13 @@ export default {
 				.then(res => {
 					this.alerts = res.rows || [];
 					this.todoTotal = res.total || 0;
+					this.dashboardStats.TotalPending = res.total || 0; // Update for new badge
 				})
 				.catch(e => {
 					console.error("Fetch Todo Failed", e);
 					this.alerts = [];
 					this.todoTotal = 0;
+					this.dashboardStats.TotalPending = 0; // Update for new badge
 				});
 		},
 		getParamsClass(category) {
@@ -489,12 +675,13 @@ export default {
 				])
 			}).then(res => {
 				this.rescueCars = res.rows || [];
-				this.rescueCars = res.rows || [];
+
 				if (this.rescueCars.length > 0) {
 					// Restore last selected car
-					const lastId = uni.getStorageSync('lastSelectedRescueCarId');
+					const lastId = storage.get('lastSelectedRescueCarId');
 					if (lastId) {
-						const idx = this.rescueCars.findIndex(c => c.Id === lastId);
+						// Use loose comparison to handle potential string/number mismatch
+						const idx = this.rescueCars.findIndex(c => c.Id == lastId);
 						if (idx > -1) {
 							this.currentRescueCarIndex = idx;
 						} else {
@@ -504,7 +691,17 @@ export default {
 						this.currentRescueCarIndex = 0;
 					}
 					// Fetch stats
+					// Fetch stats
 					this.fetchDashboardStats();
+					this.fetchRescueInfo();
+					// Save current car info to cache
+					const currentCar = this.rescueCars[this.currentRescueCarIndex];
+					if (currentCar) {
+						storage.set('currentRescueCarInfo', {
+							Id: currentCar.Id,
+							Name: currentCar.DisplayName
+						});
+					}
 				} else {
 					// Guide mode handled in template
 				}
@@ -515,14 +712,28 @@ export default {
 			// Save selection
 			const car = this.rescueCars[this.currentRescueCarIndex];
 			if (car) {
-				uni.setStorageSync('lastSelectedRescueCarId', car.Id);
+				storage.set('lastSelectedRescueCarId', car.Id);
+				storage.set('currentRescueCarInfo', {
+					Id: car.Id,
+					Name: car.DisplayName
+				});
 			}
 			this.fetchDashboardStats();
+			this.fetchRescueInfo();
 		},
 
 
 
 		openAddRescueCar() {
+			if (!this.userOrgInfo.Department || !this.userOrgInfo.Department.Id) {
+				this.warningModal = {
+					visible: true,
+					title: this.$t('common.tip'),
+					message: this.$t('profile.please_join_dept_first'),
+					buttonText: this.$t('common.confirm')
+				};
+				return;
+			}
 			uni.navigateTo({
 				url: '/pages/position-manage/position-add-car'
 			});
@@ -644,6 +855,17 @@ export default {
 				uni.showToast({ title: 'Error fetching timeline', icon: 'none' });
 			});
 		},
+		showStatusRemark() {
+			const car = this.rescueCars[this.currentRescueCarIndex];
+			if (car && car.Remark) {
+				uni.showModal({
+					title: '当前状态：' + this.getRescueCarStatusText(car.Status),
+					content: car.Remark,
+					showCancel: false,
+					confirmText: this.$t('common.confirm') || '确定'
+				});
+			}
+		},
 		fetchDashboardStats() {
 			if (this.rescueCars.length === 0) return;
 			const currentCar = this.rescueCars[this.currentRescueCarIndex];
@@ -652,21 +874,92 @@ export default {
 				.then(res => {
 					if (res) {
 						let price = (res.PriceCounter || 0) / 10000 / 100; // Cent to Yuan (100), then to 10k (10000) => / 1000000? 
-						// Request: "单位为分，需要转化为万元，保留两位小�
-						// 1 � 100 �
-						// 1 万元 = 10000 � 1000000 �
+						// Request: "单位为分，需要转化为万元，保留两位小
+						// 1  100 
+						// 1 万元 = 10000  1000000 
 						price = (res.PriceCounter || 0) / 1000000;
 						this.dashboardStats = {
 							ItemCounter: res.ItemCounter || 0,
 							PriceCounter: price.toFixed(2),
 							AbnormalStock: res.AbnormalStock || 0,
-							AbnormalExpiry: res.AbnormalExpiry || 0
+							AbnormalExpiry: res.AbnormalExpiry || 0,
+							TotalPending: this.dashboardStats.TotalPending || 0 // Keep existing TotalPending
 						};
 					}
 				})
 				.catch(err => {
 					console.error('Fetch Dashboard Stats Failed', err);
 				});
+		},
+		fetchRescueInfo() {
+			if (this.rescueCars.length === 0) return;
+			const currentCar = this.rescueCars[this.currentRescueCarIndex];
+			if (!currentCar) return;
+
+			// Fetch latest rescue info for this car
+			request.post('api/ssbh/Rescue/GetPageData', {
+				page: 1,
+				rows: 1,
+				sort: 'Id',
+				order: 'desc',
+				wheres: JSON.stringify([{ name: 'CartId', value: currentCar.Id }])
+			}).then(res => {
+				if (res && res.rows && res.rows.length > 0) {
+					this.currentRescueInfo = res.rows[0];
+					// Cache the current task for potential edit
+					storage.set('currentRescueTask', this.currentRescueInfo);
+					this.startRescueTimer();
+				} else {
+					this.currentRescueInfo = null;
+					storage.remove('currentRescueTask');
+					this.stopRescueTimer();
+				}
+			}).catch(e => {
+				console.error("Fetch Rescue Info Failed", e);
+				this.currentRescueInfo = null;
+				storage.remove('currentRescueTask');
+				this.stopRescueTimer();
+			});
+		},
+		startRescueTimer() {
+			this.stopRescueTimer();
+			if (this.currentRescueInfo && this.currentRescueInfo.StartTime) {
+				this.updateRescueDuration();
+				this.rescueTimer = setInterval(this.updateRescueDuration, 33); // High frequency update
+			}
+		},
+		updateRescueDuration() {
+			if (!this.currentRescueInfo || !this.currentRescueInfo.StartTime) return;
+			const start = dayjs(this.currentRescueInfo.StartTime);
+			const now = dayjs();
+			const diff = now.diff(start); // Difference in milliseconds
+
+			const days = Math.floor(diff / 86400000);
+			const remainderDay = diff % 86400000;
+			const hours = Math.floor(remainderDay / 3600000);
+			const remainderHour = remainderDay % 3600000;
+			const minutes = Math.floor(remainderHour / 60000);
+			const remainderMinute = remainderHour % 60000;
+			const seconds = Math.floor(remainderMinute / 1000);
+			const millis = remainderMinute % 1000;
+
+			const pad = (n, width = 2) => n.toString().padStart(width, '0');
+			const msPad = (n) => n.toString().padStart(3, '0');
+
+			let durationStr = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}.${msPad(millis)}`;
+
+			if (days > 0) {
+				durationStr = `${days}天 ${durationStr}`;
+			}
+
+			this.rescueDuration = durationStr;
+		},
+		stopRescueTimer() {
+			if (this.rescueTimer) {
+				clearInterval(this.rescueTimer);
+				this.rescueTimer = null;
+			}
+			this.rescueDuration = '';
 		},
 		handleStatClick(type) {
 			if (type === 'AbnormalStock') {
@@ -688,16 +981,9 @@ export default {
 		},
 		formatTime(timeStr) {
 			if (!timeStr) return '';
-			// Assuming ISO format or similar, you might need 'formatDate' util
-			const date = new Date(timeStr);
-			if (isNaN(date.getTime())) return timeStr;
-			// Simple format: YYYY-MM-DD HH:mm
-			const Y = date.getFullYear();
-			const M = (date.getMonth() + 1).toString().padStart(2, '0');
-			const D = date.getDate().toString().padStart(2, '0');
-			const h = date.getHours().toString().padStart(2, '0');
-			const m = date.getMinutes().toString().padStart(2, '0');
-			return `${Y}-${M}-${D} ${h}:${m}`;
+			const date = dayjs(timeStr);
+			if (!date.isValid()) return timeStr;
+			return date.format('YYYY-MM-DD HH:mm');
 		},
 		getStatusText(status) {
 			// Reuse NotifyStatus if applicable, or generic mapping
@@ -705,6 +991,79 @@ export default {
 			if (status == 210) return '已取消';
 			if (status == 220) return '已忽略';
 			return status;
+		},
+		getRescueCarStatusText(status) {
+			return getRescueCarStatusText(status, this.$t);
+		},
+		handleRescueClick() {
+			if (this.isRescuing) {
+				this.warningModal = {
+					visible: true,
+					title: '结束抢救',
+					message: '是否确认结束当前抢救？',
+					buttonText: '确认结束',
+					showCancel: true,
+					type: 'endRescue'
+				};
+			} else {
+				uni.navigateTo({
+					url: '/pages/rescue/rescue-record'
+				});
+			}
+		},
+		onWarningConfirm() {
+			if (this.warningModal.type === 'endRescue') {
+				this.endRescue();
+			} else if (this.warningModal.type === 'addCar') {
+				this.navTo('/pages/position-manage/position-manage');
+			}
+			this.warningModal.visible = false;
+		},
+		onWarningCancel() {
+			if (this.warningModal.type === 'endRescue') {
+				// Navigate to edit on cancel?
+				uni.navigateTo({
+					url: '/pages/rescue/rescue-record'
+				});
+			}
+			this.warningModal.visible = false;
+		},
+		// Old method if used by other calls, redirected to generic handler
+		closeWarningModal() {
+			this.warningModal.visible = false;
+		},
+		endRescue() {
+			if (!this.currentRescueInfo || !this.currentRescueInfo.Id) return;
+
+			// 1. Prepare Update Data: Set Status to 10 (Finished)
+			const mainData = {
+				...this.currentRescueInfo,
+				Status: 20,
+				EndTime: dayjs().format('YYYY-MM-DD HH:mm:ss')
+			};
+
+			console.log("EndRescue: Submitting Update", mainData);
+
+			// 2. Call Update Interface
+			request.post('api/ssbh/Rescue/Update', { mainData: mainData }).then(res => {
+				if (res.success || res.status) {
+					uni.showToast({ title: '抢救已结束', icon: 'success' });
+
+					// 3. Update Local Cache: Clear active task
+					this.currentRescueInfo = null;
+					storage.remove('currentRescueTask');
+					this.stopRescueTimer();
+
+					// 4. Refresh Dashboard
+					this.fetchDashboardStats();
+					this.fetchRescueInfo();
+				} else {
+					uni.showToast({ title: res.msg || '操作失败', icon: 'none' });
+				}
+			}).catch(err => {
+				console.error("EndRescue Failed", err);
+				uni.showToast({ title: '操作失败', icon: 'none' });
+			});
 		}
 	}
 }
@@ -721,45 +1080,62 @@ page {
 	display: flex;
 	flex-direction: column;
 	height: 100vh;
+	background-color: $sull-color-primary;
+}
+
+.scroll-content {
+	background-color: #f8f9fb;
+	min-height: 100%;
+	padding-bottom: 40rpx;
+	border-radius: 32rpx 32rpx 0 0;
+	/* Optional: smooth transition */
 }
 
 /* Header - Optimized for compactness and scrolling */
-.header {
-	padding: 0px 24px 10px 24px;
-	/* Reduced padding */
+.header-fixed {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	z-index: 100;
+	background-color: $sull-color-primary;
+	/* Match page bg so it blends when scrolling */
+}
+
+.header-content {
+	height: 88rpx;
+	padding: 0 48rpx 20rpx 48rpx;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	background-color: $sull-color-background;
-	/* Match page bg so it blends when scrolling */
 }
 
 .header-right {
 	display: flex;
-	gap: 12px;
+	gap: 24rpx;
 }
 
 .greeting {
 	font-size: $font-size-body-lg;
 	/* Reduced from h5 */
 	font-weight: $font-weight-bold;
-	color: $sull-text-main;
+	color: #ffffff;
 	display: block;
 }
 
 .subtitle {
 	font-size: $font-size-body-sm;
 	/* Reduced from md */
-	color: $sull-text-secondary;
+	color: rgba(255, 255, 255, 0.9);
 }
 
 .icon-btn {
 	position: relative;
-	width: 32px;
+	width: 64rpx;
 	/* Smaller button */
-	height: 32px;
+	height: 64rpx;
 	background: $sull-color-white;
-	border: 1px solid $sull-color-line;
+	border: 2rpx solid $sull-color-line;
 	border-radius: $radius-circle;
 	display: flex;
 	align-items: center;
@@ -772,15 +1148,17 @@ page {
 
 .badge {
 	position: absolute;
-	top: -4px;
-	right: -4px;
+	top: -8rpx;
+	right: -8rpx;
 	background: $sull-color-error;
 	color: $sull-color-white;
-	font-size: 8px;
-	padding: 1px 4px;
+	font-size: 16rpx;
+	padding: 2rpx 8rpx;
 	border-radius: $radius-md;
-	border: 1px solid $sull-color-white;
+	border: 2rpx solid $sull-color-white;
 }
+
+
 
 .main-scroll {
 	flex: 1;
@@ -788,45 +1166,158 @@ page {
 }
 
 .scroll-content {
-	padding: 10px 24px 160px 24px;
+	padding: 20rpx 48rpx 320rpx 48rpx;
 	/* Increased bottom padding to clear nav bar */
 }
 
 /* Overview Card */
 .overview-card {
-	border-radius: 20px;
-	padding: 16px;
-	margin-bottom: 20px;
+	border-radius: 40rpx;
+	padding: 32rpx;
+	margin-top: 40rpx;
+	margin-bottom: 40rpx;
 	transition: all 0.3s ease;
 }
 
 .overview-card.normal {
 	background: #F0F9EB;
-	border: 1px solid #67C23A;
+	border: 2rpx solid #E89310;
 }
 
 .overview-card.warning {
 	background: #FDF6EC;
-	border: 1px solid #E6A23C;
+	border: 2rpx solid #E89310;
 }
 
 .overview-card.abnormal {
 	background: #FEF0F0;
-	border: 2px solid #F56C6C;
-	border: 2px solid #F56C6C;
+	border: 4rpx solid #F56C6C;
 	/* Thicker border for glaring effect */
+}
+
+/* Status-Based Colors */
+/* Normal #2E7D32 #E8F5E9 */
+.status-normal {
+	background: #E8F5E9;
+	border: 2rpx solid #2E7D32;
+
+	.overview-title,
+	.status-text,
+	.arrow-down {
+		color: #2E7D32;
+	}
+
+	.status-tag {
+		background: rgba(46, 125, 50, 0.1);
+	}
+}
+
+/* Confirming #F9A825 #FFF8E1 */
+.status-confirming {
+	background: #FFF8E1;
+	border: 2rpx solid #F9A825;
+
+	.overview-title,
+	.status-text,
+	.arrow-down {
+		color: #F9A825;
+	}
+
+	.status-tag {
+		background: rgba(249, 168, 37, 0.1);
+	}
+}
+
+/* Dirty #C0A16B #FAF7F0 */
+.status-dirty {
+	background: #FAF7F0;
+	border: 2rpx solid #C0A16B;
+
+	.overview-title,
+	.status-text,
+	.arrow-down {
+		color: #C0A16B;
+	}
+
+	.status-tag {
+		background: rgba(192, 161, 107, 0.1);
+	}
+}
+
+/* Abnormal #C62828 #FDECEA */
+.status-abnormal {
+	background: #FDECEA;
+	border: 2rpx solid #C62828;
+
+	.overview-title,
+	.status-text,
+	.arrow-down {
+		color: #C62828;
+	}
+
+	.status-tag {
+		background: rgba(198, 40, 40, 0.1);
+	}
+}
+
+/* Repair #B71C1C #F9E5E5 */
+.status-repair {
+	background: #F9E5E5;
+	border: 2rpx solid #B71C1C;
+
+	.overview-title,
+	.status-text,
+	.arrow-down {
+		color: #B71C1C;
+	}
+
+	.status-tag {
+		background: rgba(183, 28, 28, 0.1);
+	}
+}
+
+/* Cleaning #1976D2 #E3F2FD */
+.status-cleaning {
+	background: #E3F2FD;
+	border: 2rpx solid #1976D2;
+
+	.overview-title,
+	.status-text,
+	.arrow-down {
+		color: #1976D2;
+	}
+
+	.status-tag {
+		background: rgba(25, 118, 210, 0.1);
+	}
+}
+
+/* Fixing #546E7A #ECEFF1 */
+.status-fixing {
+	background: #ECEFF1;
+	border: 2rpx solid #546E7A;
+
+	.overview-title,
+	.status-text,
+	.arrow-down {
+		color: #546E7A;
+	}
+
+	.status-tag {
+		background: rgba(84, 110, 122, 0.1);
+	}
 }
 
 .overview-card.empty-frosted {
 	background: rgba(255, 255, 255, 0.3);
-	backdrop-filter: blur(10px);
-	-webkit-backdrop-filter: blur(10px);
-	border: 1px solid rgba(255, 255, 255, 0.5);
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+	backdrop-filter: blur(20rpx);
+	-webkit-backdrop-filter: blur(20rpx);
+	border: 2rpx solid rgba(255, 255, 255, 0.5);
+	box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.05);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	min-height: 130px;
+	min-height: 260rpx;
 	/* Preserve height */
 }
 
@@ -850,20 +1341,20 @@ page {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 12px;
+	margin-bottom: 24rpx;
 }
 
 .overview-title {
-	font-size: $font-size-body-lg;
-	font-weight: $font-weight-semibold;
-	opacity: 0.9;
-	color: $sull-text-main;
-	/* Ensure dark text */
+	/* font-size: $font-size-body-lg; */
+	font-size: 32rpx;
+	font-weight: $font-weight-bold;
+	/* Color handled by status class */
+	/* color: $sull-text-main; */
 }
 
 .status-tag {
-	padding: 4px 12px;
-	border-radius: 20px;
+	padding: 8rpx 24rpx;
+	border-radius: 40rpx;
 }
 
 .status-text {
@@ -884,7 +1375,7 @@ page {
 }
 
 .stat-num {
-	font-size: $font-size-h4;
+	font-size: 36rpx;
 	font-weight: $font-weight-bold;
 	color: $sull-text-main;
 	line-height: 1;
@@ -894,17 +1385,17 @@ page {
 	display: flex;
 	align-items: baseline;
 	justify-content: center;
-	gap: 2px;
-	margin-bottom: 4px;
+	gap: 4rpx;
+	margin-bottom: 8rpx;
 }
 
 .stat-unit {
-	font-size: 12px;
+	font-size: 24rpx;
 	color: $sull-text-secondary;
 	font-weight: normal;
 
 	&.warning {
-		color: #E6A23C;
+		color: #E89310;
 	}
 
 	&.danger {
@@ -914,7 +1405,7 @@ page {
 
 /* Updated for light background contrast */
 .stat-num.warning {
-	color: #E6A23C;
+	color: #E89310;
 }
 
 .stat-num.danger {
@@ -932,7 +1423,7 @@ page {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 16px;
+	margin-bottom: 32rpx;
 }
 
 .section-title {
@@ -948,47 +1439,50 @@ page {
 
 /* Quick Actions Grid */
 .action-swiper {
-	height: 230px;
-	margin-bottom: 0px;
+	height: 400rpx;
+	/* Adjusted height for 2 rows */
+	margin-bottom: 20rpx;
 }
 
 .action-grid {
+	width: 100%;
 	display: flex;
 	flex-wrap: wrap;
-	gap: 16px;
-	/* margin-bottom removed as it is handled by swiper container */
-	padding: 10px 4px 0 4px;
-	/* Increased top padding to prevent bell clipping */
+	padding: 10rpx 0;
+	box-sizing: border-box;
 }
 
 .action-item {
-	width: calc(25% - 12px);
+	/* Strict 25% width with no padding/borders to prevent wrapping */
+	width: 25%;
+	flex: 0 0 25%;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	margin-bottom: 24rpx;
 }
 
 .action-icon-box {
 	position: relative;
 	/* Added for reminder positioning */
-	width: 56px;
-	height: 56px;
+	width: 112rpx;
+	height: 112rpx;
 	border-radius: $radius-lg;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	margin-bottom: 8px;
+	margin-bottom: 16rpx;
 	background-color: $sull-color-white;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.03);
 }
 
 .reminder-bell {
 	position: absolute;
-	top: -8px;
-	right: -8px;
-	width: 20px;
-	height: 20px;
-	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23F56C6C'%3E%3Cpath d='M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z'/%3E%3C/svg%3E");
+	top: -16rpx;
+	right: -16rpx;
+	width: 40rpx;
+	height: 40rpx;
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23E89310'%3E%3Cpath d='M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z'/%3E%3C/svg%3E");
 	background-size: contain;
 	background-repeat: no-repeat;
 	animation: bell-shake 1.2s infinite ease-in-out;
@@ -1035,7 +1529,18 @@ page {
 }
 
 .action-icon {
-	font-size: 24px;
+	font-size: 48rpx;
+}
+
+.action-icon-img {
+	width: 56rpx;
+	height: 56rpx;
+	margin-bottom: 8rpx;
+}
+
+.icon-img {
+	width: 32rpx;
+	height: 32rpx;
 }
 
 .action-label {
@@ -1055,20 +1560,20 @@ page {
 }
 
 .guide-icon-box {
-	width: 64px;
-	height: 64px;
+	width: 128rpx;
+	height: 128rpx;
 	border-radius: 50%;
 	/* 3D Soft Gradient - Orange */
-	background: linear-gradient(135deg, #FFD666, #E6A23C);
+	background: linear-gradient(135deg, #FFD666, #E89310);
 	/* Depth Shadows */
 	box-shadow:
-		0 10px 20px rgba(230, 162, 60, 0.25),
-		inset 2px 2px 5px rgba(255, 255, 255, 0.5),
-		inset -2px -2px 5px rgba(0, 0, 0, 0.1);
+		0 20rpx 40rpx rgba(230, 162, 60, 0.25),
+		inset 4rpx 4rpx 10rpx rgba(255, 255, 255, 0.5),
+		inset -4rpx -4rpx 10rpx rgba(0, 0, 0, 0.1);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	margin-bottom: 12px;
+	margin-bottom: 24rpx;
 	position: relative;
 	overflow: hidden;
 	z-index: 10;
@@ -1102,50 +1607,49 @@ page {
 }
 
 .guide-icon {
-	font-size: 32px;
+	font-size: 64rpx;
 	color: #FFFFFF;
 	font-weight: bold;
 	line-height: 1;
-	margin-top: -4px;
+	margin-top: -8rpx;
 }
 
 .guide-title {
-	font-size: 18px;
+	font-size: 36rpx;
 	font-weight: bold;
 	color: #333;
-	margin-bottom: 6px;
+	margin-bottom: 12rpx;
 }
 
 .guide-desc {
-	font-size: 14px;
+	font-size: 28rpx;
 	color: #666;
 	margin-bottom: 0;
 }
 
-/* Alert List */
 .alert-list {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: 24rpx;
 }
 
 .alert-card {
 	background: $sull-color-white;
 	border-radius: $radius-lg;
-	padding: 16px;
+	padding: 32rpx;
 	display: flex;
 	align-items: center;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
 }
 
 .alert-left {
-	margin-right: 12px;
+	margin-right: 24rpx;
 }
 
 .alert-type-tag {
-	padding: 4px 8px;
-	border-radius: 4px;
-	font-size: 11px;
+	padding: 8rpx 16rpx;
+	border-radius: 8rpx;
+	font-size: 22rpx;
 	font-weight: bold;
 }
 
@@ -1156,7 +1660,7 @@ page {
 
 .tag-warning {
 	background: #FDF6EC;
-	color: #E6A23C;
+	color: #E89310;
 }
 
 .tag-info {
@@ -1173,7 +1677,7 @@ page {
 .alert-msg {
 	font-size: $font-size-body-md;
 	color: $sull-text-main;
-	margin-bottom: 4px;
+	margin-bottom: 8rpx;
 	line-height: 1.4;
 
 	overflow: hidden;
@@ -1185,19 +1689,19 @@ page {
 }
 
 .alert-time {
-	font-size: 11px;
+	font-size: 22rpx;
 	color: $sull-text-secondary;
 }
 
 .alert-action {
-	margin-left: 12px;
+	margin-left: 24rpx;
 	display: flex;
-	gap: 8px;
+	gap: 16rpx;
 }
 
 .icon-action-btn {
-	width: 32px;
-	height: 32px;
+	width: 64rpx;
+	height: 64rpx;
 	border-radius: 50%;
 	display: flex;
 	align-items: center;
@@ -1210,17 +1714,17 @@ page {
 
 	&.process-btn {
 		background: #EAF2FF;
-		border: 1px solid #D0E7FF;
+		border: 2rpx solid #D0E7FF;
 	}
 
 	&.ignore-btn {
 		background: #F4F4F5;
-		border: 1px solid #E9E9EB;
+		border: 2rpx solid #E9E9EB;
 	}
 }
 
 .action-icon-small {
-	font-size: 16px;
+	font-size: 32rpx;
 	line-height: 1;
 }
 
@@ -1230,26 +1734,26 @@ page {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	padding: 30px 0;
+	padding: 60rpx 0;
 }
 
 .empty-icon-simple {
-	width: 48px;
-	height: 48px;
+	width: 160rpx;
+	height: 160rpx;
+	margin-bottom: 8rpx;
 	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23DCDFE6'%3E%3Cpath d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z'/%3E%3C/svg%3E");
 	background-size: contain;
 	background-repeat: no-repeat;
-	margin-bottom: 8px;
 	opacity: 0.5;
 }
 
 .empty-text-simple {
-	font-size: 13px;
+	font-size: 26rpx;
 	color: $sull-text-secondary;
 }
 
 .bottom-spacer {
-	height: 60px;
+	height: 120rpx;
 }
 
 /* Modal Styles (Global or Scoped Root) */
@@ -1269,7 +1773,7 @@ page {
 .modal-content {
 	width: 80%;
 	background: #fff;
-	border-radius: 12px;
+	border-radius: 24rpx;
 	overflow: hidden;
 	animation: modal-pop 0.3s ease-out;
 }
@@ -1287,36 +1791,36 @@ page {
 }
 
 .modal-header {
-	padding: 16px;
-	border-bottom: 1px solid #EBEEF5;
+	padding: 32rpx;
+	border-bottom: 2rpx solid #EBEEF5;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
 
 	.modal-title {
-		font-size: 16px;
+		font-size: 32rpx;
 		font-weight: bold;
 		color: #303133;
 	}
 
 	.close-btn {
-		font-size: 20px;
+		font-size: 40rpx;
 		color: #909399;
-		padding: 4px;
+		padding: 8rpx;
 	}
 }
 
 .modal-body {
-	padding: 20px 16px;
+	padding: 40rpx 32rpx;
 }
 
 .modal-input {
-	height: 48px;
+	height: 96rpx;
 	background: #F5F7FA;
-	border-radius: 8px;
-	padding: 0 12px;
-	font-size: 14px;
-	margin-bottom: 16px;
+	border-radius: 16rpx;
+	padding: 0 24rpx;
+	font-size: 28rpx;
+	margin-bottom: 32rpx;
 
 	&:last-child {
 		margin-bottom: 0;
@@ -1325,14 +1829,14 @@ page {
 
 .modal-footer {
 	display: flex;
-	padding: 0 16px 16px 16px;
-	gap: 12px;
+	padding: 0 32rpx 32rpx 32rpx;
+	gap: 24rpx;
 }
 
 .btn {
 	flex: 1;
-	font-size: 14px;
-	border-radius: 20px;
+	font-size: 28rpx;
+	border-radius: 40rpx;
 
 	&::after {
 		border: none;
@@ -1358,18 +1862,18 @@ page {
 
 .timeline-body {
 	flex: 1;
-	padding: 20px;
+	padding: 40rpx;
 	box-sizing: border-box;
 }
 
 .timeline-list {
-	padding-left: 10px;
+	padding-left: 20rpx;
 }
 
 .timeline-item {
 	position: relative;
-	padding-left: 20px;
-	padding-bottom: 24px;
+	padding-left: 40rpx;
+	padding-bottom: 48rpx;
 }
 
 .timeline-item:last-child {
@@ -1380,26 +1884,26 @@ page {
 	position: absolute;
 	left: 0;
 	top: 0;
-	width: 20px;
+	width: 40rpx;
 	height: 100%;
 	display: flex;
 	justify-content: center;
 }
 
 .timeline-dot {
-	width: 8px;
-	height: 8px;
+	width: 16rpx;
+	height: 16rpx;
 	border-radius: 50%;
 	background-color: $sull-color-primary;
-	margin-top: 16px;
+	margin-top: 32rpx;
 	/* Align with content top approx */
 	z-index: 1;
 }
 
 .node-icon {
-	width: 16px;
-	height: 16px;
-	margin-top: 12px;
+	width: 32rpx;
+	height: 32rpx;
+	margin-top: 24rpx;
 	z-index: 1;
 	background-color: $sull-color-primary;
 	-webkit-mask-size: contain;
@@ -1425,12 +1929,12 @@ page {
 
 .timeline-line {
 	position: absolute;
-	left: 9px;
-	top: 24px;
+	left: 18rpx;
+	top: 48rpx;
 	/* Start below first node/dot */
-	bottom: -10px;
+	bottom: -20rpx;
 	/* Extend to next */
-	width: 2px;
+	width: 4rpx;
 	background-color: #E4E7ED;
 }
 
@@ -1440,7 +1944,7 @@ page {
 
 /* Adjust line for start/end icons which are larger */
 .timeline-node.is-start~.timeline-line {
-	top: 28px;
+	top: 56rpx;
 }
 
 /* If end node is present, the previous line needs to connect to it. 
@@ -1451,58 +1955,62 @@ page {
 
 .timeline-content {
 	background: #F8F9FB;
-	padding: 12px;
-	border-radius: 8px;
-	margin-left: 10px;
+	padding: 24rpx;
+	border-radius: 16rpx;
+	margin-left: 20rpx;
 	/* Space from dot layout */
 }
 
 .timeline-header {
 	display: flex;
 	justify-content: space-between;
-	margin-bottom: 6px;
-	font-size: 12px;
+	margin-bottom: 12rpx;
+	font-size: 24rpx;
 	color: #909399;
 }
 
 .timeline-desc {
-	font-size: 14px;
+	font-size: 28rpx;
 	color: #303133;
-	margin-bottom: 6px;
+	margin-bottom: 12rpx;
 	line-height: 1.4;
 }
 
 .timeline-footer {
-	font-size: 12px;
+	font-size: 24rpx;
 	color: #606266;
 	display: flex;
 	flex-wrap: wrap;
-	gap: 8px;
+	gap: 16rpx;
 }
 
 .timeline-status {
 	color: $sull-color-primary;
 }
 
-/* Custom Refresher */
+/* Refresher */
 .custom-refresher {
-	height: 60px;
+	height: 120rpx;
 	width: 100%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	position: absolute;
+	top: -120rpx;
+	left: 0;
+	transition: transform 0.2s linear;
 }
 
 .refresher-content {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 4px;
+	gap: 8rpx;
 }
 
 .refresher-icon {
-	width: 32px;
-	height: 32px;
+	width: 64rpx;
+	height: 64rpx;
 	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
 	background-size: contain;
 	background-repeat: no-repeat;
@@ -1514,7 +2022,7 @@ page {
 }
 
 .refresher-text {
-	font-size: 10px;
+	font-size: 20rpx;
 	color: $sull-color-primary;
 	opacity: 0.8;
 }
@@ -1527,7 +2035,7 @@ page {
 	}
 
 	50% {
-		transform: translateY(-6px);
+		transform: translateY(-12rpx);
 	}
 }
 
@@ -1563,23 +2071,23 @@ page {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	padding: 40px 0;
+	padding: 80rpx 0;
 }
 
 .empty-text-simple {
-	font-size: 14px;
+	font-size: 28rpx;
 	color: #999;
 	font-weight: normal;
-	letter-spacing: 0.5px;
+	letter-spacing: 1rpx;
 }
 
 .empty-icon-simple {
-	width: 48px;
-	height: 48px;
-	min-width: 48px;
-	min-height: 48px;
+	width: 96rpx;
+	height: 96rpx;
+	min-width: 96rpx;
+	min-height: 96rpx;
 	flex-shrink: 0;
-	margin-bottom: 8px;
+	margin-bottom: 16rpx;
 	background-color: #E0E0E0;
 	/* Slightly lighter for large icon */
 	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z'/%3E%3C/svg%3E");
@@ -1592,35 +2100,7 @@ page {
 	mask-position: center;
 }
 
-/* Todo Tabs */
-.todo-tabs {
-	display: flex;
-	background: #fff;
-	border-radius: 25px;
-	padding: 4px;
-	margin-bottom: 16px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
-}
-
-.todo-tab-item {
-	flex: 1;
-	height: 42px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 14px;
-	color: $sull-text-secondary;
-	font-weight: 500;
-	border-radius: 21px;
-	transition: all 0.3s;
-}
-
-.todo-tab-item.active {
-	background: $sull-color-primary;
-	color: #fff;
-	font-weight: 600;
-	box-shadow: 0 2px 6px rgba(149, 202, 255, 0.4);
-}
+/* Todo Tabs Styling integrated via component */
 
 /* Modal Styles (Global or Scoped Root) */
 .modal-mask {
@@ -1639,37 +2119,37 @@ page {
 .modal-content {
 	background: #fff;
 	width: 80%;
-	border-radius: 12px;
-	padding: 20px;
+	border-radius: 24rpx;
+	padding: 40rpx;
 }
 
 .modal-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 20px;
+	margin-bottom: 40rpx;
 }
 
 .modal-title {
-	font-size: 18px;
+	font-size: 36rpx;
 	font-weight: bold;
 }
 
 .close-btn {
-	font-size: 24px;
+	font-size: 48rpx;
 	color: #999;
 }
 
 .modal-body {
-	margin-bottom: 20px;
+	margin-bottom: 40rpx;
 }
 
 .modal-input {
-	border: 1px solid #eee;
-	border-radius: 8px;
-	padding: 10px;
-	margin-bottom: 12px;
-	font-size: 14px;
+	border: 2rpx solid #eee;
+	border-radius: 16rpx;
+	padding: 20rpx;
+	margin-bottom: 24rpx;
+	font-size: 28rpx;
 	display: block;
 	width: 100%;
 	box-sizing: border-box;
@@ -1678,12 +2158,12 @@ page {
 .modal-footer {
 	display: flex;
 	justify-content: flex-end;
-	gap: 12px;
+	gap: 24rpx;
 }
 
 .icon-action-btn {
-	width: 32px;
-	height: 32px;
+	width: 64rpx;
+	height: 64rpx;
 	border-radius: 50%;
 	display: flex;
 	align-items: center;
@@ -1696,18 +2176,18 @@ page {
 
 	&.process-btn {
 		background: #EAF2FF;
-		border: 1px solid #D0E7FF;
+		border: 2rpx solid #D0E7FF;
 	}
 
 	&.ignore-btn {
 		background: #F4F4F5;
-		border: 1px solid #E9E9EB;
+		border: 2rpx solid #E9E9EB;
 	}
 }
 
 .action-icon-svg {
-	width: 16px;
-	height: 16px;
+	width: 32rpx;
+	height: 32rpx;
 	background-repeat: no-repeat;
 	background-position: center;
 	background-size: contain;
@@ -1722,5 +2202,124 @@ page {
 .icon-ignore {
 	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23909399' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24'/%3E%3Cline x1='1' y1='1' x2='23' y2='23'/%3E%3C/svg%3E");
 }
-</style>
+
+/* Emergency Logic */
+.header-fixed.header-emergency {
+	background-color: #ffeaea;
+	/* Light red bg */
+	border-bottom: 2rpx solid #ff4d4f;
+	overflow: hidden;
 }
+
+.flash-effect {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: linear-gradient(135deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.8) 50%, rgba(255, 255, 255, 0) 100%);
+	transform: translate(-100%, -100%);
+	animation: flash 2s infinite;
+	pointer-events: none;
+	z-index: 1;
+}
+
+@keyframes flash {
+	0% {
+		transform: translate(-100%, -100%);
+	}
+
+	100% {
+		transform: translate(100%, 100%);
+	}
+}
+
+/* Rescue btn animation disabled
+.rescue-btn.rescuing {
+	animation: pulse-rotate 1s infinite;
+	box-shadow: 0 0 16rpx rgba(255, 0, 0, 0.8);
+	background-color: #fff0f0;
+	border: 2rpx solid #ff4d4f;
+}
+
+@keyframes pulse-rotate {
+	0% {
+		transform: scale(1) rotate(0deg);
+		box-shadow: 0 0 0 rgba(255, 77, 79, 0.7);
+	}
+
+	50% {
+		transform: scale(1.1) rotate(10deg);
+		box-shadow: 0 0 20rpx rgba(255, 77, 79, 1);
+	}
+
+	100% {
+		transform: scale(1) rotate(0deg);
+		box-shadow: 0 0 0 rgba(255, 77, 79, 0.7);
+	}
+}
+*/
+
+.overview-card.status-rescuing {
+	background: linear-gradient(135deg, #fff0f0 0%, #ffeaea 100%);
+	box-shadow: 0 0 0 rgba(255, 77, 79, 0);
+	border: 2rpx solid #ff4d4f;
+	animation: heartbeat 1.5s infinite;
+}
+
+.overview-card.status-rescuing .status-text {
+	color: #ff4d4f !important;
+	font-weight: bold;
+}
+
+@keyframes heartbeat {
+	0% {
+		box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.4);
+	}
+
+	15% {
+		box-shadow: 0 0 24rpx 8rpx rgba(255, 77, 79, 0.8);
+	}
+
+	30% {
+		box-shadow: 0 0 4rpx 0 rgba(255, 77, 79, 0.4);
+	}
+
+	45% {
+		box-shadow: 0 0 48rpx 12rpx rgba(255, 77, 79, 0.9);
+		/* Larger and stronger second beat */
+	}
+
+	70% {
+		box-shadow: 0 0 0 0 rgba(255, 77, 79, 0);
+	}
+
+	100% {
+		box-shadow: 0 0 0 0 rgba(255, 77, 79, 0);
+	}
+}
+
+.status-container {
+	display: flex;
+	align-items: center;
+	gap: 16rpx;
+}
+
+.rescuing-tag {
+	padding: 4rpx 16rpx;
+	border: 2rpx solid #ff4d4f;
+	border-radius: 8rpx;
+	color: #ff4d4f;
+	font-size: 24rpx;
+	font-weight: bold;
+	background: rgba(255, 77, 79, 0.1);
+}
+
+.rescue-timer {
+	font-family: monospace;
+	/* Monospaced for stable digits */
+	color: #ff4d4f;
+	font-weight: bold;
+	font-size: 28rpx;
+}
+</style>

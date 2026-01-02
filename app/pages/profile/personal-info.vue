@@ -66,7 +66,7 @@
                 <!-- Change Password Button (Styled differently/secondary) -->
                 <view class="button-container-secondary">
                     <button class="btn-secondary" @click="showPasswordModal = true">{{ $t('profile.change_password')
-                    }}</button>
+                        }}</button>
                 </view>
 
             </view>
@@ -100,9 +100,9 @@
                 </view>
                 <view class="modal-footer">
                     <button class="btn btn-secondary btn-sm" @click="closePasswordModal">{{ $t('common.cancel')
-                        }}</button>
+                    }}</button>
                     <button class="btn btn-primary btn-sm" @click="submitPasswordChange">{{ $t('common.confirm')
-                        }}</button>
+                    }}</button>
                 </view>
             </view>
         </view>
@@ -112,6 +112,7 @@
 
 <script>
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
 
 export default {
     data() {
@@ -152,17 +153,20 @@ export default {
             uni.navigateBack();
         },
         fetchUserInfo() {
-            const info = uni.getStorageSync('userInfo');
-            if (info) {
-                this.userInfo = info;
-                this.formData.UserTrueName = info.userTrueName || info.UserTrueName;
-                this.formData.Email = info.email || info.Email;
-                this.formData.Remark = info.remark || info.Remark;
-                this.formData.Gender = (info.gender !== undefined) ? info.gender : (info.Gender !== undefined ? info.Gender : 0);
-                this.formData.HeadImageUrl = info.headImageUrl || info.HeadImageUrl;
+            return request.post('api/user/GetCurrentUserInfo').then(res => {
+                if (res.status && res.data) {
+                    storage.set('userInfo', res.data);
+                    this.userInfo = res.data;
+                    const info = res.data;
+                    this.formData.UserTrueName = info.userTrueName || info.UserTrueName;
+                    this.formData.Email = info.email || info.Email;
+                    this.formData.Remark = info.remark || info.Remark;
+                    this.formData.Gender = (info.gender !== undefined) ? info.gender : (info.Gender !== undefined ? info.Gender : 0);
+                    this.formData.HeadImageUrl = info.headImageUrl || info.HeadImageUrl;
 
-                this.updateAvatarUrl(this.formData.HeadImageUrl);
-            }
+                    this.updateAvatarUrl(this.formData.HeadImageUrl);
+                }
+            }).catch(err => console.error(err));
         },
         updateAvatarUrl(path) {
             if (path) {
@@ -185,13 +189,28 @@ export default {
                 count: 1,
                 sizeType: ['compressed'],
                 success: (res) => {
-                    const tempFilePaths = res.tempFilePaths;
-                    this.uploadAvatar(tempFilePaths[0], res.tempFiles[0].name);
+                    let fileName = '';
+                    const filePath = res.tempFilePaths[0];
+
+                    // #ifdef H5
+                    fileName = res.tempFiles[0].name;
+                    // #endif
+
+                    // #ifndef H5
+                    // Extract filename from path for App/MP
+                    fileName = filePath.substring(filePath.lastIndexOf('/') + 1);
+                    // #endif
+
+                    if (!fileName) {
+                        uni.showToast({ title: this.$t('common.file_name_error'), icon: 'none' });
+                        return;
+                    }
+                    this.uploadAvatar(filePath, fileName);
                 }
             });
         },
         uploadAvatar(filePath, fileName) {
-            const token = uni.getStorageSync('token');
+            const token = storage.getToken();
             uni.uploadFile({
                 url: request.config.BASE_URL + 'api/sys_user/upload',
                 filePath: filePath,
@@ -209,9 +228,15 @@ export default {
 
                     if (uploadFileRes.statusCode === 200 && (data.status || data.success)) {
                         const newAvatarPath = data.data + fileName;
-                        // Update local form data
-                        this.formData.HeadImageUrl = newAvatarPath;
-                        this.updateAvatarUrl(newAvatarPath);
+                        const updateData = {
+                            ...this.userInfo,
+                            img: (request.config.RESOURCE_URL || '') + (this.userInfo.headImageUrl || this.userInfo.HeadImageUrl),
+                            headImageUrl: newAvatarPath
+                        };
+                        request.post('api/user/updateUserInfo', updateData).then(() => {
+                            uni.showToast({ title: this.$t('profile.save_success'), icon: 'success' });
+                            this.fetchUserInfo();
+                        }).catch(err => console.error(err));
                     } else {
                         uni.showToast({
                             title: data.message || 'Upload Failed',
@@ -250,7 +275,8 @@ export default {
                 Gender: this.formData.Gender,
                 Email: this.formData.Email,
                 Remark: this.formData.Remark,
-                HeadImageUrl: this.formData.HeadImageUrl
+                HeadImageUrl: this.formData.HeadImageUrl,
+                img: (request.config.RESOURCE_URL || '') + (this.userInfo.headImageUrl || this.userInfo.HeadImageUrl)
             };
 
             request.post('api/user/updateUserInfo', updateData)
@@ -260,7 +286,7 @@ export default {
                         // Update local storage
                         const newUser = { ...this.userInfo, ...updateData, userTrueName: updateData.UserTrueName, headImageUrl: updateData.HeadImageUrl };
                         // Maintain camelCase compatibility if original was camelCase
-                        uni.setStorageSync('userInfo', newUser);
+                        storage.set('userInfo', newUser);
 
                         setTimeout(() => uni.navigateBack(), 1000);
                     } else {
@@ -314,8 +340,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-
-
 page {
     background-color: #F8F8F8;
     height: 100%;
@@ -335,7 +359,7 @@ page {
 }
 
 .scroll-content {
-    padding: 0 24px 40px;
+    padding: 0 48rpx 80rpx;
 }
 
 /* Header */
@@ -343,21 +367,21 @@ page {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 40px 0 20px 0;
-    height: 44px;
+    padding: 80rpx 0 40rpx 0;
+    height: 88rpx;
 }
 
 .back-btn {
-    width: 40px;
-    height: 40px;
+    width: 80rpx;
+    height: 80rpx;
     display: flex;
     align-items: center;
     justify-content: flex-start;
 }
 
 .icon-arrow-left {
-    width: 24px;
-    height: 24px;
+    width: 48rpx;
+    height: 48rpx;
     background-color: $sull-text-main;
     -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z'/%3E%3C/svg%3E");
     -webkit-mask-size: contain;
@@ -370,66 +394,66 @@ page {
 }
 
 .page-title {
-    font-size: 18px;
+    font-size: 36rpx;
     font-weight: 600;
     color: $sull-text-main;
 }
 
 .placeholder-right {
-    width: 40px;
+    width: 80rpx;
 }
 
 /* Form */
 .form-container {
     background: #FFFFFF;
-    border-radius: 16px;
-    padding: 20px;
-    margin-top: 10px;
+    border-radius: 32rpx;
+    padding: 40rpx;
+    margin-top: 20rpx;
 }
 
 .form-item {
     display: flex;
     flex-direction: column;
-    margin-bottom: 20px;
+    margin-bottom: 40rpx;
 }
 
 .avatar-item {
     align-items: center;
-    margin-bottom: 30px;
+    margin-bottom: 60rpx;
 }
 
 .avatar-wrapper {
     position: relative;
-    margin-top: 10px;
+    margin-top: 20rpx;
 }
 
 .avatar {
-    width: 80px;
-    height: 80px;
+    width: 160rpx;
+    height: 160rpx;
     border-radius: 50%;
     background-color: #f0f0f0;
-    border: 2px solid #fff;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 4rpx solid #fff;
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
 }
 
 .icon-camera {
     position: absolute;
     bottom: 0;
     right: 0;
-    width: 24px;
-    height: 24px;
+    width: 48rpx;
+    height: 48rpx;
     background-color: $sull-color-primary;
     border-radius: 50%;
-    border: 2px solid #fff;
+    border: 4rpx solid #fff;
     -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zm0 4.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm8-4.5h-2.19l-.81-1.48C16.66 6.66 16.03 6 15.19 6H8.81c-.84 0-1.47.66-1.81 1.52L6.19 9H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V11c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zm0 4.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm8-4.5h-2.19l-.81-1.48C16.66 6.66 16.03 6 15.19 6H8.81c-.84 0-1.47.66-1.81 1.52L6.19 9H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V11c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
-    background-size: 16px;
+    background-size: 32rpx;
     background-repeat: no-repeat;
     background-position: center;
     /* Using mask-image above with background-color to color the icon white? No, primary bg, white icon. */
     /* Let's fix mask logic: bg color is primary. Image should be white. */
-    -webkit-mask-size: 16px;
-    mask-size: 16px;
+    -webkit-mask-size: 32rpx;
+    mask-size: 32rpx;
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
     -webkit-mask-position: center;
@@ -447,8 +471,8 @@ page {
     background-color: #fff;
     -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zm0 4.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm8-4.5h-2.19l-.81-1.48C16.66 6.66 16.03 6 15.19 6H8.81c-.84 0-1.47.66-1.81 1.52L6.19 9H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V11c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zm0 4.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm8-4.5h-2.19l-.81-1.48C16.66 6.66 16.03 6 15.19 6H8.81c-.84 0-1.47.66-1.81 1.52L6.19 9H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V11c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
-    -webkit-mask-size: 14px;
-    mask-size: 14px;
+    -webkit-mask-size: 28rpx;
+    mask-size: 28rpx;
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
     -webkit-mask-position: center;
@@ -457,19 +481,19 @@ page {
 }
 
 .label {
-    font-size: 14px;
+    font-size: 28rpx;
     color: $sull-text-secondary;
-    margin-bottom: 8px;
+    margin-bottom: 16rpx;
     font-weight: 500;
 }
 
 .input,
 .picker-input {
-    height: 48px;
+    height: 96rpx;
     background: #F6F8FA;
-    border-radius: 12px;
-    padding: 0 16px;
-    font-size: 14px;
+    border-radius: 24rpx;
+    padding: 0 32rpx;
+    font-size: 28rpx;
     color: $sull-text-main;
     display: flex;
     align-items: center;
@@ -481,8 +505,8 @@ page {
 }
 
 .icon-arrow-down {
-    width: 20px;
-    height: 20px;
+    width: 40rpx;
+    height: 40rpx;
     background-color: #ccc;
     -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z'/%3E%3C/svg%3E");
@@ -495,20 +519,20 @@ page {
 }
 
 .button-container {
-    margin-top: 30px;
+    margin-top: 60rpx;
 }
 
 .button-container-secondary {
-    margin-top: 16px;
+    margin-top: 32rpx;
 }
 
 .btn-save {
     width: 100%;
-    height: 50px;
+    height: 100rpx;
     background: $sull-color-primary;
     color: #FFFFFF;
-    border-radius: 25px;
-    font-size: 16px;
+    border-radius: 50rpx;
+    font-size: 32rpx;
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -517,12 +541,12 @@ page {
 
 .btn-secondary {
     width: 100%;
-    height: 50px;
+    height: 100rpx;
     background: #FFFFFF;
     color: $sull-color-primary;
-    border: 1px solid $sull-color-primary;
-    border-radius: 25px;
-    font-size: 16px;
+    border: 2rpx solid $sull-color-primary;
+    border-radius: 50rpx;
+    font-size: 32rpx;
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -546,55 +570,55 @@ page {
 .modal-content {
     width: 85%;
     background: #FFFFFF;
-    border-radius: 16px;
+    border-radius: 32rpx;
     overflow: hidden;
 }
 
 .modal-header {
-    padding: 16px;
-    border-bottom: 1px solid #eee;
+    padding: 32rpx;
+    border-bottom: 2rpx solid #eee;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 .modal-title {
-    font-size: 16px;
+    font-size: 32rpx;
     font-weight: bold;
     color: $sull-text-main;
 }
 
 .close-btn {
-    font-size: 24px;
+    font-size: 48rpx;
     color: #999;
-    padding: 0 8px;
+    padding: 0 16rpx;
 }
 
 .modal-body {
-    padding: 20px;
+    padding: 40rpx;
 }
 
 .modal-input {
-    height: 44px;
-    border: 1px solid #eee;
-    border-radius: 8px;
-    padding: 0 12px;
-    font-size: 14px;
+    height: 88rpx;
+    border: 2rpx solid #eee;
+    border-radius: 16rpx;
+    padding: 0 24rpx;
+    font-size: 28rpx;
     width: 100%;
     box-sizing: border-box;
     display: block;
 }
 
 .modal-footer {
-    padding: 16px;
+    padding: 32rpx;
     display: flex;
-    gap: 12px;
-    border-top: 1px solid #eee;
+    gap: 24rpx;
+    border-top: 2rpx solid #eee;
 }
 
 .btn {
     flex: 1;
-    height: 40px;
+    height: 80rpx;
     /* Adjust height if btn-sm overrides aren't enough or need specificity, but base class handles padding */
     /* border-radius is handled by .btn class in sull.scss */
     /* Inherit or reset properties if needed, but here we use global classes */
@@ -602,6 +626,6 @@ page {
 
 /* Overrides for local modal layout if global classes aren't enough */
 .modal-footer .btn {
-    min-width: 80px;
+    min-width: 160rpx;
 }
 </style>

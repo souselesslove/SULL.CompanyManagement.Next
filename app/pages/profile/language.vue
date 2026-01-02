@@ -7,7 +7,7 @@
                 <view class="refresher-content">
                     <view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
                     <text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
-                        }}</text>
+                    }}</text>
                 </view>
             </view>
 
@@ -116,8 +116,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-
-
 page {
     background-color: $sull-color-background;
     height: 100%;
@@ -138,7 +136,7 @@ page {
 }
 
 .scroll-content {
-    padding: 0 24px;
+    padding: 0 48rpx;
     min-height: 100%;
     display: flex;
     flex-direction: column;
@@ -149,22 +147,22 @@ page {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 40px 0 20px 0;
+    padding: 80rpx 0 40rpx 0;
     /* Adjust top padding for status bar if needed */
-    height: 44px;
+    height: 88rpx;
 }
 
 .back-btn {
-    width: 40px;
-    height: 40px;
+    width: 80rpx;
+    height: 80rpx;
     display: flex;
     align-items: center;
     justify-content: flex-start;
 }
 
 .icon-arrow-left {
-    width: 24px;
-    height: 24px;
+    width: 48rpx;
+    height: 48rpx;
     background-color: $sull-text-main;
     -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z'/%3E%3C/svg%3E");
     -webkit-mask-size: contain;
@@ -177,21 +175,21 @@ page {
 }
 
 .page-title {
-    font-size: 18px;
+    font-size: 36rpx;
     font-weight: 600;
     color: $sull-text-main;
 }
 
 .placeholder-right {
-    width: 40px;
+    width: 80rpx;
 }
 
 /* Language List */
 .language-list {
-    margin-top: 20px;
+    margin-top: 40rpx;
     background: #FFFFFF;
-    border-radius: 16px;
-    padding: 0 16px;
+    border-radius: 32rpx;
+    padding: 0 32rpx;
     flex: 1;
 }
 
@@ -199,8 +197,8 @@ page {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 60px;
-    border-bottom: 1px solid $sull-color-line;
+    height: 120rpx;
+    border-bottom: 2rpx solid $sull-color-line;
 }
 
 .language-item:last-child {
@@ -208,7 +206,7 @@ page {
 }
 
 .lang-name {
-    font-size: 16px;
+    font-size: 32rpx;
     color: $sull-text-main;
 }
 
@@ -219,11 +217,11 @@ page {
 
 .check-icon {
     color: $sull-color-primary;
-    font-size: 18px;
+    font-size: 36rpx;
     font-weight: bold;
 }
 
 .bottom-spacer {
-    height: 40px;
+    height: 80rpx;
 }
 </style>

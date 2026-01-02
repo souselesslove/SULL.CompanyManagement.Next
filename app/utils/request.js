@@ -1,10 +1,12 @@
+import { storage } from './storage.js';
+
 // Server Configuration
 const SERVER_CONFIG = {
     // Replace with your actual server address
-    BASE_URL: 'http://10.0.0.1:64624/',
-    RESOURCE_URL: 'http://10.0.0.1:64624/',
-    // BASE_URL: 'https://www.gdssbh.com/cmfv2/',
-    // RESOURCE_URL: 'https://www.gdssbh.com/cmfv2/',
+    // BASE_URL: 'http://10.0.0.1:64624/',
+    // RESOURCE_URL: 'http://10.0.0.1:64624/',
+    BASE_URL: 'https://www.gdssbh.com/cmfv2/',
+    RESOURCE_URL: 'https://www.gdssbh.com/cmfv2/',
     TIMEOUT: 30000
 };
 
@@ -20,8 +22,8 @@ const request = (options) => {
             ? options.url
             : SERVER_CONFIG.BASE_URL + options.url;
 
-        // Get token from storage
-        const token = uni.getStorageSync('token');
+        // Get token from storage manager (User Scoped)
+        const token = storage.getToken();
 
         // Default headers
         const header = {
@@ -76,7 +78,8 @@ const handleHttpError = (res) => {
     switch (res.statusCode) {
         case 401:
             message = 'Unauthorized (401)';
-            uni.removeStorageSync('token');
+            storage.remove('token');
+            storage.logout();
             uni.reLaunch({ url: '/pages/profile/profile' });
             break;
         case 403:
@@ -103,7 +106,7 @@ const handleHttpError = (res) => {
  */
 const replaceToken = () => {
     // We use a clean request without interception loop for token refresh to avoid recursion
-    const token = uni.getStorageSync('token');
+    const token = storage.getToken();
     if (!token) return;
 
     uni.request({
@@ -115,17 +118,19 @@ const replaceToken = () => {
         success: (res) => {
             if (res.statusCode >= 200 && res.statusCode < 300 && res.data && res.data.data) {
                 const newToken = res.data.data;
-                uni.setStorageSync('token', newToken);
+                storage.set('token', newToken);
                 console.log('Token refreshed successfully');
             } else {
                 // Refresh failed
-                uni.removeStorageSync('token');
+                storage.remove('token');
+                storage.logout();
                 uni.reLaunch({ url: '/pages/profile/profile' });
             }
         },
         fail: (err) => {
             console.error('Failed to replace token', err);
-            uni.removeStorageSync('token');
+            storage.remove('token');
+            storage.logout();
             uni.reLaunch({ url: '/pages/profile/profile' });
         }
     });

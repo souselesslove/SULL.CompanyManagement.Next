@@ -1,32 +1,51 @@
 <template>
-	<view class="bottom-nav">
-		<view class="nav-item" :class="{ active: activePage === 'home' }" @click="navTo('home')">
-			<view class="nav-icon icon-home"></view>
-			<text class="nav-label">{{ $t('index.nav.home') }}</text>
-		</view>
-		<view class="nav-item" :class="{ active: activePage === 'bigscreen' }" @click="navTo('bigscreen')">
-			<view class="nav-icon icon-screen"></view>
-			<text class="nav-label">{{ $t('index.nav.bigScreen') }}</text>
-		</view>
-		<view class="nav-item center-item">
-			<view class="center-btn">
-				<view class="center-icon icon-scan"></view>
+	<view class="nav-wrapper">
+		<view class="bottom-nav">
+			<view class="nav-item" :class="{ active: activePage === 'home' }" @click="navTo('home')">
+				<view class="nav-icon icon-home"></view>
+				<text class="nav-label">{{ $t('index.nav.home') }}</text>
+			</view>
+			<view class="nav-item" :class="{ active: activePage === 'bigscreen' }" @click="navTo('bigscreen')">
+				<view class="nav-icon icon-screen"></view>
+				<text class="nav-label">{{ $t('index.nav.bigScreen') }}</text>
+			</view>
+			<view class="nav-item center-item" @click="handleScan">
+				<view class="center-btn">
+					<view class="center-icon icon-scan"></view>
+				</view>
+			</view>
+			<view class="nav-item" :class="{ active: activePage === 'statistics' }" @click="navTo('statistics')">
+				<view class="nav-icon icon-stats"></view>
+				<text class="nav-label">{{ $t('index.nav.statistics') }}</text>
+			</view>
+			<view class="nav-item" :class="{ active: activePage === 'profile' }" @click="navTo('profile')">
+				<view class="nav-icon icon-user"></view>
+				<text class="nav-label">{{ $t('index.nav.profile') }}</text>
 			</view>
 		</view>
-		<view class="nav-item" :class="{ active: activePage === 'statistics' }" @click="navTo('statistics')">
-			<view class="nav-icon icon-stats"></view>
-			<text class="nav-label">{{ $t('index.nav.statistics') }}</text>
-		</view>
-		<view class="nav-item" :class="{ active: activePage === 'profile' }" @click="navTo('profile')">
-			<view class="nav-icon icon-user"></view>
-			<text class="nav-label">{{ $t('index.nav.profile') }}</text>
-		</view>
+
+		<SuccessModal v-model:visible="scanResultModal.visible" :title="$t('index.scan.title')"
+			:message="scanResultModal.message" :buttonText="$t('common.confirm')" />
 	</view>
 </template>
 
 <script>
+import SuccessModal from '@/components/SuccessModal/SuccessModal.vue';
+import { storage } from '@/utils/storage.js';
+
 export default {
 	name: 'BottomNav',
+	components: {
+		SuccessModal
+	},
+	data() {
+		return {
+			scanResultModal: {
+				visible: false,
+				message: ''
+			}
+		}
+	},
 	props: {
 		activePage: {
 			type: String,
@@ -46,25 +65,60 @@ export default {
 			if (url) {
 				uni.reLaunch({ url });
 			}
+		},
+		handleScan() {
+			uni.scanCode({
+				success: (res) => {
+					console.log('Scan result:', res);
+					// Check if result is a HTTP URL
+					// item.html?code=379630044868680%2bssa3213221
+					if (res.result && (res.result.indexOf('http') === 0 || res.result.indexOf('item.html') === 0)) {
+						storage.set('TEMP_WEBVIEW_URL', res.result);
+						uni.navigateTo({
+							url: '/pages/webview/webview'
+						});
+						return;
+					}
+					this.scanResultModal.message = `${this.$t('index.scan.result')}: ${res.result}\n${this.$t('index.scan.type')}: ${res.scanType}`;
+					this.scanResultModal.visible = true;
+				},
+				fail: (err) => {
+					console.error('Scan failed:', err);
+					if (err.errMsg.indexOf('cancel') === -1) {
+						uni.showToast({
+							title: this.$t('index.scan.cancel'),
+							icon: 'none'
+						});
+					}
+				}
+			});
 		}
 	}
 }
 </script>
 
 <style lang="scss" scoped>
+.nav-wrapper {
+	/* Root wrapper of the component */
+	pointer-events: none;
+	/* Let clicks pass through empty areas */
+}
+
 .bottom-nav {
 	position: fixed;
 	bottom: 0;
 	left: 0;
 	width: 100%;
-	height: calc(60px + env(safe-area-inset-bottom));
+	height: calc(120rpx + env(safe-area-inset-bottom));
 	background: transparent;
 	display: flex;
 	justify-content: space-around;
 	align-items: center;
 	padding-bottom: env(safe-area-inset-bottom);
-	filter: drop-shadow(0 -4px 10px rgba(0, 0, 0, 0.05));
-	z-index: 100;
+	filter: drop-shadow(0 -8rpx 20rpx rgba(0, 0, 0, 0.05));
+	z-index: 1000;
+	pointer-events: auto;
+	/* Enable clicks on the bar itself */
 }
 
 .bottom-nav::before {
@@ -75,18 +129,15 @@ export default {
 	width: 100%;
 	height: 100%;
 	background: #ffffff;
-	border-radius: 24px 24px 0 0;
+	border-radius: 48rpx 48rpx 0 0;
 	z-index: -1;
 }
 
 .bottom-nav::after {
 	content: '';
 	position: absolute;
-	top: -20px;
-	left: 50%;
-	transform: translateX(-50%);
-	width: 100px;
-	height: 90px;
+	width: 200rpx;
+	height: 180rpx;
 	border-radius: 50% 50% 0 0 / 100% 100% 0 0;
 	background: #ffffff;
 	z-index: -1;
@@ -96,13 +147,13 @@ export default {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	width: 60px;
+	width: 120rpx;
 }
 
 .nav-icon {
-	width: 24px;
-	height: 24px;
-	margin-bottom: 4px;
+	width: 48rpx;
+	height: 48rpx;
+	margin-bottom: 8rpx;
 	background-color: $sull-gray-50;
 	-webkit-mask-size: contain;
 	-webkit-mask-repeat: no-repeat;
@@ -127,28 +178,28 @@ export default {
 
 .center-item {
 	position: relative;
-	top: -20px;
+	top: -40rpx;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 }
 
 .center-btn {
-	width: 40px;
-	height: 40px;
+	width: 80rpx;
+	height: 80rpx;
 	background: $sull-color-primary;
 	border-radius: $radius-circle;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	box-shadow: 0 10px 20px rgba(149, 202, 255, 0.4);
-	border: 4px solid $sull-color-white;
-	margin-bottom: 4px;
+	box-shadow: 0 20rpx 40rpx rgba(149, 202, 255, 0.4);
+	border: 8rpx solid $sull-color-white;
+	margin-bottom: 8rpx;
 }
 
 .center-icon {
-	width: 32px;
-	height: 32px;
+	width: 64rpx;
+	height: 64rpx;
 	background-color: #fff;
 	-webkit-mask-size: contain;
 	-webkit-mask-repeat: no-repeat;

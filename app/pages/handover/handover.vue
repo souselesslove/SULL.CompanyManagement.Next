@@ -1,7 +1,8 @@
 <template>
 	<view class="page-container">
-		<!-- Custom Navigation Bar -->
-		<view class="custom-nav" :style="{ paddingTop: statusBarHeight + 'px' }">
+
+		<!-- Custom Navigation Bar (Fixed) -->
+		<view class="custom-nav" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
 			<view class="nav-content">
 				<view class="nav-left">
 					<BackButton class="nav-back-btn" @click="goBack" />
@@ -13,8 +14,21 @@
 
 		<!-- Main Content -->
 		<scroll-view class="scroll-content" scroll-y :enable-back-to-top="true" :refresher-enabled="true"
-			:refresher-triggered="isRefreshing" @refresherrefresh="onRefresh" @scrolltolower="loadMore"
-			@scroll="onScroll" :scroll-top="scrollTopVal" :style="{ paddingTop: (statusBarHeight + 44) + 'px' }">
+			:refresher-triggered="isRefreshing" :refresher-threshold="60" @refresherrefresh="onRefresh"
+			@refresherpulling="onPulling" @refresherrestore="onRestore" @refresherabort="onRestore"
+			@scrolltolower="loadMore" @scroll="onScroll" :scroll-top="scrollTopVal" refresher-default-style="none"
+			refresher-background="#f0f5ff"
+			:style="{ marginTop: `calc(${statusBarHeight * 2}rpx + 88rpx)`, height: `calc(100vh - ${statusBarHeight * 2}rpx - 88rpx)` }">
+
+			<view slot="refresher" class="custom-refresher"
+				:style="{ transform: (isPulling || isRefreshing) ? 'translateY(120rpx)' : 'translateY(0)' }">
+				<view class="refresher-content">
+					<view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
+					<text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') :
+						$t('index.pullToRefresh')
+					}}</text>
+				</view>
+			</view>
 
 			<view class="content-wrapper">
 				<!-- 1. Statistics Card (Optimized Style) -->
@@ -101,7 +115,8 @@
 									<!-- Status / Action -->
 									<!-- 0: Pending Check -->
 									<block v-if="item.status === 0">
-										<text class="status-badge warning">{{ $t('handover.status_checking') }}</text>
+										<text class="status-badge warning">{{ $t('handover.status_checking')
+										}}</text>
 									</block>
 
 									<!-- 1: Pending Confirmation -->
@@ -168,7 +183,7 @@
 					</view>
 				</view>
 
-				<FooterInfo />
+				<FooterInfo :showFinished="handoverList.length > 0" />
 				<view class="safe-area-bottom"></view>
 			</view>
 		</scroll-view>
@@ -186,6 +201,11 @@
 					<text class="close-btn" @click="closeNewHandoverModal">✖️</text>
 				</view>
 				<view class="modal-body">
+					<view class="form-item">
+						<text class="label">部门</text>
+						<view class="value disabled">{{ userOrgInfo.Department ? userOrgInfo.Department.Name : '-' }}
+						</view>
+					</view>
 					<view class="form-item">
 						<text class="label">时间</text>
 						<view class="value">{{ (formData.time || '').substring(0, 16) }}</view>
@@ -216,50 +236,39 @@
 					</view>
 				</view>
 				<view class="modal-footer">
-					<button class="modal-btn cancel" @click="closeNewHandoverModal">{{ $t('handover.cancel') }}</button>
+					<button class="modal-btn cancel" @click="closeNewHandoverModal">{{ $t('handover.cancel')
+					}}</button>
 					<button class="modal-btn confirm" @click="submitHandover">{{ $t('handover.confirm') }}</button>
 				</view>
 			</view>
 		</view>
-		<view class="member-overlay" v-if="showMemberSelector" @click.stop="doNothing"
-			@touchmove.stop.prevent="doNothing">
-			<view class="member-modal" @click.stop="doNothing">
-				<view class="member-header">
-					<view class="search-box">
-						<input class="member-search-input" v-model="memberSearchKey"
-							:placeholder="$t('handover.search_member_placeholder')" />
-						<text v-if="memberSearchKey" class="clear-icon" @click="clearSearch">✖</text>
-					</view>
-					<text class="close-btn" @click="closeMemberSelector">✖️</text>
-				</view>
-				<scroll-view scroll-y class="member-list">
-					<view class="member-item" v-for="(m, i) in filteredMemberSelectorList" :key="i"
-						@click="selectMember(m)">
-						<text class="member-name">{{ m.label }}</text>
-					</view>
-					<view v-if="filteredMemberSelectorList.length === 0" class="empty-state-small">
-						<text>No Result</text>
-					</view>
-				</scroll-view>
-			</view>
-		</view>
+		<!-- Member Selector Component -->
+		<MemberSelector v-model:visible="showMemberSelector" @select="selectMember" :exclude-ids="[userInfo.UserId]"
+			:placeholder="$t('handover.search_member_placeholder')" />
 	</view>
 </template>
 
 <script>
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import BackButton from '@/components/BackButton/BackButton.vue';
+import MemberSelector from '@/components/MemberSelector/MemberSelector.vue';
+
+import config from '@/config.js';
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
+import dayjs from 'dayjs';
 
 export default {
 	components: {
 		FooterInfo,
-		BackButton
+		BackButton,
+		MemberSelector
 	},
 	data() {
 		return {
 			statusBarHeight: 20,
 			isRefreshing: false,
+			isPulling: false,
 			isLoading: false,
 			isSubmitting: false,
 			showBackToTop: false,
@@ -292,19 +301,15 @@ export default {
 			deptMembers: [],
 			pickerMembers: [], // Keep for reference if needed, but mainly using filtered list now
 			currentUser: '',
+			userOrgInfo: {},
 
 			// Custom Member Selector
 			showMemberSelector: false,
-			memberSearchKey: '',
 			showReceiverError: false
 		};
 	},
 	computed: {
-		filteredMemberSelectorList() {
-			if (!this.memberSearchKey) return this.pickerMembers;
-			const key = this.memberSearchKey.toLowerCase();
-			return this.pickerMembers.filter(m => m.label.toLowerCase().includes(key));
-		},
+
 		currentMonthYear() {
 			if (!this.selectedDate) return '2025-12';
 			return this.selectedDate.substring(0, 7);
@@ -319,10 +324,11 @@ export default {
 		}
 
 		// Load User Info
-		const uInfo = uni.getStorageSync('userOrgInfo');
-		if (uInfo) {
-			this.userInfo = uInfo.User;
-			this.currentUser = uInfo.User.UserName;
+		const userOrgInfo = storage.get('userOrgInfo');
+		if (userOrgInfo) {
+			this.userOrgInfo = userOrgInfo;
+			this.userInfo = userOrgInfo.User;
+			this.currentUser = userOrgInfo.User.UserName;
 		}
 
 		this.initDate();
@@ -334,7 +340,6 @@ export default {
 	mounted() {
 		const sysInfo = uni.getSystemInfoSync();
 		this.statusBarHeight = sysInfo.statusBarHeight || 20;
-		this.fetchDeptMembers();
 	},
 	methods: {
 		goBack() {
@@ -365,25 +370,25 @@ export default {
 		generateWeekDays(refDate) {
 			this.weekDays = [];
 			const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-			let currentDay = refDate.getDay();
-			let startDate = new Date(refDate);
-			startDate.setDate(refDate.getDate() - currentDay);
+			const refD = dayjs(refDate);
+			let currentDay = refD.day();
+			// Start from Sunday of that week
+			let startDate = refD.subtract(currentDay, 'day');
 
 			for (let i = 0; i < 7; i++) {
-				let d = new Date(startDate);
-				d.setDate(startDate.getDate() + i);
-				const fDate = this.formatDate(d);
+				const d = startDate.add(i, 'day');
+				const fDate = d.format('YYYY-MM-DD');
 				this.weekDays.push({
 					name: days[i],
-					date: String(d.getDate()).padStart(2, '0'),
+					date: d.format('DD'),
 					fullDate: fDate,
-					hasData: fDate === this.formatDate(new Date()) && this.todayHandoverCount === 0
+					hasData: fDate === dayjs().format('YYYY-MM-DD') && this.todayHandoverCount === 0
 				});
 			}
 		},
 		onDateChange(e) {
 			this.selectedDate = e.detail.value;
-			this.generateWeekDays(new Date(this.selectedDate));
+			this.generateWeekDays(this.selectedDate); // dayjs handles string
 			this.fetchData();
 		},
 		selectDate(date) {
@@ -406,12 +411,7 @@ export default {
 
 			if (this.selectedDate) {
 				const start = this.selectedDate + ' 00:00:00';
-				const d = new Date(this.selectedDate);
-				d.setDate(d.getDate() + 1);
-				const y = d.getFullYear();
-				const m = String(d.getMonth() + 1).padStart(2, '0');
-				const day = String(d.getDate()).padStart(2, '0');
-				const end = `${y}-${m}-${day} 00:00:00`;
+				const end = dayjs(this.selectedDate).add(1, 'day').format('YYYY-MM-DD') + ' 00:00:00';
 
 				searchOptions.wheres.push({
 					name: 'ShiftTime',
@@ -452,12 +452,17 @@ export default {
 					}
 
 					this.isLoading = false;
-					this.isRefreshing = false;
+					setTimeout(() => {
+						this.isRefreshing = false;
+						this.isPulling = false;
+						uni.showToast({ title: '已刷新', icon: 'none' });
+					}, 800);
 				})
 				.catch(err => {
 					console.error("Fetch Data Failed", err);
 					this.isLoading = false;
 					this.isRefreshing = false;
+					this.isPulling = false;
 				});
 		},
 		checkTodayStatus() {
@@ -494,8 +499,15 @@ export default {
 				day.hasData = (day.fullDate === todayStr && this.todayHandoverCount === 0);
 			});
 		},
+		onPulling() {
+			this.isPulling = true;
+		},
+		onRestore() {
+			this.isPulling = false;
+		},
 		onRefresh() {
 			this.isRefreshing = true;
+			this.isPulling = true;
 			this.fetchData();
 		},
 		loadMore() {
@@ -559,29 +571,8 @@ export default {
 			this.showReceiverError = false;
 			this.closeMemberSelector();
 		},
-		clearSearch() {
-			this.memberSearchKey = '';
-		},
-		fetchDeptMembers() {
-			request.get('api/ssbh/OrganizationUser/DepartmentUser')
-				.then(res => {
-					const list = res.rows || [];
-					const currentId = this.userInfo.UserId;
-					let filtered = list;
-					if (currentId) {
-						filtered = list.filter(m => m.UserId != currentId);
-					}
-					this.deptMembers = filtered;
-					this.pickerMembers = filtered.map(m => ({
-						label: m.UserTrueName || m.userTrueName || m.UserName || m.userName || 'Unknown',
-						value: m.UserId || m.userId
-					}));
-				})
-				.catch(err => {
-					console.error("Fetch Members Failed", err);
-					this.pickerMembers = [];
-				});
-		},
+
+
 		onShiftChange(e) {
 			this.formData.shiftName = this.shifts[e.detail.value];
 		},
@@ -667,8 +658,9 @@ export default {
 			return item.giver !== this.currentUser;
 		},
 		confirmReceive(item) {
-			item.status = 'normal';
-			uni.showToast({ title: this.$t('handover.receive_success') });
+			uni.navigateTo({
+				url: `/pages/handover-check/handover-item-check?id=${item.id}&todoListId=${this.relatedId}`
+			});
 		},
 		toCheckPage(item) {
 			console.log(item);
@@ -705,13 +697,14 @@ export default {
 			});
 		},
 		deleteItem(item) {
+			console.log(item);
 			uni.showModal({
 				title: this.$t('handover.delete'),
 				content: this.$t('handover.delete_confirm'),
 				success: (res) => {
 					if (res.confirm) {
 						uni.showLoading({ title: this.$t('handover.loading'), mask: true });
-						request.post('api/ssbh/Handover/Del', [item.Id]).then(res => {
+						request.post('api/ssbh/Handover/Del', [item.id]).then(res => {
 							uni.hideLoading();
 							if (res.success || res.status) {
 								uni.showToast({ title: this.$t('handover.delete_success') });
@@ -750,17 +743,17 @@ export default {
 	left: 0;
 	width: 100%;
 	z-index: 999;
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+	box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.03);
 
 	.nav-content {
-		height: 44px;
+		height: 88rpx;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0 16px;
+		padding: 0 32rpx;
 
 		.nav-left {
-			width: 40px;
+			width: 80rpx;
 			display: flex;
 			align-items: center;
 		}
@@ -772,7 +765,7 @@ export default {
 		}
 
 		.nav-right {
-			width: 40px;
+			width: 80rpx;
 		}
 	}
 }
@@ -783,17 +776,17 @@ export default {
 }
 
 .content-wrapper {
-	padding: 16px;
-	padding-bottom: 40px;
+	padding: 32rpx;
+	padding-bottom: 80rpx;
 }
 
 // 1. Stats Card - Styled like Index Overview
 .overview-card {
 	background: $sull-color-white;
 	border-radius: $radius-lg;
-	padding: 20px;
-	margin-bottom: 20px;
-	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+	padding: 40rpx;
+	margin-bottom: 40rpx;
+	box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.03);
 
 	.stats-row {
 		display: flex;
@@ -807,9 +800,9 @@ export default {
 			align-items: center;
 
 			.stat-num {
-				font-size: 24px;
+				font-size: 48rpx;
 				font-weight: $font-weight-bold;
-				margin-bottom: 4px;
+				margin-bottom: 8rpx;
 				line-height: 1.2;
 			}
 
@@ -836,8 +829,8 @@ export default {
 		}
 
 		.stat-divider {
-			width: 1px;
-			height: 30px;
+			width: 2rpx;
+			height: 60rpx;
 			background: $sull-color-line;
 		}
 	}
@@ -847,15 +840,15 @@ export default {
 .calendar-section {
 	background: $sull-color-white;
 	border-radius: $radius-lg;
-	padding: 16px;
-	margin-bottom: 20px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+	padding: 32rpx;
+	margin-bottom: 40rpx;
+	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
 
 	.calendar-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 12px;
+		margin-bottom: 24rpx;
 
 		.section-title {
 			font-size: $font-size-body-lg;
@@ -864,23 +857,27 @@ export default {
 		}
 
 		.date-picker-btn {
-			padding: 4px 8px;
+			padding: 8rpx 16rpx;
 			background: #F5F7FA;
-			border-radius: 6px;
+			border-radius: 12rpx;
 		}
 	}
 
 	.week-row {
 		display: flex;
 		justify-content: space-between;
+		width: 100%;
+		gap: 8rpx;
 
 		.day-item {
+			flex: 1;
 			display: flex;
 			flex-direction: column;
 			align-items: center;
-			padding: 8px 6px;
+			padding: 16rpx 0;
 			border-radius: $radius-sm;
-			min-width: 36px;
+			min-width: 0;
+			box-sizing: border-box;
 
 			&.active {
 				background-color: $sull-color-primary;
@@ -892,23 +889,23 @@ export default {
 			}
 
 			.day-name {
-				font-size: 11px;
+				font-size: 22rpx;
 				color: $sull-text-secondary;
-				margin-bottom: 4px;
+				margin-bottom: 8rpx;
 			}
 
 			.day-num {
-				font-size: 15px;
+				font-size: 30rpx;
 				font-weight: $font-weight-semibold;
 				color: $sull-text-main;
 			}
 
 			.day-dot {
-				width: 4px;
-				height: 4px;
+				width: 8rpx;
+				height: 8rpx;
 				background-color: $sull-color-error;
 				border-radius: 50%;
-				margin-top: 4px;
+				margin-top: 8rpx;
 			}
 		}
 	}
@@ -919,7 +916,7 @@ export default {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 16px;
+	margin-bottom: 32rpx;
 
 	.new-handover-btn {
 		display: flex;
@@ -928,18 +925,18 @@ export default {
 		background: $sull-color-primary; // Use flat color or define gradient in sull.scss if needed. Keeping simple primary for now based on request.
 		color: $sull-color-white;
 		font-size: $font-size-body-md;
-		padding: 0 16px;
-		height: 36px;
-		border-radius: 18px;
-		box-shadow: 0 4px 8px rgba(149, 202, 255, 0.4); // Matching primary color shadow roughly
+		padding: 0 32rpx;
+		height: 72rpx;
+		border-radius: 36rpx;
+		box-shadow: 0 8rpx 16rpx rgba(149, 202, 255, 0.4); // Matching primary color shadow roughly
 		transition: all 0.2s;
 
 		.plus-icon {
-			font-size: 20px;
-			margin-right: 4px;
+			font-size: 40rpx;
+			margin-right: 8rpx;
 			line-height: 1;
 			font-weight: 400;
-			margin-top: -2px;
+			margin-top: -4rpx;
 		}
 
 		.btn-text {
@@ -948,24 +945,24 @@ export default {
 
 		&:active {
 			transform: scale(0.96);
-			box-shadow: 0 2px 4px rgba(149, 202, 255, 0.3);
+			box-shadow: 0 4rpx 8rpx rgba(149, 202, 255, 0.3);
 		}
 	}
 
 	.end-controls {
 		display: flex;
-		gap: 12px;
+		gap: 24rpx;
 
 		.icon-btn {
-			width: 36px;
-			height: 36px;
+			width: 72rpx;
+			height: 72rpx;
 			background: $sull-color-white;
 			border-radius: 50%;
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-			font-size: 18px;
+			box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
+			font-size: 36rpx;
 
 			&:active {
 				transform: scale(0.95);
@@ -976,7 +973,7 @@ export default {
 
 // 4. List Section
 .list-section {
-	min-height: 200px;
+	min-height: 400rpx;
 
 	.loading-state,
 	.empty-state {
@@ -984,13 +981,13 @@ export default {
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		padding: 40px 0;
+		padding: 80rpx 0;
 		color: $sull-text-secondary;
 
 		.loading-spinner,
 		.empty-icon {
-			font-size: 32px;
-			margin-bottom: 12px;
+			font-size: 64rpx;
+			margin-bottom: 24rpx;
 		}
 
 		.empty-text {
@@ -1001,10 +998,10 @@ export default {
 	.handover-item {
 		background: $sull-color-white;
 		border-radius: $radius-md;
-		padding: 16px;
-		margin-bottom: 12px;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
-		border-left: 4px solid transparent;
+		padding: 32rpx;
+		margin-bottom: 24rpx;
+		box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
+		border-left: 8rpx solid transparent;
 
 		&.new-item {
 			border-left-color: $sull-color-primary;
@@ -1015,10 +1012,10 @@ export default {
 			display: flex;
 			justify-content: space-between;
 			align-items: center;
-			margin-bottom: 16px;
+			margin-bottom: 32rpx;
 
 			.item-time {
-				font-size: 15px;
+				font-size: 30rpx;
 				font-weight: $font-weight-semibold;
 				color: $sull-text-main;
 			}
@@ -1026,20 +1023,20 @@ export default {
 			.item-meta-right {
 				display: flex;
 				align-items: center;
-				gap: 8px;
+				gap: 16rpx;
 
 				.dept-name {
-					font-size: 12px;
+					font-size: 24rpx;
 					color: $sull-text-secondary;
-					padding: 2px 6px;
+					padding: 4rpx 12rpx;
 					background: $sull-color-background;
-					border-radius: 4px;
+					border-radius: 8rpx;
 				}
 
 				.status-badge {
-					font-size: 11px;
-					padding: 4px 8px;
-					border-radius: 4px;
+					font-size: 22rpx;
+					padding: 8rpx 16rpx;
+					border-radius: 8rpx;
 
 					&.pending {
 						background: #FFF0E0;
@@ -1049,7 +1046,7 @@ export default {
 					&.warning {
 						background: #FDF6EC;
 						color: $sull-color-warning;
-						border: 1px solid #FAECD8;
+						border: 2rpx solid #FAECD8;
 					}
 
 					&.success {
@@ -1064,26 +1061,26 @@ export default {
 				}
 
 				.receive-btn {
-					font-size: 12px;
-					padding: 0 12px;
-					height: 24px;
-					line-height: 24px;
+					font-size: 24rpx;
+					padding: 0 24rpx;
+					height: 48rpx;
+					line-height: 48rpx;
 					background: $sull-color-success;
 					color: $sull-color-white;
-					border-radius: 12px;
+					border-radius: 24rpx;
 					margin: 0;
 				}
 			}
 
 			.option-btn {
-				padding: 0 8px;
-				height: 24px;
+				padding: 0 16rpx;
+				height: 48rpx;
 				display: flex;
 				align-items: center;
 				justify-content: center;
 
 				.option-icon {
-					font-size: 20px;
+					font-size: 40rpx;
 					color: #999;
 					font-weight: bold;
 				}
@@ -1095,8 +1092,8 @@ export default {
 			align-items: center;
 			justify-content: center;
 			/* Center aligned */
-			margin-bottom: 16px;
-			gap: 20px;
+			margin-bottom: 32rpx;
+			gap: 40rpx;
 
 			.person-group {
 				display: flex;
@@ -1104,13 +1101,13 @@ export default {
 				align-items: center;
 
 				.role-label {
-					font-size: 10px;
+					font-size: 20rpx;
 					color: $sull-text-secondary;
-					margin-bottom: 2px;
+					margin-bottom: 4rpx;
 				}
 
 				.person-name {
-					font-size: 16px;
+					font-size: 32rpx;
 					color: $sull-text-main;
 					font-weight: $font-weight-medium;
 				}
@@ -1118,29 +1115,29 @@ export default {
 
 			.transfer-arrow {
 				color: $sull-text-secondary;
-				font-size: 14px;
-				margin-top: 10px; // align visually with names
+				font-size: 28rpx;
+				margin-top: 20rpx; // align visually with names
 			}
 		}
 
 		.remark-row {
-			font-size: 13px;
+			font-size: 26rpx;
 			color: $sull-text-secondary;
-			padding-top: 12px;
-			border-top: 1px solid $sull-color-line;
+			padding-top: 24rpx;
+			border-top: 2rpx solid $sull-color-line;
 
 			.remark-label {
 				color: $sull-text-placeholder;
-				margin-right: 4px;
+				margin-right: 8rpx;
 			}
 		}
 
 		.audit-row {
-			font-size: 13px;
+			font-size: 26rpx;
 			color: $sull-text-secondary;
-			padding-top: 8px;
-			margin-top: 8px;
-			border-top: 1px dashed $sull-color-line;
+			padding-top: 16rpx;
+			margin-top: 16rpx;
+			border-top: 2rpx dashed $sull-color-line;
 			display: flex;
 			justify-content: space-between;
 
@@ -1151,7 +1148,7 @@ export default {
 
 			.audit-label {
 				color: $sull-text-placeholder;
-				margin-right: 4px;
+				margin-right: 8rpx;
 			}
 
 			.audit-value {
@@ -1164,21 +1161,21 @@ export default {
 // Back to Top
 .back-to-top {
 	position: fixed;
-	bottom: 80px;
-	right: 20px;
-	width: 44px;
-	height: 44px;
+	bottom: 160rpx;
+	right: 40rpx;
+	width: 88rpx;
+	height: 88rpx;
 	background: $sull-color-white;
 	border-radius: 50%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.15);
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity 0.3s;
 	z-index: 900;
-	font-size: 20px;
+	font-size: 40rpx;
 
 	&.show {
 		opacity: 1;
@@ -1198,7 +1195,7 @@ export default {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	backdrop-filter: blur(2px);
+	backdrop-filter: blur(4rpx);
 
 	.modal-content {
 		width: 85%;
@@ -1212,8 +1209,8 @@ export default {
 		animation: slideUp 0.3s ease;
 
 		.modal-header {
-			padding: 16px;
-			border-bottom: 1px solid $sull-color-line;
+			padding: 32rpx;
+			border-bottom: 2rpx solid $sull-color-line;
 			display: flex;
 			justify-content: space-between;
 			align-items: center;
@@ -1224,54 +1221,54 @@ export default {
 			}
 
 			.close-btn {
-				padding: 4px;
-				font-size: 18px;
+				padding: 8rpx;
+				font-size: 36rpx;
 				color: $sull-text-secondary;
 			}
 		}
 
 		.modal-body {
-			padding: 20px;
+			padding: 40rpx;
 			overflow-y: auto; // Allow scroll if content is long
 
 			.form-item {
-				margin-bottom: 20px;
+				margin-bottom: 40rpx;
 				display: flex;
 				flex-direction: column;
 
 				.label {
 					font-size: $font-size-body-sm;
 					color: $sull-text-secondary;
-					margin-bottom: 8px;
+					margin-bottom: 16rpx;
 					display: block;
 				}
 
 				.error-msg {
-					font-size: 12px;
+					font-size: 24rpx;
 					color: $sull-color-error;
-					margin-top: 4px;
+					margin-top: 8rpx;
 				}
 
 				.value {
 					font-size: $font-size-body-md;
 					font-weight: 500;
 					color: $sull-text-main;
-					padding: 10px 0;
-					border-bottom: 1px solid #eee;
+					padding: 20rpx 0;
+					border-bottom: 2rpx solid #eee;
 				}
 
 				.value.disabled {
 					color: $sull-text-secondary;
 					background: #f9f9f9;
-					padding-left: 8px;
-					border-radius: 4px;
+					padding-left: 16rpx;
+					border-radius: 8rpx;
 					border-bottom: none;
 
 					/* Added for Receiver layout */
 					display: flex;
 					justify-content: space-between;
 					align-items: center;
-					padding-right: 6px;
+					padding-right: 12rpx;
 				}
 
 				.value.disabled .text-main {
@@ -1288,8 +1285,8 @@ export default {
 					display: flex;
 					justify-content: space-between;
 					align-items: center;
-					padding: 10px 0;
-					border-bottom: 1px solid #eee;
+					padding: 20rpx 0;
+					border-bottom: 2rpx solid #eee;
 					width: 100%;
 					font-size: $font-size-body-lg;
 					color: $sull-text-main;
@@ -1305,23 +1302,23 @@ export default {
 				}
 
 				.picker-arrow {
-					font-size: 12px;
+					font-size: 24rpx;
 					color: $sull-text-secondary;
 				}
 
 				.shift-selector {
 					display: flex;
-					gap: 12px;
+					gap: 24rpx;
 
 					.shift-chip {
 						flex: 1;
 						text-align: center;
-						padding: 10px 0;
+						padding: 20rpx 0;
 						background: #F5F7FA;
 						color: $sull-text-secondary;
-						border-radius: 8px;
-						font-size: 14px;
-						border: 1px solid transparent;
+						border-radius: 16rpx;
+						font-size: 28rpx;
+						border: 2rpx solid transparent;
 						transition: all 0.2s;
 
 						&.active {
@@ -1346,27 +1343,27 @@ export default {
 
 		.modal-footer {
 			display: flex;
-			border-top: 1px solid $sull-color-line;
+			border-top: 2rpx solid $sull-color-line;
 
 			.modal-btn {
 				flex: 1;
 				border: none;
 				background: #fff;
 				border-radius: 0;
-				padding: 14px 0;
+				padding: 28rpx 0;
 				font-size: $font-size-body-md;
 				line-height: normal;
 
 				&.cancel {
 					color: $sull-text-secondary;
-					border-right: 1px solid $sull-color-line;
-					border-bottom-left-radius: 16px;
+					border-right: 2rpx solid $sull-color-line;
+					border-bottom-left-radius: 32rpx;
 				}
 
 				&.confirm {
 					color: $sull-color-primary;
 					font-weight: $font-weight-medium;
-					border-bottom-right-radius: 16px;
+					border-bottom-right-radius: 32rpx;
 				}
 
 				&:active {
@@ -1379,7 +1376,7 @@ export default {
 
 @keyframes slideUp {
 	from {
-		transform: translateY(20px);
+		transform: translateY(40rpx);
 		opacity: 0;
 	}
 
@@ -1393,98 +1390,116 @@ export default {
 	height: env(safe-area-inset-bottom);
 }
 
-/* Member Selector Custom Modal */
-.member-overlay {
-	position: fixed;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
-	background: rgba(0, 0, 0, 0.5);
-	z-index: 3000;
-	/* Higher than main modal */
-	display: flex;
-	align-items: flex-end;
-	/* Bottom sheet style or center */
-	justify-content: center;
-	backdrop-filter: blur(2px);
-}
 
-.member-modal {
-	width: 100%;
-	background: $sull-color-white;
-	border-radius: 20px 20px 0 0;
-	padding: 20px;
-	padding-bottom: 40px;
-	display: flex;
-	flex-direction: column;
-	max-height: 60vh;
-	animation: slideUp 0.3s ease;
-}
-
-.member-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 16px;
-	gap: 12px;
-}
-
-.member-search-input {
-	flex: 1;
-	height: 40px;
-	background: #F5F7FA;
-	border-radius: 20px;
-	padding: 0 36px 0 16px;
-	/* Right padding for clear icon */
-	font-size: 14px;
-}
-
-.search-box {
-	flex: 1;
-	position: relative;
-	display: flex;
-	align-items: center;
-}
-
-.clear-icon {
-	position: absolute;
-	right: 12px;
-	color: #999;
-	font-size: 14px;
-	padding: 4px;
-	z-index: 10;
-}
-
-.member-list {
-	flex: 1;
-	height: 0;
-	/* Important for flex scroll */
-	min-height: 200px;
-}
-
-.member-item {
-	padding: 16px;
-	border-bottom: 1px solid #eee;
-	font-size: 16px;
-	color: $sull-text-main;
-
-	&:active {
-		background: #f9f9f9;
-	}
-}
-
-.empty-state-small {
-	padding: 20px;
-	text-align: center;
-	color: $sull-text-secondary;
-}
 
 /* .picker-trigger removed as per request */
 
 .picker-arrow {
 	/* margin-right removed, spacing handled by container padding */
-	font-size: 12px;
+	font-size: 24rpx;
 	color: $sull-text-secondary;
+}
+
+.custom-nav {
+	background-color: $sull-color-white;
+	/* Removed fixed position to scroll with content */
+	/* position: fixed; */
+	/* top: 0; */
+	/* left: 0; */
+	width: 100%;
+	z-index: 999;
+	/* box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.03); */
+	/* Removed shadow to blend better, or keep if preferred */
+
+	.nav-content {
+		height: 88rpx;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 32rpx;
+
+		.nav-left {
+			width: 80rpx;
+			display: flex;
+			align-items: center;
+		}
+
+		.nav-title {
+			font-size: $font-size-h6;
+			font-weight: $font-weight-semibold;
+			color: $sull-text-main;
+		}
+
+		.nav-right {
+			width: 80rpx;
+		}
+	}
+}
+
+.scroll-content {
+	flex: 1;
+	height: 100vh;
+}
+
+// ... existing styles ...
+
+/* .picker-arrow {
+...
+} */
+/* Ensure all previous styles are kept or this block replaces only needed parts. 
+Since I cannot easily see all lines, I will append the NEW styles and rely on the fact that I am modifying .custom-nav which is near the top of style block.
+Wait, replace_file_content replaces a block. 
+I should target .custom-nav block specifically.
+*/
+
+/* Custom Refresher */
+.custom-refresher {
+	height: 120rpx;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: absolute;
+	top: -120rpx;
+	left: 0;
+	transition: transform 0.2s linear;
+}
+
+.refresher-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8rpx;
+}
+
+.refresher-icon {
+	width: 64rpx;
+	height: 64rpx;
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
+	background-size: contain;
+	background-repeat: no-repeat;
+	transition: transform 0.3s ease;
+}
+
+.refresher-icon.animating {
+	animation: ambulance-bounce 0.8s infinite ease-in-out;
+}
+
+.refresher-text {
+	font-size: 20rpx;
+	color: $sull-color-primary;
+	opacity: 0.8;
+}
+
+@keyframes ambulance-bounce {
+
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+
+	50% {
+		transform: translateY(-6px);
+	}
 }
 </style>

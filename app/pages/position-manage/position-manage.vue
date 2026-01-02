@@ -2,10 +2,23 @@
     <view class="container">
         <!-- Navigation Bar Removed - Using Header Section -->
 
-        <view class="main-content">
+
+        <scroll-view scroll-y class="main-scroll" refresher-enabled="true" :refresher-triggered="isRefreshing"
+            :refresher-threshold="60" @refresherrefresh="onRefresh" @refresherpulling="onPulling"
+            @refresherrestore="onRestore" @refresherabort="onRestore" refresher-default-style="none"
+            refresher-background="#f0f5ff">
+            <view slot="refresher" class="custom-refresher"
+                :style="{ transform: (isPulling || isRefreshing) ? 'translateY(120rpx)' : 'translateY(0)' }">
+                <view class="refresher-content">
+                    <view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
+                    <text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') :
+                        $t('index.pullToRefresh')
+                        }}</text>
+                </view>
+            </view>
 
             <!-- Header Gradient Section matching Add Car page -->
-            <view class="header-section" :style="{ paddingTop: (statusBarHeight + 10) + 'px' }">
+            <view class="header-section" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
                 <view class="nav-bar">
                     <BackButton @click="goBack" />
                     <text class="page-title">抢救车管理</text>
@@ -55,96 +68,24 @@
                     </view>
                 </view>
 
-                <!-- Floor List -->
-                <view class="floor-list">
-                    <view class="floor-wrapper" v-for="floor in floorList" :key="floor.Id">
-                        <view class="floor-card" @click="toggleFloor(floor)">
-                            <!-- Icon -->
-                            <view class="floor-icon">
-                                <view class="icon-circle" :class="getFloorStatusClass(floor)"></view>
-                            </view>
-
-                            <!-- Info -->
-                            <view class="floor-info">
-                                <text class="floor-name">{{ floor.DisplayName || floor.Name }}</text>
-                                <text class="floor-sub">已用 {{ getOccupiedCount(floor) }} / 共 {{ floor.SerialId || 0 }}
-                                    格</text>
-                            </view>
-                            <!-- Status Icons -->
-                            <view class="floor-status-icons">
-                                <view class="status-icon warning" v-if="hasExpiryProblem(floor)">
-                                    <view class="status-bg-icon icon-clock"></view>
-                                </view>
-                                <view class="status-icon danger" v-if="hasStockProblem(floor)">
-                                    <view class="status-bg-icon icon-siren"></view>
-                                </view>
-                            </view>
-
-                            <!-- Action Button -->
-                            <view class="floor-action" @click.stop="showFloorActions(floor)">
-                                <text class="action-icon">⋮</text>
-                            </view>
+                <!-- Floor List (Refactored) -->
+                <StorageLayers :floorList="floorList" :serialsMap="floorSerialsMap" :itemsMap="itemsMap"
+                    :showFloorAction="true" :showSerialAction="true" :highlightedSerialIds="highlightedSerialIds"
+                    @toggle-floor="toggleFloor" @serial-click="editSerial" @floor-action="showFloorActions"
+                    @serial-action="showSerialActions">
+                    <template #add-floor>
+                        <!-- Add Button Module -->
+                        <view v-if="false" class="add-floor-btn" @click="goAdd(20)">
+                            <text class="add-text">+ 添加分层</text>
                         </view>
-
-                        <!-- Expanded Details (Serials) -->
-                        <view class="serial-grid-wrapper" v-if="floor.expanded">
-                            <view class="serial-grid">
-                                <view class="serial-item" v-for="serial in getSerialsByFloor(floor.Id)" :key="serial.Id"
-                                    :class="{ 'expiry-warning': serial.ItemId > 0 && itemsMap[serial.ItemId] && isExpiryWarning(itemsMap[serial.ItemId]) }"
-                                    @click="editSerial(serial)">
-                                    <view class="serial-header">
-                                        <text class="serial-no">{{ serial.SerialId || serial.OrderBy }}</text>
-                                        <view class="serial-action" @click.stop="showSerialActions(serial)">
-                                            <text>⋮</text>
-                                        </view>
-                                    </view>
-
-                                    <!-- Occupied Content -->
-                                    <view class="item-detail" v-if="serial.ItemId > 0 && itemsMap[serial.ItemId]">
-                                        <view class="item-name-wrapper">
-                                            <text class="item-name-text"
-                                                :class="{ scrolling: (itemsMap[serial.ItemId].Name || '').length > 8 }">{{
-                                                    itemsMap[serial.ItemId].Name }}</text>
-                                        </view>
-                                        <view class="item-info-row">
-                                            <text class="item-spec">{{ itemsMap[serial.ItemId].Specification || '-'
-                                                }}</text>
-                                            <view class="item-stock"
-                                                :class="{ 'text-red-bold': isStockInsufficient(itemsMap[serial.ItemId]) }">
-                                                <text>x {{ itemsMap[serial.ItemId].AvailableStock || 0 }}</text>
-                                                <text class="item-cardinality"
-                                                    v-if="itemsMap[serial.ItemId].Cardinality"> / {{
-                                                        itemsMap[serial.ItemId].Cardinality }}</text>
-                                                <text class="item-unit" v-if="itemsMap[serial.ItemId].Unit">{{
-                                                    itemsMap[serial.ItemId].Unit }}</text>
-                                            </view>
-                                        </view>
-                                        <view class="item-expiry">
-                                            <text :class="getExpiryClass(itemsMap[serial.ItemId].LatestExpirationDate)">
-                                                {{ formatDate(itemsMap[serial.ItemId].LatestExpirationDate) }}
-                                            </text>
-                                        </view>
-                                    </view>
-
-                                    <!-- Empty Content -->
-                                    <view class="empty-slot" v-else>
-                                        <text class="plus-icon">+</text>
-                                    </view>
-                                </view>
-                            </view>
-                        </view>
-                    </view>
-                    <!-- Add Button Module -->
-                    <view v-if="false" class="add-floor-btn" @click="goAdd(20)">
-                        <text class="add-text">+ 添加分层</text>
-                    </view>
-                </view>
+                    </template>
+                </StorageLayers>
                 <view style="height: 40px;"></view>
             </view>
 
             <view class="bottom-spacer"></view>
             <FooterInfo />
-        </view>
+        </scroll-view>
 
         <BackToTop :scroll-top="scrollTop" @click="goTop" />
 
@@ -172,11 +113,11 @@
         </view>
 
         <!-- Custom Rename Modal -->
-        <view class="modal-overlay" v-if="showRenameModalDialog" @click.self="closeRenameDialog">
-            <view class="modal-content">
+        <view class="modal-overlay" v-if="showRenameModalDialog" @click="closeRenameDialog">
+            <view class="modal-content" @click.stop>
                 <view class="modal-header">
                     <text class="modal-title">修改名称</text>
-                    <text class="close-btn" @click="closeRenameDialog">✖️</text>
+                    <text class="close-btn" @click="closeRenameDialog">×</text>
                 </view>
                 <view class="modal-body">
                     <view class="form-item">
@@ -197,11 +138,11 @@
         </view>
 
         <!-- Custom Split Modal -->
-        <view class="modal-overlay" v-if="showSplitModalDialog" @click.self="closeSplitDialog">
-            <view class="modal-content">
+        <view class="modal-overlay" v-if="showSplitModalDialog" @click="closeSplitDialog">
+            <view class="modal-content" @click.stop>
                 <view class="modal-header">
                     <text class="modal-title">修改分隔</text>
-                    <text class="close-btn" @click="closeSplitDialog">✖️</text>
+                    <text class="close-btn" @click="closeSplitDialog">×</text>
                 </view>
                 <view class="modal-body">
                     <view class="form-item">
@@ -222,17 +163,17 @@
         </view>
 
         <!-- Custom Manual Modal -->
-        <view class="modal-overlay" v-if="showManualDialog" @click.self="closeManualDialog">
-            <view class="modal-content manual-modal">
+        <view class="modal-overlay" v-if="showManualDialog" @click="closeManualDialog">
+            <view class="modal-content manual-modal" @click.stop>
                 <view class="modal-header">
                     <text class="modal-title">物品说明书</text>
-                    <text class="close-btn" @click="closeManualDialog">✖️</text>
+                    <text class="close-btn" @click="closeManualDialog">×</text>
                 </view>
                 <scroll-view scroll-y class="modal-body manual-body">
                     <text class="manual-text">{{ itemRemarkContent }}</text>
                 </scroll-view>
                 <view class="modal-footer">
-                    <button class="modal-btn confirm" @click="closeManualDialog" style="border-radius:0;">关闭</button>
+                    <button class="modal-btn confirm full-width" @click="closeManualDialog">关闭</button>
                 </view>
             </view>
         </view>
@@ -261,32 +202,41 @@
             </scroll-view>
         </view>
     </view>
+
+    <!-- Warning Modal -->
+    <WarningModal v-model:visible="warningModal.visible" :title="warningModal.title" :message="warningModal.message"
+        :buttonText="warningModal.buttonText" />
 </template>
 
 <script>
 import BackButton from '@/components/BackButton/BackButton.vue';
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import BackToTop from '@/components/BackToTop/BackToTop.vue';
+import WarningModal from '@/components/WarningModal/WarningModal.vue';
+import StorageLayers from '@/components/StorageLayers/StorageLayers.vue';
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
+import dayjs from 'dayjs';
 
 export default {
-    components: { BackButton, FooterInfo, BackToTop },
+    components: { BackButton, FooterInfo, BackToTop, WarningModal, StorageLayers },
     data() {
         return {
             statusBarHeight: 20,
             scrollTop: 0,
             oldScrollTop: 0,
             isRefreshing: false,
+            isPulling: false,
 
             // Data Lists
             rescueCarList: [],
-            allFloorList: [],
             floorList: [],
             serialList: [],
 
             // Selections
             selectedRescueCarId: null,
             scrollIntoViewId: '',
+            highlightedSerialIds: [],
 
             // Items Cache
             itemsMap: {},
@@ -320,13 +270,19 @@ export default {
             showMemberSelector: false,
             memberList: [],
             searchMemberKey: '',
-            currentEditingCar: null
+            currentEditingCar: null,
+            warningModal: {
+                visible: false,
+                title: '',
+                message: '',
+                buttonText: ''
+            }
         };
     },
     onLoad(options) {
         const sysInfo = uni.getSystemInfoSync();
         this.statusBarHeight = sysInfo.statusBarHeight || 20;
-        this.userOrgInfo = uni.getStorageSync('userOrgInfo') || {};
+        this.userOrgInfo = storage.get('userOrgInfo') || {};
 
         if (options && options.filter) {
             this.currentFilter = options.filter; // 'AbnormalStock' or 'AbnormalExpiry'
@@ -336,6 +292,35 @@ export default {
         this.fetchMembers();
     },
     computed: {
+        floorSerialsMap() {
+            const map = {};
+            this.floorList.forEach(f => map[f.Id] = []);
+
+            const rawMap = {};
+            this.serialList.forEach(s => {
+                if (!rawMap[s.FloorId]) rawMap[s.FloorId] = [];
+                rawMap[s.FloorId].push(s);
+            });
+
+            for (const fid in rawMap) {
+                let list = rawMap[fid];
+                if (this.currentFilter === 'AbnormalStock') {
+                    list = list.filter(s => {
+                        const item = this.itemsMap[s.ItemId];
+                        return item && this.isStockInsufficient(item);
+                    });
+                } else if (this.currentFilter === 'AbnormalExpiry') {
+                    list = list.filter(s => {
+                        const item = this.itemsMap[s.ItemId];
+                        if (!item) return false;
+                        const days = this.getDaysUntil(item.LatestExpirationDate);
+                        return days < 30;
+                    });
+                }
+                map[fid] = list;
+            }
+            return map;
+        },
         filteredMemberList() {
             if (!this.searchMemberKey) return this.memberList;
             const key = this.searchMemberKey.toLowerCase();
@@ -355,12 +340,21 @@ export default {
         onPageScroll(e) {
             this.scrollTop = e.scrollTop;
         },
-        onPullDownRefresh() {
+        onPulling() {
+            this.isPulling = true;
+        },
+        onRestore() {
+            this.isPulling = false;
+        },
+        onRefresh() {
             this.isRefreshing = true;
+            this.isPulling = true;
             this.fetchData().then(() => {
-                this.isRefreshing = false;
-                uni.showToast({ title: '已刷新', icon: 'none' });
-                uni.stopPullDownRefresh();
+                setTimeout(() => {
+                    this.isRefreshing = false;
+                    this.isPulling = false;
+                    uni.showToast({ title: '已刷新', icon: 'none' });
+                }, 800);
             });
         },
         async fetchData() {
@@ -376,33 +370,33 @@ export default {
                 const res = await request.post('api/ssbh/Position/GetPageData', {
                     page: 1, rows: 100,
                     wheres: JSON.stringify([
-                        { name: 'Category', value: "10,100", DisplayType: 'in' },
+                        { name: 'Category', value: 10 },
                         { name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
                         { name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
                     ]),
                     sort: 'OrderBy', order: 'asc'
                 });
                 this.rescueCarList = (res.rows || []).filter(w => w.Category === 10);
-                this.allFloorList = (res.rows || []).filter(w => w.Category === 100);
+
                 if (this.rescueCarList.length > 0) {
                     let targetId = this.selectedRescueCarId;
 
                     // Try to load from storage
                     if (!targetId) {
-                        const lastId = uni.getStorageSync('lastSelectedRescueCarId');
-                        if (lastId && this.rescueCarList.find(w => w.Id === lastId)) {
+                        const lastId = storage.get('lastSelectedRescueCarId');
+                        // Use loose comparison to handle potential string/number mismatch
+                        if (lastId && this.rescueCarList.find(w => w.Id == lastId)) {
                             targetId = lastId;
                         }
                     }
 
-                    if (!targetId || !this.rescueCarList.find(w => w.Id === targetId)) {
+                    if (!targetId || !this.rescueCarList.find(w => w.Id == targetId)) {
                         this.selectRescueCar(this.rescueCarList[0].Id);
                     } else {
                         this.selectRescueCar(targetId);
                     }
                 } else {
                     this.rescueCarList = [];
-                    this.allFloorList = [];
                     this.floorList = [];
                     this.selectedRescueCarId = null;
                 }
@@ -413,105 +407,93 @@ export default {
 
         selectRescueCar(id) {
             this.selectedRescueCarId = id;
-            uni.setStorageSync('lastSelectedRescueCarId', id);
-            this.scrollIntoViewId = 'car-' + id;
-            this.fetchFloors(id);
+            storage.set('lastSelectedRescueCarId', id);
+            this.fetchRescueCarData(id);
+            this.scrollIntoViewId = '';
+            this.$nextTick(() => {
+                this.scrollIntoViewId = 'car-' + id;
+            });
         },
 
-        // Category 20: Floor (Filter by ParentId which is RescueCarId)
-        async fetchFloors(parentId) {
-            if (!parentId) return;
+        async fetchRescueCarData(warehouseId) {
+            if (!warehouseId) return;
             try {
-                this.floorList = this.allFloorList.filter(f => f.WarehouseId === parentId);
-                if (this.floorList.length > 0) {
-                    // Gather Floor IDs and fetch serials
-                    const floorIds = this.floorList.map(f => f.Id);
-
-                    if (this.currentFilter) {
-                        await this.fetchSerialsByFloors(floorIds);
-                        // Expand all floors if filtering
-                        this.floorList.forEach(f => this.$set(f, 'expanded', true));
-                    } else {
-                        this.fetchSerialsByFloors(floorIds);
-                    }
-                } else {
-                    this.serialList = [];
-                }
-            } catch (e) { console.error(e); }
-        },
-
-        async fetchSerialsByFloors(floorIds) {
-            if (!floorIds || floorIds.length === 0) return;
-            try {
-                // If backend supports IN for wheres name/value... usually value array works.
                 const res = await request.post('api/ssbh/Position/GetPageData', {
-                    page: 1, rows: 500,
+                    page: 1, rows: 1000,
                     wheres: JSON.stringify([
-                        { name: 'Category', value: 110 },
-                        { name: 'ParentId', value: floorIds.join(','), DisplayType: 'in' }
+                        { name: 'WarehouseId', value: warehouseId },
+                        { name: 'Category', value: '100,110', DisplayType: 'in' }
                     ]),
-                    sort: 'OrderBy', order: 'asc'
+                    sort: 'OrderBy,SerialId', order: 'asc'
                 });
-                this.serialList = res.rows || [];
 
-                // Collect ItemIds
+                const allItems = res.rows || [];
+                this.floorList = allItems.filter(p => p.Category === 100).sort((a, b) => (a.OrderBy || 0) - (b.OrderBy || 0));
+                this.serialList = allItems.filter(p => p.Category === 110);
+
+                if (this.currentFilter) {
+                    this.floorList.forEach(f => this.$set(f, 'expanded', true));
+                }
+
+                // Batch fetch item details
                 const itemIds = this.serialList.filter(s => s.ItemId > 0).map(s => s.ItemId);
                 if (itemIds.length > 0) {
                     this.fetchItemDetails([...new Set(itemIds)]);
                 }
-            } catch (e) { console.error(e); }
-        },
-
-        getSerialsByFloor(floorId) {
-            let list = this.serialList.filter(s => s.FloorId === floorId);
-
-            if (this.currentFilter === 'AbnormalStock') {
-                list = list.filter(s => {
-                    const item = this.itemsMap[s.ItemId];
-                    // Stock Warning: stock < cardinality or stock <= 0
-                    return item && this.isStockInsufficient(item);
-                });
-            } else if (this.currentFilter === 'AbnormalExpiry') {
-                list = list.filter(s => {
-                    const item = this.itemsMap[s.ItemId];
-                    if (!item) return false;
-                    const days = this.getDaysUntil(item.LatestExpirationDate);
-                    return days < 30;
-                });
+            } catch (e) {
+                console.error("Fetch Rescue Car Data Error", e);
             }
-
-            return list;
         },
+
+        // Display helpers moved to StorageLayers component
 
         async fetchItemDetails(ids) {
-            const distinctIds = [...new Set(ids)];
-            for (let id of distinctIds) {
-                if (this.itemsMap[id]) continue; // Skip if cached
-                try {
-                    const res = await request.post('api/ssbh/Item/GetPageData', {
-                        page: 1, rows: 1,
-                        wheres: JSON.stringify([{ name: 'Id', value: id }, { name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
-                        { name: 'DepartmentId', value: this.userOrgInfo.Department.Id }])
-                    });
-                    if (res.rows && res.rows.length > 0) {
-                        const item = res.rows[0];
+            const distinctIds = ids.filter(id => !this.itemsMap[id]);
+            if (distinctIds.length === 0) return;
+
+            try {
+                const res = await request.post('api/ssbh/Item/GetPageData', {
+                    page: 1, rows: 500,
+                    wheres: JSON.stringify([
+                        { name: 'Id', value: distinctIds.join(','), DisplayType: 'in' },
+                        { name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
+                        { name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
+                    ])
+                });
+
+                if (res.rows && res.rows.length > 0) {
+                    res.rows.forEach(item => {
                         const dateToUse = item.LatestExpirationDate || item.ExpiryDate;
                         const days = this.getDaysUntil(dateToUse);
 
-                        // Pre-calculate
+                        // Pre-calculate properties for StorageLayers
                         item.IsExpiryWarning = days < 30;
-                        item.IsStockInsufficient = this.isStockInsufficient(item);
+                        const stock = Number(item.AvailableStock || 0);
+                        const base = Number(item.Cardinality || 0);
+                        item.IsStockInsufficient = stock <= 0 || (base > 0 && stock < base);
+                        item.FormattedDate = this.formatDate(dateToUse);
+                        item.ExpiryClass = this.getExpiryClass(dateToUse);
 
-                        this.$set(this.itemsMap, id, item);
-                    }
-                } catch (e) { }
+                        this.$set(this.itemsMap, item.Id, item);
+                    });
+                }
+            } catch (e) {
+                console.error("Batch fetch item details failed", e);
             }
         },
 
         goAdd(category) {
-            let parentId = 0;
             // category 10 = rescue car, 100 = floor
             if (category === 10) {
+                if (!this.userOrgInfo.Department || !this.userOrgInfo.Department.Id) {
+                    this.warningModal = {
+                        visible: true,
+                        title: this.$t('common.tip'),
+                        message: this.$t('profile.please_join_dept_first'),
+                        buttonText: this.$t('common.confirm')
+                    };
+                    return;
+                }
                 uni.navigateTo({
                     url: `/pages/position-manage/position-add-car`
                 });
@@ -530,7 +512,7 @@ export default {
         getDaysUntil(dateStr) {
             if (!dateStr) return 9999;
             const now = new Date();
-            const target = new Date(dateStr);
+            const target = dayjs(dateStr).toDate();
             const diff = target.getTime() - now.getTime();
             return Math.ceil(diff / (1000 * 3600 * 24));
         },
@@ -541,12 +523,8 @@ export default {
             if (days <= 90) return 'text-yellow';
             return 'text-normal';
         },
-        async toggleFloor(floor) {
-            if (floor.expanded) {
-                this.$set(floor, 'expanded', false);
-                return;
-            }
-            await this.refreshFloorSerials(floor);
+        toggleFloor(floor) {
+            this.$set(floor, 'expanded', !floor.expanded);
         },
         async refreshFloorSerials(floor) {
             uni.showLoading({ title: '加载中', mask: true });
@@ -583,30 +561,7 @@ export default {
                 uni.hideLoading();
             }
         },
-        getFloorStatusClass(floor) {
-            const serials = this.getSerialsByFloor(floor.Id);
-            if (!serials || serials.length === 0) return 'blink-green';
-
-            let hasExpiryWarning = false;
-            let hasStockWarning = false;
-
-            for (let s of serials) {
-                if (s.ItemId > 0 && this.itemsMap[s.ItemId]) {
-                    const item = this.itemsMap[s.ItemId];
-                    if (item.IsExpiryWarning) {
-                        hasExpiryWarning = true;
-                        break;
-                    }
-                    if (item.IsStockInsufficient) {
-                        hasStockWarning = true;
-                    }
-                }
-            }
-
-            if (hasExpiryWarning) return 'blink-red';
-            if (hasStockWarning) return 'blink-orange';
-            return 'blink-green';
-        },
+        // Status Logic moved to component
         showFloorActions(floor) {
             this.tempFloor = floor;
             this.showActionSheetModal = true;
@@ -648,11 +603,6 @@ export default {
                 });
 
                 // Update Local Data Immediate Reflection
-                const floorInAll = this.allFloorList.find(f => f.Id === id);
-                if (floorInAll) {
-                    floorInAll.Name = newName;
-                    floorInAll.DisplayName = newName;
-                }
                 const floorInList = this.floorList.find(f => f.Id === id);
                 if (floorInList) {
                     floorInList.Name = newName;
@@ -682,9 +632,6 @@ export default {
                 });
 
                 // Update Local
-                const floorInAll = this.allFloorList.find(f => f.Id === this.tempFloor.Id);
-                if (floorInAll) floorInAll.SerialId = count;
-
                 const floorInList = this.floorList.find(f => f.Id === this.tempFloor.Id);
                 if (floorInList) floorInList.SerialId = count;
 
@@ -698,10 +645,7 @@ export default {
                 uni.showToast({ title: '修改失败', icon: 'none' });
             }
         },
-        getOccupiedCount(floor) {
-            const serials = this.getSerialsByFloor(floor.Id);
-            return serials.filter(s => s.ItemId && s.ItemId > 0).length;
-        },
+        // Occupied Count Logic moved to component
         async restockFloor(floor) {
             try {
                 uni.showLoading({ title: '补库中...', mask: true });
@@ -795,9 +739,7 @@ export default {
                     for (let fid of floorIds) {
                         const floor = this.floorList.find(f => f.Id === fid);
                         if (floor) {
-                            if (!floor.expanded) {
-                                await this.refreshFloorSerials(floor);
-                            }
+                            this.$set(floor, 'expanded', true);
                         }
                     }
                     uni.showToast({ title: `找到 ${res.rows.length} 个物品`, icon: 'none' });
@@ -829,10 +771,16 @@ export default {
 
                     uni.showToast({ title: '绑定成功', icon: 'success' });
 
-                    // Refresh
+                    // Update Local State
+                    if (this.tempSerial) {
+                        this.tempSerial.ItemId = item.Id;
+                        this.tempSerial.ItemName = item.Name;
+                        // Pre-fetch item details for UI
+                        await this.fetchItemDetails([item.Id]);
+                    }
                     const floor = this.floorList.find(f => f.Id === this.tempSerial.FloorId);
                     if (floor) {
-                        await this.refreshFloorSerials(floor);
+                        this.$set(floor, 'expanded', true);
                     }
                 } catch (e) {
                     console.error(e);
@@ -860,9 +808,10 @@ export default {
                 });
 
                 uni.showToast({ title: '解绑成功', icon: 'success' });
-                const floor = this.floorList.find(f => f.Id === this.tempSerial.FloorId);
-                if (floor) {
-                    await this.refreshFloorSerials(floor);
+                // Update Local State
+                if (this.tempSerial) {
+                    this.tempSerial.ItemId = 0;
+                    this.tempSerial.ItemName = '';
                 }
             } catch (e) {
                 console.error(e);
@@ -908,6 +857,7 @@ export default {
                 });
         },
         selectMember(member) {
+            console.log(member);
             if (!this.currentEditingCar) return;
             const car = this.currentEditingCar;
 
@@ -916,7 +866,7 @@ export default {
             const payload = {
                 ...car,
                 DutyUser: member.name,
-                // DutyUserId: member.id, 
+                DutyUserId: member.id,
             };
 
             // Using standard update
@@ -945,23 +895,23 @@ export default {
         getDaysUntil(dateStr) {
             if (!dateStr) return 9999;
             const now = new Date();
-            const target = new Date(dateStr);
+            const target = dayjs(dateStr).toDate();
             return Math.ceil((target.getTime() - now.getTime()) / (1000 * 3600 * 24));
         },
         getExpiryClass(dateStr) {
             const days = this.getDaysUntil(dateStr);
             if (days < 0) return 'text-black'; // Expired
-            if (days < 30) return 'text-red-bold'; // Urgent warning
-            if (days <= 90) return 'text-yellow-bold'; // Warning
+            if (days < 30) return 'text-red'; // Urgent warning
+            if (days <= 90) return 'text-yellow'; // Warning
             return 'text-normal';
         },
         isStockInsufficient(item) {
             if (!item) return false;
-            if (typeof item.IsStockInsufficient !== 'undefined') return item.IsStockInsufficient;
+            if (typeof item.IsStockInsufficient === 'boolean') return item.IsStockInsufficient;
 
-            const stock = item.AvailableStock || 0;
-            const base = item.Cardinality || 0;
-            return stock < base || stock === 0;
+            const stock = Number(item.AvailableStock || 0);
+            const base = Number(item.Cardinality || 0);
+            return stock <= 0 || (base > 0 && stock < base);
         },
         isExpiryWarning(item) {
             if (!item || !item.LatestExpirationDate) return false;
@@ -1010,9 +960,9 @@ page {
 }
 
 .header-section {
-    height: 200px;
+    height: 400rpx;
     background: linear-gradient(135deg, $sull-color-primary 0%, lighten($sull-color-primary, 20%) 100%);
-    padding: 0 24px;
+    padding: 0 48rpx;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -1030,60 +980,60 @@ page {
 
 .header-content {
     margin-top: 0;
-    padding-bottom: 20px;
+    padding-bottom: 40rpx;
 }
 
 .page-title {
-    font-size: 22px;
+    font-size: 44rpx;
     font-weight: bold;
     color: #fff;
-    margin-left: 12px;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-left: 24rpx;
+    text-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.1);
 }
 
 
 
 .search-row {
-    margin-top: 12px;
+    margin-top: 24rpx;
     display: flex;
     align-items: center;
 }
 
 .search-box {
     flex: 1;
-    height: 36px;
+    height: 72rpx;
     background: rgba(255, 255, 255, 0.2);
-    border-radius: 18px;
+    border-radius: 36rpx;
     display: flex;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 24rpx;
     backdrop-filter: blur(5px);
 }
 
 .search-icon {
-    font-size: 14px;
-    margin-right: 8px;
+    font-size: 28rpx;
+    margin-right: 16rpx;
     color: #fff;
     opacity: 0.8;
 }
 
 .search-input {
     flex: 1;
-    font-size: 14px;
+    font-size: 28rpx;
     color: #fff;
 }
 
 .clear-icon {
-    margin-left: 8px;
+    margin-left: 16rpx;
     color: rgba(255, 255, 255, 0.8);
 }
 
 .scan-btn {
-    width: 36px;
-    height: 36px;
+    width: 72rpx;
+    height: 72rpx;
     background: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
-    margin-left: 12px;
+    margin-left: 24rpx;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1091,8 +1041,8 @@ page {
 }
 
 .scan-icon {
-    width: 20px;
-    height: 20px;
+    width: 40rpx;
+    height: 40rpx;
     background-color: #fff;
     -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
@@ -1106,11 +1056,11 @@ page {
 
 .content-panel {
     background-color: #fff;
-    border-top-left-radius: 30px;
-    border-top-right-radius: 30px;
-    margin-top: -40px;
-    padding: 24px 16px;
-    min-height: 500px;
+    border-top-left-radius: 60rpx;
+    border-top-right-radius: 60rpx;
+    margin-top: -80rpx;
+    padding: 48rpx 32rpx;
+    min-height: 1000rpx;
     position: relative;
     z-index: 10;
 }
@@ -1119,22 +1069,22 @@ page {
 .horizontal-section {
     display: flex;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 48rpx;
 }
 
 .fixed-add-btn {
-    width: 48px;
-    height: 48px;
+    width: 96rpx;
+    height: 96rpx;
     background: #F2F4F8;
-    border-radius: 12px;
+    border-radius: 24rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-right: 12px;
+    margin-right: 24rpx;
     flex-shrink: 0;
 
     .add-icon {
-        font-size: 24px;
+        font-size: 48rpx;
         color: $sull-color-primary;
         font-weight: bold;
     }
@@ -1159,43 +1109,43 @@ page {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 48px;
-    padding: 0 12px;
-    min-width: 60px;
+    height: 96rpx;
+    padding: 0 24rpx;
+    min-width: 120rpx;
     background: #F7F8FA;
-    border-radius: 24px;
-    margin-right: 12px;
-    border: 1px solid transparent;
-    margin-right: 12px;
-    border: 1px solid transparent;
+    border-radius: 48rpx;
+    margin-right: 24rpx;
+    border: 2rpx solid transparent;
+    margin-right: 24rpx;
+    border: 2rpx solid transparent;
     transition: all 0.3s;
     min-width: auto;
     flex-shrink: 0;
 
     .card-name {
-        font-size: 14px;
+        font-size: 28rpx;
         font-weight: 500;
         color: #555;
         line-height: 1.2;
     }
 
     .card-duty {
-        font-size: 10px;
+        font-size: 20rpx;
         color: #999;
-        margin-top: 2px;
+        margin-top: 4rpx;
         line-height: 1;
     }
 
     .floor-count {
-        font-size: 10px;
+        font-size: 20rpx;
         color: #999;
-        margin-left: 4px;
+        margin-left: 8rpx;
     }
 
     &.active {
         background: #E6F7FF;
         color: $sull-color-primary;
-        border: 1px solid $sull-color-primary;
+        border: 2rpx solid $sull-color-primary;
 
         .card-name {
             color: $sull-color-primary;
@@ -1212,19 +1162,19 @@ page {
 .floor-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 24rpx;
 }
 
 .add-floor-btn {
-    height: 48px;
+    height: 96rpx;
     /** 56px in Add Car, but 48px is fine here */
     background: $sull-color-primary;
-    border-radius: 28px;
+    border-radius: 56rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 16px rgba(149, 202, 255, 0.5);
-    margin-top: 16px;
+    box-shadow: 0 8rpx 32rpx rgba(149, 202, 255, 0.5);
+    margin-top: 32rpx;
 }
 
 .add-floor-btn:active {
@@ -1233,395 +1183,12 @@ page {
 }
 
 .add-text {
-    font-size: 16px;
+    font-size: 32rpx;
     color: #fff;
     font-weight: 500;
 }
 
-.floor-wrapper {
-    margin-bottom: 0;
-}
-
-.floor-card {
-    background: #fff;
-    border-radius: 12px;
-    padding: 16px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
-    display: flex;
-    align-items: center;
-    min-height: 60px;
-    border: 1px solid #f0f0f0;
-}
-
-.floor-card:active {
-    background-color: #f9f9f9;
-}
-
-.floor-icon {
-    margin-right: 8px;
-}
-
-.icon-circle {
-    width: 8px;
-    height: 32px;
-    border-radius: 4px;
-    background-color: #F7F8FA;
-    transition: all 0.3s;
-}
-
-.blink-red {
-    background-color: #ff4d4f;
-    border: 1px solid #ff4d4f;
-    animation: strong-pulse-red 0.8s infinite;
-}
-
-.blink-orange {
-    background-color: #faad14;
-    border: 1px solid #faad14;
-    animation: strong-pulse-orange 1s infinite;
-}
-
-.blink-green {
-    background-color: #F0F9EB;
-    border: 1px solid #E1F3D8;
-    animation: pulse-green 3s infinite;
-}
-
-@keyframes strong-pulse-red {
-    0% {
-        box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.7);
-        transform: scale(0.95);
-    }
-
-    50% {
-        transform: scale(1.05);
-        box-shadow: 0 0 0 12px rgba(255, 77, 79, 0);
-    }
-
-    100% {
-        transform: scale(0.95);
-        box-shadow: 0 0 0 0 rgba(255, 77, 79, 0);
-    }
-}
-
-@keyframes strong-pulse-orange {
-    0% {
-        box-shadow: 0 0 0 0 rgba(250, 173, 20, 0.7);
-        transform: scale(0.95);
-    }
-
-    50% {
-        transform: scale(1.05);
-        box-shadow: 0 0 0 12px rgba(250, 173, 20, 0);
-    }
-
-    100% {
-        transform: scale(0.95);
-        box-shadow: 0 0 0 0 rgba(250, 173, 20, 0);
-    }
-}
-
-@keyframes pulse-green {
-    0% {
-        box-shadow: 0 0 0 0 rgba(103, 194, 58, 0.4);
-    }
-
-    70% {
-        box-shadow: 0 0 0 6px rgba(103, 194, 58, 0);
-    }
-
-    100% {
-        box-shadow: 0 0 0 0 rgba(103, 194, 58, 0);
-    }
-}
-
-.floor-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.floor-action {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    margin-left: 8px;
-}
-
-.floor-action:active {
-    background-color: #f0f0f0;
-}
-
-.action-icon {
-    font-size: 20px;
-    color: #999;
-    font-weight: bold;
-}
-
-.floor-name {
-    font-size: 16px;
-    font-weight: 600;
-    color: #333;
-    margin-bottom: 4px;
-}
-
-.floor-sub {
-    font-size: 13px;
-    color: #999;
-}
-
-.serial-grid-wrapper {
-    margin-top: 12px;
-    padding: 0 4px;
-    animation: fadeIn 0.3s ease;
-}
-
-.serial-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-}
-
-.serial-item {
-    width: 100%;
-    box-sizing: border-box;
-    overflow: hidden;
-    background: #F5F7FA;
-    border-radius: 8px;
-    padding: 8px;
-    height: 110px;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    /* 3D Box Effect - Inset look */
-    box-shadow:
-        inset 0 2px 4px rgba(0, 0, 0, 0.06),
-        0 1px 2px rgba(255, 255, 255, 0.8),
-        0 0 0 1px rgba(0, 0, 0, 0.03);
-    border: 1px solid #E4E7ED;
-
-    &.expiry-warning {
-        border: 1px solid #F56C6C !important;
-        background-color: #FFF0F0;
-    }
-}
-
-.serial-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 4px;
-}
-
-.serial-no {
-    font-size: 14px;
-    color: #303133;
-    font-weight: 900;
-    /* Bold */
-    font-family: inherit;
-}
-
-.serial-action {
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #909399;
-    font-weight: bold;
-    font-size: 18px;
-}
-
-.item-detail {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.item-name-wrapper {
-    width: 100%;
-    height: 20px;
-    overflow: hidden;
-    white-space: nowrap;
-    margin-bottom: 4px;
-    position: relative;
-}
-
-.item-name-text {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-    color: #303133;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    width: 100%;
-}
-
-.item-name-text.scrolling {
-    display: inline-block;
-    width: auto;
-    padding-left: 100%;
-    animation: marquee 8s linear infinite;
-    text-overflow: clip;
-}
-
-@keyframes marquee {
-    0% {
-        transform: translateX(0);
-    }
-
-    100% {
-        transform: translateX(-100%);
-    }
-}
-
-.item-info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2px;
-}
-
-.item-spec {
-    font-size: 11px;
-    color: #909399;
-}
-
-.item-stock {
-    font-size: 11px;
-    font-weight: bold;
-    color: #666;
-    padding: 0 4px;
-    display: flex;
-    align-items: baseline;
-}
-
-.text-red-bold {
-    color: #F56C6C !important;
-    background: rgba(245, 108, 108, 0.1) !important;
-}
-
-.text-yellow-bold {
-    color: #E6A23C !important;
-}
-
-.text-black {
-    color: #303133 !important;
-    font-weight: bold !important;
-}
-
-.item-cardinality {
-    font-size: inherit;
-    color: inherit;
-    opacity: 0.8;
-    margin-left: 2px;
-    font-weight: normal;
-}
-
-.item-unit {
-    font-size: 10px;
-    color: inherit;
-    margin-left: 2px;
-    font-weight: normal;
-}
-
-.item-expiry {
-    text-align: right;
-    font-size: 10px;
-}
-
-.empty-slot {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.plus-icon {
-    font-size: 28px;
-    color: #DCDFE6;
-    font-weight: 300;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-5px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.bottom-spacer {
-    height: 40px;
-}
-
-.empty-placeholder {
-    color: #999;
-    font-size: 14px;
-    text-align: center;
-    margin-top: 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-}
-
-
-
-.floor-status-icons {
-    display: flex;
-    align-items: center;
-    margin-right: 8px;
-}
-
-.status-icon {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-left: 4px;
-    background: #f5f7fa;
-}
-
-.status-icon.warning {
-    background: #FEF0F0;
-    border: 1px solid #F56C6C;
-}
-
-.status-icon.danger {
-    background: #FDF6EC;
-    border: 1px solid #E6A23C;
-}
-
-.status-bg-icon {
-    width: 16px;
-    height: 16px;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-}
-
-.icon-clock {
-    /* Red Clock */
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23F56C6C'%3E%3Cpath d='M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8 8-8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z'/%3E%3C/svg%3E");
-}
-
-.icon-siren {
-    /* Orange Siren */
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23E6A23C'%3E%3Cpath d='M12 4c-3.3 0-6 2.7-6 6v4h12v-4c0-3.3-2.7-6-6-6zm-1 3h2v4h-2V7z'/%3E%3Cpath d='M5 16v3c0 1.1 0.9 2 2 2h10c1.1 0 2-0.9 2-2v-3H5z'/%3E%3Cpath d='M12 1.5l1.5 1.5-1.5 1.5-1.5-1.5L12 1.5zM4.5 5.5l2 2-1.5 1.5-2-2 1.5-1.5zM19.5 5.5l-2 2 1.5 1.5 2-2-1.5-1.5z'/%3E%3C/svg%3E");
-}
+/* Floor Styles Removed (Moved to StorageLayers) */
 
 /* Custom Action Sheet */
 .action-sheet-overlay {
@@ -1639,19 +1206,19 @@ page {
 
 .action-sheet-panel {
     background: #F7F7F7;
-    border-top-left-radius: 16px;
-    border-top-right-radius: 16px;
+    border-top-left-radius: 32rpx;
+    border-top-right-radius: 32rpx;
     overflow: hidden;
     animation: slideUp 0.3s ease;
 }
 
 .action-item {
     background: #fff;
-    padding: 16px;
+    padding: 32rpx;
     text-align: center;
-    font-size: 16px;
+    font-size: 32rpx;
     color: #171725;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 2rpx solid #f0f0f0;
 }
 
 .action-item:last-child {
@@ -1663,7 +1230,7 @@ page {
 }
 
 .action-cancel-gap {
-    height: 8px;
+    height: 16rpx;
     background: #F7F7F7;
 }
 
@@ -1671,6 +1238,7 @@ page {
     color: #171725;
 }
 
+/* Custom Modal */
 /* Custom Modal */
 .modal-overlay {
     position: fixed;
@@ -1686,62 +1254,64 @@ page {
     backdrop-filter: blur(2px);
 
     .modal-content {
-        width: 85%;
+        width: 80%;
         background: #fff;
-        border-radius: 16px;
+        border-radius: 40rpx;
         display: flex;
         flex-direction: column;
         animation: slideUp 0.3s ease;
+        overflow: hidden;
 
         .modal-header {
-            padding: 16px;
-            border-bottom: 1px solid #E9E9ED;
+            padding: 32rpx;
+            border-bottom: 2rpx solid $sull-color-line;
             display: flex;
             justify-content: space-between;
             align-items: center;
 
             .modal-title {
-                font-size: 18px;
+                font-size: 36rpx;
                 font-weight: bold;
-                color: #171725;
+                color: $sull-text-main;
             }
 
             .close-btn {
-                font-size: 18px;
-                color: #78828A;
-                padding: 4px;
+                font-size: 40rpx;
+                color: $sull-text-secondary;
+                padding: 8rpx;
+                line-height: 1;
             }
         }
 
         .modal-body {
-            padding: 20px;
+            padding: 48rpx 40rpx;
 
             .form-item {
                 display: flex;
                 flex-direction: column;
 
                 .label {
-                    font-size: 12px;
-                    color: #78828A;
-                    margin-bottom: 8px;
+                    font-size: 28rpx;
+                    color: $sull-text-secondary;
+                    margin-bottom: 16rpx;
                 }
             }
 
             .input-wrapper {
-                background-color: #FDFDFD;
-                border: 1px solid #E9E9ED;
-                border-radius: 12px;
-                padding: 0 12px;
+                background-color: $sull-color-background;
+                border: 2rpx solid $sull-color-line;
+                border-radius: 20rpx;
+                padding: 0 24rpx;
                 display: flex;
                 align-items: center;
-                height: 48px;
+                height: 96rpx;
                 box-sizing: border-box;
             }
 
             .input-field {
                 flex: 1;
-                font-size: 16px;
-                color: #171725;
+                font-size: 30rpx;
+                color: $sull-text-main;
                 height: 100%;
                 border: none;
                 background: transparent;
@@ -1749,44 +1319,51 @@ page {
             }
 
             .clear-icon {
-                width: 24px;
-                height: 24px;
+                width: 48rpx;
+                height: 48rpx;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                color: #999;
-                font-size: 14px;
+                color: $sull-text-disabled;
+                font-size: 28rpx;
             }
         }
 
         .modal-footer {
             display: flex;
-            border-top: 1px solid #E9E9ED;
+            border-top: 2rpx solid $sull-color-line;
 
             .modal-btn {
                 flex: 1;
                 border: none;
                 background: #fff;
-                padding: 14px 0;
-                font-size: 14px;
+                padding: 28rpx 0;
+                font-size: 30rpx;
                 line-height: normal;
                 border-radius: 0;
+
+                &::after {
+                    border: none;
+                }
             }
 
             .modal-btn.cancel {
-                color: #78828A;
-                border-right: 1px solid #E9E9ED;
-                border-bottom-left-radius: 16px;
+                color: $sull-text-secondary;
+                border-right: 2rpx solid $sull-color-line;
             }
 
             .modal-btn.confirm {
-                color: #95CAFF;
+                color: $sull-color-primary;
                 font-weight: 500;
-                border-bottom-right-radius: 16px;
+            }
+
+            .modal-btn.full-width {
+                width: 100%;
+                border-right: none;
             }
 
             .modal-btn:active {
-                background: #F9F9F9;
+                background: $sull-color-background;
             }
         }
     }
@@ -1794,33 +1371,30 @@ page {
 
 @keyframes slideUp {
     from {
-        transform: translateY(20px);
+        transform: scale(0.9);
         opacity: 0;
     }
 
     to {
-        transform: translateY(0);
+        transform: scale(1);
         opacity: 1;
     }
 }
 
 .manual-modal {
     max-height: 80vh;
-    display: flex;
-    flex-direction: column;
 }
 
 .manual-body {
-    padding: 24px;
-    max-height: 60vh;
+    padding: 48rpx;
+    max-height: 50vh;
     box-sizing: border-box;
 }
 
 .manual-text {
-    font-size: 15px;
-    color: #333;
-    line-height: 1.8;
-    white-space: pre-wrap;
+    font-size: 28rpx;
+    color: $sull-text-main;
+    line-height: 1.6;
     white-space: pre-wrap;
     text-align: justify;
 }
@@ -1843,9 +1417,9 @@ page {
 .member-modal {
     width: 100%;
     background: #fff;
-    border-radius: 20px 20px 0 0;
-    padding: 20px;
-    padding-bottom: 40px;
+    border-radius: 40rpx 40rpx 0 0;
+    padding: 40rpx;
+    padding-bottom: 80rpx;
     display: flex;
     flex-direction: column;
     max-height: 70vh;
@@ -1856,11 +1430,11 @@ page {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 32rpx;
 }
 
 .member-modal-title {
-    font-size: 18px;
+    font-size: 36rpx;
     font-weight: bold;
     color: #171725;
 }
@@ -1868,7 +1442,7 @@ page {
 .member-search-bar {
     display: flex;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 24rpx;
 
     .search-box {
         flex: 1;
@@ -1884,11 +1458,11 @@ page {
 
     .search-input {
         flex: 1;
-        height: 40px;
+        height: 80rpx;
         background: #F5F7FA;
-        border-radius: 20px;
-        padding: 0 36px 0 16px;
-        font-size: 14px;
+        border-radius: 40rpx;
+        padding: 0 72rpx 0 32rpx;
+        font-size: 28rpx;
         color: #333; // Dark text for member search
     }
 }
@@ -1896,12 +1470,12 @@ page {
 .member-list {
     flex: 1;
     height: 0;
-    min-height: 300px;
+    min-height: 600rpx;
 }
 
 .member-item {
-    padding: 16px;
-    border-bottom: 1px solid #f9f9f9;
+    padding: 32rpx;
+    border-bottom: 2rpx solid #f9f9f9;
     display: flex;
     align-items: center;
 
@@ -1911,14 +1485,67 @@ page {
 }
 
 .item-text {
-    font-size: 15px;
+    font-size: 30rpx;
     color: #171725;
 }
 
 .empty-state-small {
-    padding: 20px;
+    padding: 40rpx;
     text-align: center;
     color: #999;
-    font-size: 14px;
+    font-size: 28rpx;
+}
+</style>
+
+<style lang="scss" scoped>
+/* Custom Refresher */
+.custom-refresher {
+    height: 120rpx;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: -120rpx;
+    left: 0;
+    transition: transform 0.2s linear;
+}
+
+.refresher-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8rpx;
+}
+
+.refresher-icon {
+    width: 64rpx;
+    height: 64rpx;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    transition: transform 0.3s ease;
+}
+
+.refresher-icon.animating {
+    animation: ambulance-bounce 0.8s infinite ease-in-out;
+}
+
+.refresher-text {
+    font-size: 20rpx;
+    color: $sull-color-primary;
+    opacity: 0.8;
+}
+
+@keyframes ambulance-bounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-6px);
+    }
 }
 </style>

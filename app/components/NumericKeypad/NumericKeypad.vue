@@ -50,33 +50,33 @@ export default {
 <style lang="scss" scoped>
 .keypad-container {
     background-color: #F2F3F5;
-    padding: 12px;
-    border-radius: 12px;
+    padding: 24rpx;
+    border-radius: 24rpx;
 }
 
 .keypad-grid {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 16rpx;
 }
 
 .key-row {
     display: flex;
-    gap: 8px;
+    gap: 16rpx;
 }
 
 .key-cell {
     flex: 1;
     background: #FFFFFF;
-    height: 48px;
-    border-radius: 8px;
+    height: 96rpx;
+    border-radius: 16rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 40rpx;
     font-weight: 600;
     color: #1F1F1F;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.05);
     transition: all 0.1s;
 }
 
@@ -90,6 +90,6 @@ export default {
 }
 
 .delete-icon {
-    font-size: 18px;
+    font-size: 36rpx;
 }
 </style>

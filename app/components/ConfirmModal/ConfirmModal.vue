@@ -11,17 +11,17 @@
             </view>
 
             <!-- Text Content -->
-            <text class="modal-title">{{ title || 'Are You Sure?' }}</text>
-            <text class="modal-message">{{ message || 'Do you want to proceed?' }}</text>
+            <text class="modal-title">{{ displayTitle }}</text>
+            <text class="modal-message">{{ displayMessage }}</text>
 
             <!-- Action Buttons -->
             <view class="modal-actions">
                 <view class="btn btn-cancel" :style="{ color: cancelColor, borderColor: cancelColor }"
                     @click="handleCancel">
-                    <text class="btn-text">{{ cancelText || 'Cancel' }}</text>
+                    <text class="btn-text">{{ displayCancelText }}</text>
                 </view>
                 <view class="btn btn-confirm" :style="{ backgroundColor: confirmColor }" @click="handleConfirm">
-                    <text class="btn-text-white">{{ confirmText || 'Confirm' }}</text>
+                    <text class="btn-text-white">{{ displayConfirmText }}</text>
                 </view>
             </view>
         </view>
@@ -46,11 +46,11 @@ export default {
         },
         confirmText: {
             type: String,
-            default: 'Confirm'
+            default: ''
         },
         cancelText: {
             type: String,
-            default: 'Cancel'
+            default: ''
         },
         confirmColor: {
             type: String,
@@ -66,6 +66,20 @@ export default {
         }
     },
     emits: ['update:visible', 'confirm', 'cancel'],
+    computed: {
+        displayTitle() {
+            return this.title || this.$t('modal.confirm_title');
+        },
+        displayMessage() {
+            return this.message || this.$t('modal.confirm_message');
+        },
+        displayConfirmText() {
+            return this.confirmText || this.$t('modal.confirm_btn');
+        },
+        displayCancelText() {
+            return this.cancelText || this.$t('modal.cancel_btn');
+        }
+    },
     methods: {
         handleConfirm() {
             this.$emit('confirm');
@@ -102,10 +116,10 @@ export default {
 }
 
 .modal-content {
-    width: 300px;
+    width: 600rpx;
     background-color: #ffffff;
-    border-radius: 24px;
-    padding: 32px 24px;
+    border-radius: 48rpx;
+    padding: 64rpx 48rpx;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -113,12 +127,12 @@ export default {
 }
 
 .illustration-container {
-    margin-bottom: 24px;
+    margin-bottom: 48rpx;
 }
 
 .icon-circle {
-    width: 100px;
-    height: 100px;
+    width: 200rpx;
+    height: 200rpx;
     background-color: #FFF4E6;
     /* Light orange background */
     border-radius: 50%;
@@ -128,11 +142,11 @@ export default {
 }
 
 .chat-bubble {
-    width: 60px;
-    height: 50px;
+    width: 120rpx;
+    height: 100rpx;
     background-color: #FFC107;
     /* Orange/Yellow */
-    border-radius: 12px;
+    border-radius: 24rpx;
     position: relative;
     display: flex;
     align-items: center;
@@ -142,48 +156,48 @@ export default {
 .chat-bubble::after {
     content: '';
     position: absolute;
-    bottom: -10px;
+    bottom: -20rpx;
     left: 50%;
     transform: translateX(-50%);
-    border-width: 10px 10px 0;
+    border-width: 20rpx 20rpx 0;
     border-style: solid;
     border-color: #FFC107 transparent transparent transparent;
 }
 
 .question-mark {
     color: #ffffff;
-    font-size: 32px;
+    font-size: 64rpx;
     font-weight: bold;
     line-height: 1;
 }
 
 .modal-title {
-    font-size: 20px;
+    font-size: 40rpx;
     font-weight: bold;
     color: #000000;
-    margin-bottom: 12px;
+    margin-bottom: 24rpx;
     text-align: center;
 }
 
 .modal-message {
-    font-size: 14px;
+    font-size: 28rpx;
     color: #999999;
-    margin-bottom: 32px;
+    margin-bottom: 64rpx;
     text-align: center;
     line-height: 1.4;
-    max-width: 240px;
+    max-width: 480rpx;
 }
 
 .modal-actions {
     display: flex;
     width: 100%;
-    gap: 16px;
+    gap: 32rpx;
 }
 
 .btn {
     flex: 1;
-    height: 44px;
-    border-radius: 22px;
+    height: 88rpx;
+    border-radius: 44rpx;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -196,22 +210,22 @@ export default {
 
 .btn-cancel {
     background-color: transparent;
-    border: 1px solid currentColor;
+    border: 2rpx solid currentColor;
 }
 
 .btn-confirm {
-    border: 1px solid transparent;
+    border: 2rpx solid transparent;
     /* Maintain size parity */
 }
 
 .btn-text {
-    font-size: 16px;
+    font-size: 32rpx;
     font-weight: 600;
     /* Color inherited from parent style binding */
 }
 
 .btn-text-white {
-    font-size: 16px;
+    font-size: 32rpx;
     font-weight: 600;
     color: #ffffff;
 }

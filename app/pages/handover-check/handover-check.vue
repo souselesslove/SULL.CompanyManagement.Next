@@ -1,7 +1,7 @@
 <template>
 	<view class="page-container">
 		<!-- Custom Navigation Bar -->
-		<view class="custom-nav" :style="{ paddingTop: statusBarHeight + 'px' }">
+		<view class="custom-nav" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
 			<view class="nav-content">
 				<view class="nav-left">
 					<BackButton class="nav-back-btn" @click="goBack" />
@@ -12,11 +12,13 @@
 		</view>
 
 		<scroll-view class="scroll-content" scroll-y :enable-back-to-top="true" :refresher-enabled="true"
-			:refresher-triggered="isRefreshing" @refresherrefresh="onRefresh" refresher-default-style="none"
-			refresher-background="#f0f5ff" :scroll-top="scrollTopValue" @scroll="onScroll"
-			:style="{ paddingTop: (statusBarHeight + 44) + 'px' }">
+			:refresher-threshold="80" :refresher-triggered="isRefreshing" @refresherrefresh="onRefresh"
+			@refresherpulling="onPulling" @refresherrestore="onRestore" @refresherabort="onRestore"
+			refresher-default-style="none" refresher-background="#f0f5ff" :scroll-top="scrollTopValue"
+			@scroll="onScroll" :style="{ paddingTop: (statusBarHeight * 2 + 88) + 'rpx' }">
 
-			<view slot="refresher" class="custom-refresher">
+			<view slot="refresher" class="custom-refresher"
+				:style="{ height: (isPulling || isRefreshing) ? '120rpx' : '0px', overflow: 'hidden' }">
 				<view class="refresher-content">
 					<view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
 					<text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
@@ -60,12 +62,8 @@
 					<!-- 1. Progress Info -->
 					<view class="progress-card">
 						<view class="progress-text">
-							<text class="current-step">{{ $t('handoverCheck.step', {
-								current: currentStepIndex + 1,
-								total: checkList.length
-							}) }}</text>
-							<text class="remaining-text">{{ $t('handoverCheck.remaining', { count: remainingCount })
-							}}</text>
+							<text class="current-step">{{ stepProgressText }}</text>
+							<text class="remaining-text">{{ remainingText }}</text>
 						</view>
 						<progress :percent="progressPercent" border-radius="4" stroke-width="6" activeColor="#007AFF"
 							backgroundColor="#E9E9ED" />
@@ -149,6 +147,8 @@ import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import BackButton from '@/components/BackButton/BackButton.vue';
 import BackToTop from '@/components/BackToTop/BackToTop.vue';
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
+import { formatMessage } from '@/utils/i18n.js';
 
 export default {
 	components: {
@@ -160,6 +160,7 @@ export default {
 		return {
 			statusBarHeight: 20,
 			isRefreshing: false,
+			isPulling: false,
 			scrollTop: 0,
 			scrollTopValue: 0,
 			currentStepIndex: 0,
@@ -178,7 +179,7 @@ export default {
 	},
 	onLoad(option) {
 		// Get User Info for Org/Dept
-		const uInfo = uni.getStorageSync('userOrgInfo');
+		const uInfo = storage.get('userOrgInfo');
 		if (uInfo && uInfo.User) {
 			this.userInfo = uInfo.User;
 			this.currentUser = this.userInfo.UserId;
@@ -237,6 +238,28 @@ export default {
 	computed: {
 		currentItem() {
 			return this.checkList[this.currentStepIndex];
+		},
+		stepProgressText() {
+			const values = {
+				current: this.currentStepIndex + 1,
+				total: this.checkList.length
+			};
+			// #ifdef H5
+			return this.$t('handoverCheck.step', values);
+			// #endif
+			// #ifndef H5
+			const text = this.$t('handoverCheck.step');
+			return formatMessage(text, values);
+			// #endif
+		},
+		remainingText() {
+			// #ifdef H5
+			return this.$t('handoverCheck.remaining', { count: this.remainingCount });
+			// #endif
+			// #ifndef H5
+			const text = this.$t('handoverCheck.remaining');
+			return formatMessage(text, { count: this.remainingCount });
+			// #endif
 		},
 		progressPercent() {
 			if (this.checkList.length === 0) return 0;
@@ -407,11 +430,19 @@ export default {
 		},
 		onRefresh() {
 			this.isRefreshing = true;
+			this.isPulling = true;
 			this.fetchCheckList();
 			setTimeout(() => {
 				this.currentStepIndex = 0;
 				this.isRefreshing = false;
+				this.isPulling = false;
 			}, 1000);
+		},
+		onPulling() {
+			this.isPulling = true;
+		},
+		onRestore() {
+			this.isPulling = false;
 		},
 		onScroll(e) {
 			this.scrollTop = e.detail.scrollTop;
@@ -598,8 +629,8 @@ export default {
 		},
 		confirmQuickFinish() {
 			uni.showModal({
-				title: '一键确认',
-				content: '确定要使用默认值(正常)提交剩余所有检查项吗？',
+				title: this.$t('handoverCheck.quickFinish'),
+				content: this.$t('handoverCheck.quickFinishConfirm'),
 				success: (res) => {
 					if (res.confirm) {
 						this.quickFinish();
@@ -611,7 +642,7 @@ export default {
 			if (this.isSubmitting) return;
 			this.isSubmitting = true;
 			uni.showLoading({
-				title: '提交中...'
+				title: this.$t('handoverCheck.submitting')
 			});
 
 			try {
@@ -669,7 +700,7 @@ export default {
 
 				uni.hideLoading();
 				uni.showToast({
-					title: '全部完成',
+					title: this.$t('handoverCheck.allFinished'),
 					icon: 'success'
 				});
 
@@ -698,10 +729,18 @@ export default {
 }
 </script>
 
+<style>
+page {
+	height: 100%;
+	overflow: hidden;
+}
+</style>
+
 <style lang="scss" scoped>
 .page-container {
 	background-color: $sull-color-background;
-	min-height: 100vh;
+	height: 100vh;
+	overflow: hidden;
 	display: flex;
 	flex-direction: column;
 	font-family: $font-family-main;
@@ -714,17 +753,17 @@ export default {
 	left: 0;
 	width: 100%;
 	z-index: 999;
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+	box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.03);
 
 	.nav-content {
-		height: 44px;
+		height: 88rpx;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0 16px;
+		padding: 0 32rpx;
 
 		.nav-left {
-			width: 40px;
+			width: 80rpx;
 			display: flex;
 			align-items: center;
 		}
@@ -736,33 +775,34 @@ export default {
 		}
 
 		.nav-right {
-			width: 40px;
+			width: 80rpx;
 		}
 	}
 }
 
 .scroll-content {
 	flex: 1;
-	height: 100vh;
+	height: 0; // Important for flex container to constrain child
+	width: 100%;
 }
 
 .content-wrapper {
-	padding: 16px;
-	padding-bottom: 40px;
+	padding: 32rpx;
+	padding-bottom: 80rpx;
 }
 
 // 1. Progress Card
 .progress-card {
 	background: $sull-color-white;
 	border-radius: $radius-lg;
-	padding: 16px;
-	margin-bottom: 20px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+	padding: 32rpx;
+	margin-bottom: 40rpx;
+	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
 
 	.progress-text {
 		display: flex;
 		justify-content: space-between;
-		margin-bottom: 8px;
+		margin-bottom: 16rpx;
 
 		.current-step {
 			font-size: $font-size-body-lg;
@@ -781,15 +821,15 @@ export default {
 .check-card {
 	background: $sull-color-white;
 	border-radius: $radius-lg;
-	padding: 24px;
-	margin-bottom: 24px;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+	padding: 48rpx;
+	margin-bottom: 48rpx;
+	box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.04);
 
 	.check-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: flex-start;
-		margin-bottom: 12px;
+		margin-bottom: 24rpx;
 
 		.check-title {
 			font-size: $font-size-h5;
@@ -798,20 +838,20 @@ export default {
 		}
 
 		.help-btn {
-			width: 20px;
-			height: 20px;
-			border: 1px solid $sull-text-secondary; // Circle border
+			width: 40rpx;
+			height: 40rpx;
+			border: 2rpx solid $sull-text-secondary; // Circle border
 			border-radius: 50%;
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			margin-left: 8px;
+			margin-left: 16rpx;
 			flex-shrink: 0;
-			margin-top: 4px;
+			margin-top: 8rpx;
 		}
 
 		.help-icon {
-			font-size: 14px;
+			font-size: 28rpx;
 			color: $sull-text-secondary;
 			font-weight: bold;
 			line-height: 1;
@@ -821,21 +861,21 @@ export default {
 	.check-desc {
 		font-size: $font-size-body-md;
 		color: $sull-text-secondary;
-		margin-bottom: 20px;
+		margin-bottom: 40rpx;
 		line-height: 1.5;
 	}
 
 	.check-options {
-		margin-bottom: 20px;
+		margin-bottom: 40rpx;
 
 		.option-item {
 			display: flex;
 			align-items: center;
-			padding: 12px 16px;
-			margin-bottom: 10px;
+			padding: 24rpx 32rpx;
+			margin-bottom: 20rpx;
 			background: $sull-color-background;
 			border-radius: $radius-md;
-			border: 1px solid transparent;
+			border: 2rpx solid transparent;
 			transition: all 0.2s;
 
 			&.disabled {
@@ -855,8 +895,8 @@ export default {
 
 			.radio-icon,
 			.checkbox-icon {
-				font-size: 18px;
-				margin-right: 10px;
+				font-size: 36rpx;
+				margin-right: 20rpx;
 			}
 
 			.option-label {
@@ -873,7 +913,7 @@ export default {
 		.input-label {
 			font-size: $font-size-body-sm;
 			color: $sull-text-secondary;
-			margin-bottom: 8px;
+			margin-bottom: 16rpx;
 		}
 
 		.remark-input {
@@ -881,10 +921,10 @@ export default {
 			box-sizing: border-box;
 			background: $sull-color-background;
 			border-radius: $radius-md;
-			padding: 12px;
+			padding: 24rpx;
 			font-size: $font-size-body-md;
 			color: $sull-text-main;
-			min-height: 80px;
+			min-height: 160rpx;
 		}
 	}
 }
@@ -892,11 +932,11 @@ export default {
 // 3. Nav Buttons
 .nav-buttons {
 	display: flex;
-	gap: 16px;
+	gap: 32rpx;
 
 	.nav-btn {
 		flex: 1;
-		height: 48px;
+		height: 96rpx;
 		border-radius: $radius-pill;
 		border: none;
 		font-size: $font-size-body-lg;
@@ -913,7 +953,7 @@ export default {
 		&.prev-btn {
 			background: $sull-color-white;
 			color: $sull-text-secondary;
-			border: 1px solid $sull-color-line;
+			border: 2rpx solid $sull-color-line;
 
 			&.disabled {
 				opacity: 0.5;
@@ -924,20 +964,20 @@ export default {
 		&.next-btn {
 			background: $sull-color-primary;
 			color: $sull-color-white;
-			box-shadow: 0 4px 10px rgba(0, 122, 255, 0.3);
+			box-shadow: 0 8rpx 20rpx rgba(0, 122, 255, 0.3);
 		}
 
 		&.finish-btn {
 			background: $sull-color-success;
 			color: $sull-color-white;
-			box-shadow: 0 4px 10px rgba(76, 217, 100, 0.3);
+			box-shadow: 0 8rpx 20rpx rgba(76, 217, 100, 0.3);
 		}
 
 		&.quick-finish-btn {
 			background: #ff4d4f;
 			color: #fff;
 			border: none;
-			box-shadow: 0 4px 10px rgba(255, 77, 79, 0.3);
+			box-shadow: 0 8rpx 20rpx rgba(255, 77, 79, 0.3);
 		}
 	}
 }
@@ -948,7 +988,7 @@ export default {
 
 /* Custom Refresher */
 .custom-refresher {
-	height: 60px;
+	height: 120rpx;
 	width: 100%;
 	display: flex;
 	align-items: center;
@@ -959,12 +999,12 @@ export default {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 4px;
+	gap: 8rpx;
 }
 
 .refresher-icon {
-	width: 32px;
-	height: 32px;
+	width: 64rpx;
+	height: 64rpx;
 	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
 	background-size: contain;
 	background-repeat: no-repeat;
@@ -976,7 +1016,7 @@ export default {
 }
 
 .refresher-text {
-	font-size: 10px;
+	font-size: 20rpx;
 	color: $sull-color-primary;
 	opacity: 0.8;
 }
@@ -989,37 +1029,37 @@ export default {
 	}
 
 	50% {
-		transform: translateY(-6px);
+		transform: translateY(-12rpx);
 	}
 }
 
 .read-only-list {
 	.check-card {
-		margin-bottom: 16px;
-		padding: 16px;
+		margin-bottom: 32rpx;
+		padding: 32rpx;
 
 		.check-header {
-			margin-bottom: 8px;
+			margin-bottom: 16rpx;
 		}
 
 		.check-title {
-			font-size: 16px;
+			font-size: 32rpx;
 		}
 
 		.result-text {
-			font-size: 15px;
+			font-size: 30rpx;
 			color: $sull-color-primary;
 			font-weight: 500;
 		}
 
 		.remark-text {
-			font-size: 14px;
+			font-size: 28rpx;
 			color: $sull-text-secondary;
-			margin-left: 8px;
+			margin-left: 16rpx;
 		}
 
 		.check-input {
-			margin-top: 8px;
+			margin-top: 16rpx;
 			flex-direction: row;
 			align-items: baseline;
 		}

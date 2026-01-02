@@ -1,9 +1,21 @@
 <template>
 	<view class="container">
-		<view class="main-content">
+		<scroll-view class="main-content" scroll-y :enable-back-to-top="true" :refresher-enabled="true"
+			:refresher-triggered="isRefreshing" :refresher-threshold="60" @refresherrefresh="onRefresh"
+			@refresherpulling="onPulling" @refresherrestore="onRestore" @refresherabort="onRestore" @scroll="onScroll"
+			:scroll-top="scrollTopVal" refresher-default-style="none" refresher-background="#f0f5ff">
+
+			<view slot="refresher" class="custom-refresher"
+				:style="{ transform: (isPulling || isRefreshing) ? 'translateY(120rpx)' : 'translateY(0)' }">
+				<view class="refresher-content">
+					<view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
+					<text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
+					}}</text>
+				</view>
+			</view>
 
 			<!-- Header Gradient Section matching Position Manage -->
-			<view class="header-section" :style="{ paddingTop: (statusBarHeight + 10) + 'px' }">
+			<view class="header-section" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
 				<view class="nav-bar">
 					<BackButton @click="goBack" />
 					<text class="page-title">{{ $t('itemOutbound.title') }}</text>
@@ -46,88 +58,16 @@
 					暂无抢救车数据
 				</view>
 
-				<!-- Floor List -->
-				<view class="floor-list">
-					<view class="floor-wrapper" v-for="floor in floorList" :key="floor.Id">
-						<view class="floor-card" @click="toggleFloor(floor)">
-							<!-- Icon -->
-							<view class="floor-icon">
-								<view class="icon-circle" :class="getFloorStatusClass(floor)"></view>
-							</view>
-
-							<!-- Info -->
-							<view class="floor-info">
-								<text class="floor-name">{{ floor.DisplayName || floor.Name }}</text>
-								<text class="floor-sub">已用 {{ getOccupiedCount(floor) }} / 共 {{ floor.SerialId || 0 }}
-									格</text>
-							</view>
-							<!-- Status Icons -->
-							<view class="floor-status-icons">
-								<view class="status-icon warning" v-if="hasExpiryProblem(floor)">
-									<view class="status-bg-icon icon-clock"></view>
-								</view>
-								<view class="status-icon danger" v-if="hasStockProblem(floor)">
-									<view class="status-bg-icon icon-siren"></view>
-								</view>
-							</view>
-						</view>
-
-						<!-- Expanded Details (Serials) -->
-						<view class="serial-grid-wrapper" v-if="floor.expanded">
-							<view class="serial-grid">
-								<view class="serial-item" v-for="serial in getSerialsByFloor(floor.Id)" :key="serial.Id"
-									:id="'serial-' + serial.Id"
-									:class="{ 'highlight-glow': highlightedSerialIds.includes(serial.Id), 'expiry-warning': serial.ItemId > 0 && itemsMap[serial.ItemId] && isExpiryWarning(itemsMap[serial.ItemId]) }"
-									@click="onSerialClick(serial)">
-									<view class="serial-header">
-										<view class="alert-bell"
-											v-if="serial.ItemId > 0 && itemsMap[serial.ItemId] && shouldShowAlert(itemsMap[serial.ItemId])">
-										</view>
-										<text class="serial-no">{{ serial.SerialId || serial.OrderBy }}</text>
-									</view>
-
-									<!-- Occupied Content -->
-									<view class="item-detail" v-if="serial.ItemId > 0 && itemsMap[serial.ItemId]">
-										<view class="item-name-wrapper">
-											<text class="item-name-text"
-												:class="{ scrolling: (itemsMap[serial.ItemId].Name || '').length > 8 }">{{
-													itemsMap[serial.ItemId].Name }}</text>
-										</view>
-										<view class="item-info-row">
-											<text class="item-spec">{{ itemsMap[serial.ItemId].Specification || '-'
-											}}</text>
-											<view class="item-stock"
-												:class="{ 'text-red-bold': isStockInsufficient(itemsMap[serial.ItemId]) }">
-												<text>x {{ itemsMap[serial.ItemId].AvailableStock || 0 }}</text>
-												<text class="item-cardinality"
-													v-if="itemsMap[serial.ItemId].Cardinality"> / {{
-														itemsMap[serial.ItemId].Cardinality }}</text>
-												<text class="item-unit" v-if="itemsMap[serial.ItemId].Unit">{{
-													itemsMap[serial.ItemId].Unit }}</text>
-											</view>
-										</view>
-										<view class="item-expiry">
-											<text :class="itemsMap[serial.ItemId].ExpiryClass">
-												{{ itemsMap[serial.ItemId].FormattedDate }}
-											</text>
-										</view>
-									</view>
-
-									<!-- Empty Content -->
-									<view class="empty-slot" v-else>
-										<text class="plus-icon">+</text>
-									</view>
-								</view>
-							</view>
-						</view>
-					</view>
-				</view>
-				<view style="height: 40px;"></view>
+				<!-- Floor List (Refactored) -->
+				<StorageLayers :floorList="floorList" :serialsMap="floorSerialsMap" :itemsMap="itemsMap"
+					:highlightedSerialIds="highlightedSerialIds" @toggle-floor="toggleFloor"
+					@serial-click="onSerialClick" />
+				<view style="height: 80rpx;"></view>
 			</view>
 
 			<view class="bottom-spacer"></view>
 			<FooterInfo />
-		</view>
+		</scroll-view>
 
 		<BackToTop :scroll-top="scrollTop" @click="goTop" />
 
@@ -148,16 +88,18 @@
 						<scroll-view scroll-x class="batch-scroll">
 							<view class="batch-list-h">
 								<view class="batch-item" v-for="(batch, idx) in itemDetails" :key="idx"
-									:class="{ active: selectedBatchId === batch.Id, disabled: batch.Stock <= 0 }"
+									:class="{ active: selectedBatchId === batch.Id, disabled: batch.Stock <= 0, 'stock-warning': (!batch.Stock || batch.Stock <= 0), 'stock-insufficient': (batch.Stock > 0 && batch.Stock < (selectedItem.Cardinality || 0)) }"
 									@click="batch.Stock > 0 && selectBatch(batch)">
 									<view class="batch-row">
-										<text class="batch-no">批号: {{ batch.BatchNo || '-' }}</text>
+										<text class="batch-no">批号: {{ batch.RegisterCode || '-' }}</text>
 									</view>
 									<view class="batch-row">
 										<text class="batch-expiry">效期: {{ formatDate(batch.ExpirationDate) }}</text>
 									</view>
 									<view class="batch-row">
-										<text class="batch-stock">库存: {{ batch.Stock }}</text>
+										<text class="batch-stock"
+											:class="{ 'stock-zero': (!batch.Stock || batch.Stock <= 0), 'stock-insufficient-text': (batch.Stock > 0 && batch.Stock < (selectedItem.Cardinality || 0)) }">库存:
+											{{ batch.Stock }}</text>
 									</view>
 								</view>
 							</view>
@@ -209,22 +151,25 @@ import BackButton from '@/components/BackButton/BackButton.vue';
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import BackToTop from '@/components/BackToTop/BackToTop.vue';
 import NumericKeypad from '@/components/NumericKeypad/NumericKeypad.vue';
+import StorageLayers from '@/components/StorageLayers/StorageLayers.vue';
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
 import dayjs from 'dayjs';
 
 export default {
-	components: { BackButton, FooterInfo, BackToTop, NumericKeypad },
+	components: { BackButton, FooterInfo, BackToTop, NumericKeypad, StorageLayers },
 	data() {
 		return {
 			statusBarHeight: 20,
 			scrollTop: 0,
 			oldScrollTop: 0,
 			isRefreshing: false,
+			isPulling: false,
 			searchText: '',
+			scrollTopVal: 0,
 
 			// Data Lists (Same as Position Manage)
 			rescueCarList: [],
-			allFloorList: [],
 			floorList: [],
 			serialList: [],
 			selectedRescueCarId: null,
@@ -271,29 +216,38 @@ export default {
 			return map;
 		}
 	},
-	onPageScroll(e) {
-		this.scrollTop = e.scrollTop;
-	},
-	onPullDownRefresh() {
-		this.isRefreshing = true;
-		this.fetchData().then(() => {
-			this.isRefreshing = false;
-			uni.showToast({ title: '已刷新', icon: 'none' });
-			uni.stopPullDownRefresh();
-		});
-	},
 	onLoad() {
 		const sysInfo = uni.getSystemInfoSync();
 		this.statusBarHeight = sysInfo.statusBarHeight || 20;
-		this.userOrgInfo = uni.getStorageSync('userOrgInfo')?.User || {};
+		this.userOrgInfo = storage.get('userOrgInfo') || {};
 		this.fetchData();
 	},
 	methods: {
 		goBack() { uni.navigateBack(); },
 		goTop() {
-			uni.pageScrollTo({
-				scrollTop: 0,
-				duration: 300
+			this.scrollTopVal = this.scrollTop;
+			this.$nextTick(() => {
+				this.scrollTopVal = 0;
+			});
+		},
+		onScroll(e) {
+			this.scrollTop = e.detail.scrollTop;
+		},
+		onPulling() {
+			this.isPulling = true;
+		},
+		onRestore() {
+			this.isPulling = false;
+		},
+		onRefresh() {
+			this.isRefreshing = true;
+			this.isPulling = true;
+			this.fetchData().then(() => {
+				setTimeout(() => {
+					this.isRefreshing = false;
+					this.isPulling = false;
+					uni.showToast({ title: '已刷新', icon: 'none' });
+				}, 800);
 			});
 		},
 
@@ -303,31 +257,32 @@ export default {
 		},
 		async fetchRescueCars() {
 			try {
-				if (!this.userOrgInfo.OrganizationId || !this.userOrgInfo.DepartmentId) return;
+				if (!this.userOrgInfo.Organization || !this.userOrgInfo.Department) return;
 
 				const res = await request.post('api/ssbh/Position/GetPageData', {
 					page: 1, rows: 100,
 					wheres: JSON.stringify([
-						{ name: 'Category', value: "10,100", DisplayType: 'in' },
-						{ name: 'OrganizationId', value: this.userOrgInfo.OrganizationId },
-						{ name: 'DepartmentId', value: this.userOrgInfo.DepartmentId }
+						{ name: 'Category', value: 10 },
+						{ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
+						{ name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
 					]),
 					sort: 'OrderBy', order: 'asc'
 				});
 				this.rescueCarList = (res.rows || []).filter(w => w.Category === 10);
-				this.allFloorList = (res.rows || []).filter(w => w.Category === 100);
+
 				if (this.rescueCarList.length > 0) {
 					let targetId = this.selectedRescueCarId;
 
 					// Try to load from storage if no specific selection
 					if (!targetId) {
-						const lastId = uni.getStorageSync('lastSelectedRescueCarId');
-						if (lastId && this.rescueCarList.find(w => w.Id === lastId)) {
+						const lastId = storage.get('lastSelectedRescueCarId');
+						// Use loose comparison
+						if (lastId && this.rescueCarList.find(w => w.Id == lastId)) {
 							targetId = lastId;
 						}
 					}
 
-					if (!targetId || !this.rescueCarList.find(w => w.Id === targetId)) {
+					if (!targetId || !this.rescueCarList.find(w => w.Id == targetId)) {
 						this.selectRescueCar(this.rescueCarList[0].Id);
 					} else {
 						this.selectRescueCar(targetId);
@@ -337,88 +292,74 @@ export default {
 		},
 		selectRescueCar(id) {
 			this.selectedRescueCarId = id;
-			uni.setStorageSync('lastSelectedRescueCarId', id);
-			this.scrollIntoViewId = 'car-' + id;
-			this.floorList = this.allFloorList.filter(f => f.WarehouseId === id);
-			if (this.floorList.length > 0) {
-				const floorIds = this.floorList.map(f => f.Id);
-				this.fetchSerialsByFloors(floorIds);
-			} else {
-				this.serialList = [];
-			}
+			storage.set('lastSelectedRescueCarId', id);
+			this.fetchRescueCarData(id);
+			this.scrollIntoViewId = '';
+			this.$nextTick(() => {
+				this.scrollIntoViewId = 'car-' + id;
+			});
 		},
-		async fetchSerialsByFloors(floorIds) {
-			if (!floorIds || floorIds.length === 0) return;
+		async fetchRescueCarData(warehouseId) {
+			if (!warehouseId) return;
 			try {
 				const res = await request.post('api/ssbh/Position/GetPageData', {
-					page: 1, rows: 500,
+					page: 1, rows: 1000,
 					wheres: JSON.stringify([
-						{ name: 'Category', value: 110 },
-						{ name: 'ParentId', value: floorIds.join(','), DisplayType: 'in' }
+						{ name: 'WarehouseId', value: warehouseId },
+						{ name: 'Category', value: '100,110', DisplayType: 'in' },
+						{ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
+						{ name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
 					]),
-					sort: 'SerialId', order: 'asc'
+					sort: 'OrderBy,SerialId', order: 'asc'
 				});
-				this.serialList = res.rows || [];
+
+				const allItems = res.rows || [];
+				this.floorList = allItems.filter(p => p.Category === 100).sort((a, b) => (a.OrderBy || 0) - (b.OrderBy || 0));
+				this.serialList = allItems.filter(p => p.Category === 110);
+
 				const itemIds = this.serialList.filter(s => s.ItemId > 0).map(s => s.ItemId);
 				if (itemIds.length > 0) {
 					this.fetchItemDetailsForList([...new Set(itemIds)]);
 				}
-			} catch (e) { console.error(e); }
+			} catch (e) {
+				console.error("Fetch Rescue Car Data Error", e);
+			}
 		},
 		async fetchItemDetailsForList(ids) {
-			const distinctIds = [...new Set(ids)];
-			for (let id of distinctIds) {
-				if (this.itemsMap[id]) continue;
-				try {
-					const res = await request.post('api/ssbh/Item/GetPageData', {
-						page: 1, rows: 1,
-						wheres: JSON.stringify([{ name: 'Id', value: id }, { name: 'OrganizationId', value: this.userOrgInfo.OrganizationId },
-						{ name: 'DepartmentId', value: this.userOrgInfo.DepartmentId }])
-					});
-					if (res.rows && res.rows.length > 0) {
-						const item = res.rows[0];
+			const distinctIds = ids.filter(id => !this.itemsMap[id]);
+			if (distinctIds.length === 0) return;
+
+			try {
+				const res = await request.post('api/ssbh/Item/GetPageData', {
+					page: 1, rows: 500,
+					wheres: JSON.stringify([
+						{ name: 'Id', value: distinctIds.join(','), DisplayType: 'in' },
+						{ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
+						{ name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
+					])
+				});
+
+				if (res.rows && res.rows.length > 0) {
+					res.rows.forEach(item => {
 						const dateToUse = item.LatestExpirationDate || item.ExpiryDate;
-						// Pre-calculate
 						const days = this.getDaysUntil(dateToUse);
 						item.FormattedDate = this.formatDate(dateToUse);
 						item.ExpiryClass = this.getExpiryClass(dateToUse);
-						item.IsStockInsufficient = ((item.AvailableStock || 0) < (item.Cardinality || 0)) || (item.AvailableStock || 0) <= 0;
+						const stock = Number(item.AvailableStock || 0);
+						const base = Number(item.Cardinality || 0);
+						item.IsStockInsufficient = stock <= 0 || (base > 0 && stock < base);
 						item.IsExpiryWarning = days < 30;
 
-						this.$set(this.itemsMap, id, item);
-					}
-				} catch (e) { }
-			}
-		},
-		getSerialsByFloor(floorId) {
-			return this.floorSerialsMap[floorId] || [];
-		},
-		getOccupiedCount(floor) {
-			const serials = this.getSerialsByFloor(floor.Id);
-			return serials.filter(s => s.ItemId && s.ItemId > 0).length;
-		},
-		getFloorStatusClass(floor) {
-			const serials = this.getSerialsByFloor(floor.Id);
-			if (!serials || serials.length === 0) return 'blink-green';
-			let hasExpiryWarning = false;
-			let hasStockWarning = false;
-			for (let s of serials) {
-				if (s.ItemId > 0 && this.itemsMap[s.ItemId]) {
-					const item = this.itemsMap[s.ItemId];
-					if (item && item.IsExpiryWarning) { hasExpiryWarning = true; break; }
-					if (item && item.IsStockInsufficient) { hasStockWarning = true; }
+						this.$set(this.itemsMap, item.Id, item);
+					});
 				}
+			} catch (e) {
+				console.error("Batch fetch item details failed", e);
 			}
-			if (hasExpiryWarning) return 'blink-red';
-			if (hasStockWarning) return 'blink-orange';
-			return 'blink-green';
 		},
-		async toggleFloor(floor) {
-			if (floor.expanded) {
-				this.$set(floor, 'expanded', false);
-				return;
-			}
-			await this.refreshFloorSerials(floor);
+		// Display helpers moved to StorageLayers component
+		toggleFloor(floor) {
+			this.$set(floor, 'expanded', !floor.expanded);
 		},
 		async refreshFloorSerials(floor) {
 			uni.showLoading({ title: '加载中', mask: true });
@@ -427,8 +368,8 @@ export default {
 					page: 1, rows: 500,
 					wheres: JSON.stringify([
 						{ name: 'Category', value: 110 },
-						{ name: 'OrganizationId', value: this.userOrgInfo.OrganizationId },
-						{ name: 'DepartmentId', value: this.userOrgInfo.DepartmentId },
+						{ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
+						{ name: 'DepartmentId', value: this.userOrgInfo.Department.Id },
 						{ name: 'WarehouseId', value: floor.WarehouseId },
 						{ name: 'FloorId', value: floor.Id }
 					]),
@@ -547,8 +488,7 @@ export default {
 				ChangeCounter: -this.outQty,
 				Stock: this.selectedItem.AvailableStock - this.outQty,
 				Remark: 'Quick Outbound',
-				CreatorId: this.userOrgInfo.UserId || 0,
-				Creator: this.userOrgInfo.UserName || 'User'
+				CartId: this.selectedRescueCarId
 			};
 
 			uni.showLoading({ title: '提交中' });
@@ -560,11 +500,23 @@ export default {
 					// Local Update Logic
 					const qty = this.outQty;
 
-					// Update Item Stock
+					// Update Item Stock & Warning Flags
 					if (this.selectedItem) {
-						this.selectedItem.AvailableStock = (this.selectedItem.AvailableStock || 0) - qty;
-						if (this.itemsMap[this.selectedItem.Id]) {
-							this.itemsMap[this.selectedItem.Id].AvailableStock = this.selectedItem.AvailableStock;
+						const oldStock = Number(this.selectedItem.AvailableStock) || 0;
+						const newStock = oldStock - qty;
+
+						// Update in itemsMap (main source of truth for StorageLayers)
+						const itemInMap = this.itemsMap[this.selectedItem.Id];
+						if (itemInMap) {
+							this.$set(itemInMap, 'AvailableStock', newStock);
+
+							// Recalculate Stock Warning
+							const base = Number(itemInMap.Cardinality || 0);
+							this.$set(itemInMap, 'IsStockInsufficient', newStock <= 0 || (base > 0 && newStock < base));
+
+							// Update selectedItem reference
+							this.selectedItem.AvailableStock = newStock;
+							this.selectedItem.IsStockInsufficient = itemInMap.IsStockInsufficient;
 						}
 					}
 
@@ -572,7 +524,9 @@ export default {
 					if (this.selectedBatchId) {
 						const batch = this.itemDetails.find(b => b.Id === this.selectedBatchId);
 						if (batch) {
-							batch.Stock = (batch.Stock || 0) - qty;
+							const oldBatchStock = Number(batch.Stock) || 0;
+							const newBatchStock = oldBatchStock - qty;
+							this.$set(batch, 'Stock', newBatchStock);
 						}
 					}
 
@@ -618,8 +572,8 @@ export default {
 					wheres: JSON.stringify([
 						{ name: 'Category', value: 110 },
 						{ name: 'WarehouseId', value: this.selectedRescueCarId },
-						{ name: 'OrganizationId', value: this.userOrgInfo.OrganizationId },
-						{ name: 'DepartmentId', value: this.userOrgInfo.DepartmentId },
+						{ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
+						{ name: 'DepartmentId', value: this.userOrgInfo.Department.Id },
 						{ name: 'ItemName', value: this.searchText, displayType: 'like' }
 					])
 				});
@@ -632,9 +586,7 @@ export default {
 					for (let fid of floorIds) {
 						const floor = this.floorList.find(f => f.Id === fid);
 						if (floor) {
-							if (!floor.expanded) {
-								await this.refreshFloorSerials(floor);
-							}
+							this.$set(floor, 'expanded', true);
 						}
 					}
 
@@ -683,53 +635,17 @@ export default {
 		getDaysUntil(dateStr) {
 			if (!dateStr) return 9999;
 			const now = new Date();
-			const target = new Date(dateStr);
+			const target = dayjs(dateStr).toDate();
 			return Math.ceil((target.getTime() - now.getTime()) / (1000 * 3600 * 24));
 		},
 		getExpiryClass(dateStr) {
 			const days = this.getDaysUntil(dateStr);
 			if (days < 0) return 'text-black';
 			if (days < 30) return 'text-red';
-			if (days <= 90) return 'text-yellow-bold';
+			if (days <= 90) return 'text-yellow';
 			return 'text-normal';
 		},
-		hasExpiryProblem(floor) {
-			// Check full list for this floor, ignoring current filter
-			// Logic: Expiry < 30 days (User defined "AbnormalExpiry" as < 30)
-			return this.serialList.some(s => {
-				if (s.FloorId !== floor.Id) return false;
-				if (!s.ItemId || !this.itemsMap[s.ItemId]) return false;
-				const item = this.itemsMap[s.ItemId];
-				return item.IsExpiryWarning;
-			});
-		},
-		hasStockProblem(floor) {
-			const serials = this.getSerialsByFloor(floor.Id);
-			return serials.some(s => {
-				if (!s.ItemId) return false;
-				const item = this.itemsMap[s.ItemId];
-				return item && item.IsStockInsufficient;
-			});
-		},
-		isStockInsufficient(item) {
-			if (!item) return false;
-			if (typeof item.IsStockInsufficient !== 'undefined') return item.IsStockInsufficient;
-
-			const stock = item.AvailableStock || 0;
-			const base = item.Cardinality || 0;
-			return stock < base || stock === 0;
-		},
-		isExpiryWarning(item) {
-			if (!item || !item.LatestExpirationDate) return false;
-			const days = this.getDaysUntil(item.LatestExpirationDate);
-			return days < 30; // Matches warning logic
-		},
-		shouldShowAlert(item) {
-			if (!item) return false;
-			if (this.isStockInsufficient(item)) return true;
-			if (this.isExpiryWarning(item)) return true;
-			return false;
-		}
+		// Helper methods moved to StorageLayers or unused
 	}
 }
 </script>
@@ -744,10 +660,10 @@ export default {
 }
 
 .header-section {
-	height: 200px;
+	height: 400rpx;
 	background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 100%);
 	/* Different Gradient for Outbound? Pink/Red tone */
-	padding: 0 24px;
+	padding: 0 48rpx;
 	display: flex;
 	flex-direction: column;
 	box-sizing: border-box;
@@ -760,15 +676,15 @@ export default {
 
 .header-content {
 	margin-top: 0;
-	padding-bottom: 20px;
+	padding-bottom: 40rpx;
 }
 
 .page-title {
-	font-size: 22px;
+	font-size: 44rpx;
 	font-weight: bold;
 	color: #fff;
-	margin-left: 12px;
-	text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	margin-left: 24rpx;
+	text-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.1);
 }
 
 .main-scroll {
@@ -779,66 +695,66 @@ export default {
 
 .content-panel {
 	background-color: #fff;
-	border-top-left-radius: 30px;
-	border-top-right-radius: 30px;
-	margin-top: -40px;
-	padding: 24px 16px;
-	min-height: 500px;
+	border-top-left-radius: 60rpx;
+	border-top-right-radius: 60rpx;
+	margin-top: -80rpx;
+	padding: 48rpx 32rpx;
+	min-height: 1000rpx;
 	position: relative;
 	z-index: 10;
 }
 
 // Search
 .search-row {
-	margin-top: 12px;
+	margin-top: 24rpx;
 	display: flex;
 	align-items: center;
 }
 
 .search-box {
 	flex: 1;
-	height: 36px;
+	height: 72rpx;
 	background: rgba(255, 255, 255, 0.2);
-	border-radius: 18px;
+	border-radius: 36rpx;
 	display: flex;
 	align-items: center;
-	padding: 0 12px;
-	backdrop-filter: blur(5px);
+	padding: 0 24rpx;
+	backdrop-filter: blur(10rpx);
 }
 
 .search-icon {
-	font-size: 14px;
-	margin-right: 8px;
+	font-size: 28rpx;
+	margin-right: 16rpx;
 	color: #fff;
 	opacity: 0.8;
 }
 
 .search-input {
 	flex: 1;
-	font-size: 14px;
+	font-size: 28rpx;
 	color: #fff;
 }
 
 .clear-icon {
-	margin-left: 8px;
+	margin-left: 16rpx;
 	color: rgba(255, 255, 255, 0.8);
 }
 
 .scan-btn {
-	width: 36px;
-	height: 36px;
+	width: 72rpx;
+	height: 72rpx;
 	background: rgba(255, 255, 255, 0.2);
 	border-radius: 50%;
-	margin-left: 12px;
+	margin-left: 24rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	backdrop-filter: blur(5px);
+	backdrop-filter: blur(10rpx);
 }
 
 .scan-icon {
-	width: 20px;
-	height: 20px;
+	width: 40rpx;
+	height: 40rpx;
 	background-color: #fff;
 	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
 	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 5v4h2V5h4V3H5c-1.1 0-2 .9-2 2zm2 10H3v4c0 1.1.9 2 2 2h4v-2H5v-4zm14 4h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zm0-16h-4v2h4v4h2V5c0-1.1-.9-2-2-2z'/%3E%3C/svg%3E");
@@ -855,7 +771,7 @@ export default {
 .horizontal-section {
 	display: flex;
 	align-items: center;
-	margin-bottom: 24px;
+	margin-bottom: 48rpx;
 }
 
 .horizontal-scroll {
@@ -872,19 +788,19 @@ export default {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	height: 48px;
-	padding: 0 20px;
+	height: 96rpx;
+	padding: 0 40rpx;
 	background: #F7F8FA;
-	border-radius: 24px;
-	margin-right: 12px;
-	border: 1px solid transparent;
-	border: 1px solid transparent;
+	border-radius: 48rpx;
+	margin-right: 24rpx;
+	border: 2rpx solid transparent;
+	border: 2rpx solid transparent;
 	transition: all 0.3s;
 	min-width: auto;
 	flex-shrink: 0;
 
 	.card-name {
-		font-size: 14px;
+		font-size: 28rpx;
 		font-weight: 500;
 		color: #555;
 	}
@@ -892,7 +808,7 @@ export default {
 	&.active {
 		background: #FFF0F0;
 		color: #FF4D4F;
-		border: 1px solid #FF4D4F;
+		border: 2rpx solid #FF4D4F;
 
 		.card-name {
 			color: #FF4D4F;
@@ -903,295 +819,13 @@ export default {
 
 .empty-placeholder {
 	color: #999;
-	font-size: 14px;
+	font-size: 28rpx;
 	text-align: center;
-	margin-top: 20px;
+	margin-top: 40rpx;
 }
 
 // Floors & Serials (Copied & simplified)
-.floor-list {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-}
-
-.floor-card {
-	background: #fff;
-	border-radius: 12px;
-	padding: 16px;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-	display: flex;
-	align-items: center;
-	min-height: 60px;
-	border: 1px solid #f0f0f0;
-
-	&:active {
-		background-color: #f9f9f9;
-	}
-}
-
-.icon-circle {
-	width: 8px;
-	height: 32px;
-	border-radius: 4px;
-	background-color: #F7F8FA;
-	transition: all 0.3s;
-	margin-right: 8px;
-}
-
-.blink-red {
-	background-color: #ff4d4f;
-	border: 1px solid #ff4d4f;
-	animation: strong-pulse-red 0.8s infinite;
-}
-
-.blink-orange {
-	background-color: #faad14;
-	border: 1px solid #faad14;
-	animation: strong-pulse-orange 1s infinite;
-}
-
-.blink-green {
-	background-color: #F0F9EB;
-	border: 1px solid #E1F3D8;
-	animation: pulse-green 3s infinite;
-}
-
-@keyframes strong-pulse-red {
-	0% {
-		box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.7);
-		transform: scale(0.95);
-	}
-
-	50% {
-		transform: scale(1.05);
-		box-shadow: 0 0 0 12px rgba(255, 77, 79, 0);
-	}
-
-	100% {
-		transform: scale(0.95);
-		box-shadow: 0 0 0 0 rgba(255, 77, 79, 0);
-	}
-}
-
-@keyframes strong-pulse-orange {
-	0% {
-		box-shadow: 0 0 0 0 rgba(250, 173, 20, 0.7);
-		transform: scale(0.95);
-	}
-
-	50% {
-		transform: scale(1.05);
-		box-shadow: 0 0 0 12px rgba(250, 173, 20, 0);
-	}
-
-	100% {
-		transform: scale(0.95);
-		box-shadow: 0 0 0 0 rgba(250, 173, 20, 0);
-	}
-}
-
-@keyframes pulse-green {
-	0% {
-		box-shadow: 0 0 0 0 rgba(103, 194, 58, 0.4);
-	}
-
-	70% {
-		box-shadow: 0 0 0 6px rgba(103, 194, 58, 0);
-	}
-
-	100% {
-		box-shadow: 0 0 0 0 rgba(103, 194, 58, 0);
-	}
-}
-
-.floor-info {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-}
-
-.floor-name {
-	font-size: 16px;
-	font-weight: 600;
-	color: #333;
-}
-
-.floor-sub {
-	font-size: 11px;
-	color: #999;
-}
-
-.serial-grid-wrapper {
-	margin-top: 12px;
-	padding: 0 4px;
-	animation: fadeIn 0.3s ease;
-}
-
-.serial-grid {
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 8px;
-}
-
-.serial-item {
-	width: 100%;
-	box-sizing: border-box;
-	overflow: hidden;
-	background: #F5F7FA;
-	border-radius: 8px;
-	padding: 8px;
-	height: 110px;
-	display: flex;
-	flex-direction: column;
-	box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
-	border: 2px solid #E4E7ED;
-	/* Use border here to avoid layout shift when highlighting */
-	transition: all 0.3s;
-	position: relative;
-
-	&.expiry-warning {
-		border: 1px solid #F56C6C !important;
-		background-color: #FFF0F0;
-	}
-}
-
-.highlight-glow {
-	border-color: #FF4D4F;
-	box-shadow: 0 0 15px rgba(255, 77, 79, 0.5);
-	animation: pulse-glow 1.5s infinite;
-	z-index: 10;
-	position: relative;
-	background: #fff;
-}
-
-@keyframes pulse-glow {
-	0% {
-		box-shadow: 0 0 5px rgba(255, 77, 79, 0.4);
-		transform: scale(1);
-	}
-
-	50% {
-		box-shadow: 0 0 20px rgba(255, 77, 79, 0.8), 0 0 10px rgba(255, 77, 79, 0.4);
-		transform: scale(1.02);
-	}
-
-	100% {
-		box-shadow: 0 0 5px rgba(255, 77, 79, 0.4);
-		transform: scale(1);
-	}
-}
-
-.serial-header {
-	display: flex;
-	justify-content: flex-start;
-	align-items: center;
-	margin-bottom: 4px;
-}
-
-.serial-no {
-	font-size: 14px;
-	font-weight: 900;
-	color: #303133;
-}
-
-.item-detail {
-	flex: 1;
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
-}
-
-.item-name-wrapper {
-	width: 100%;
-	height: 20px;
-	overflow: hidden;
-	white-space: nowrap;
-	margin-bottom: 4px;
-	position: relative;
-}
-
-.item-name-text {
-	display: block;
-	font-size: 13px;
-	font-weight: 600;
-	color: #303133;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	width: 100%;
-}
-
-.item-name-text.scrolling {
-	display: inline-block;
-	width: auto;
-	padding-left: 100%;
-	animation: marquee 8s linear infinite;
-	text-overflow: clip;
-}
-
-@keyframes marquee {
-	0% {
-		transform: translateX(0);
-	}
-
-	100% {
-		transform: translateX(-100%);
-	}
-}
-
-.item-info-row {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 2px;
-}
-
-.item-spec {
-	font-size: 11px;
-	color: #909399;
-}
-
-.item-unit {
-	font-size: 10px;
-	color: inherit;
-	margin-left: 2px;
-	font-weight: normal;
-}
-
-.item-stock {
-	font-size: 11px;
-	font-weight: bold;
-	color: #666;
-	padding: 0 4px;
-	display: flex;
-	align-items: baseline;
-}
-
-.item-cardinality {
-	font-size: inherit;
-	color: inherit;
-	opacity: 0.8;
-	margin-left: 2px;
-	font-weight: normal;
-}
-
-.item-expiry {
-	text-align: right;
-	font-size: 10px;
-}
-
-.empty-slot {
-	flex: 1;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.plus-icon {
-	font-size: 28px;
-	color: #DCDFE6;
-}
+/* Floor Styles Removed (Moved to StorageLayers) */
 
 // Inbound/Outbound Modal Specifics
 .modal-mask {
@@ -1209,7 +843,7 @@ export default {
 .modal-content {
 	width: 100%;
 	background: #fff;
-	border-radius: 24px 24px 0 0;
+	border-radius: 48rpx 48rpx 0 0;
 	display: flex;
 	flex-direction: column;
 	animation: slideUp 0.3s ease;
@@ -1217,11 +851,11 @@ export default {
 }
 
 .modal-header {
-	padding: 16px 24px;
+	padding: 32rpx 48rpx;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	border-bottom: 1px solid #eee;
+	border-bottom: 2rpx solid #eee;
 }
 
 .title-section {
@@ -1230,13 +864,12 @@ export default {
 }
 
 .stock-warning {
-	font-size: 12px;
-	color: #FF4D4F;
-	margin-top: 4px;
+	font-size: 24rpx;
+	margin-top: 8rpx;
 }
 
 .stock-warning-label {
-	font-size: 14px;
+	font-size: 28rpx;
 	color: #FF4D4F;
 	font-weight: bold;
 	animation: flash 1s infinite alternate;
@@ -1253,74 +886,120 @@ export default {
 }
 
 .modal-title {
-	font-size: 18px;
+	font-size: 36rpx;
 	font-weight: bold;
 }
 
 .close-btn {
-	font-size: 20px;
+	font-size: 40rpx;
 	color: #999;
-	padding: 8px;
+	padding: 16rpx;
 }
 
 .modal-body {
-	padding: 24px;
+	padding: 48rpx;
 }
 
 .form-label {
-	font-size: 14px;
+	font-size: 28rpx;
 	color: #666;
-	margin-bottom: 8px;
+	margin-bottom: 16rpx;
 	display: block;
 }
 
 .batch-scroll {
 	width: 100%;
 	white-space: nowrap;
-	margin-bottom: 20px;
+	margin-bottom: 40rpx;
 }
 
 .batch-list-h {
 	display: flex;
-	gap: 10px;
+	gap: 20rpx;
+	padding-top: 20rpx; // Make space for the top badge
+	padding-right: 20rpx; // Make space for the right badge
 }
 
 .batch-item {
-	padding: 10px;
-	border: 1px solid #eee;
-	border-radius: 8px;
-	min-width: 120px;
+	padding: 20rpx;
+	border: 2rpx solid #eee;
+	border-radius: 16rpx;
+	min-width: 240rpx;
 	transition: all 0.2s;
+	position: relative; // For checkmark
 
 	&.active {
-		border-color: #FF4D4F;
-		background: #FFF0F0;
+		// Keep warning border if present, relies on checkmark for selection indication
+		background: #FFF0F0; // Or whatever background was appropriate, or Keep original logic
+		// But let's match the inbound style closer if we want consistency
+		// Inbound used #E6F7FF but also handled warning overrides.
+		// Outbound uses red theme.
+		background: #FFF1F0;
+		border-color: #FF4D4F; // Keep red border for outbound theme
+	}
+
+	&.active::after {
+		content: '✓';
+		position: absolute;
+		top: -16rpx;
+		right: -16rpx;
+		background: #FF4D4F; // Red for outbound context
+		color: #fff;
+		width: 40rpx;
+		height: 40rpx;
+		border-radius: 50%;
+		font-size: 24rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 4rpx solid #fff;
+		box-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.1);
 	}
 
 	&.disabled {
 		opacity: 0.5;
 	}
+
+	&.stock-warning {
+		border: 4rpx solid #F56C6C !important;
+		background-color: #FFF0F0;
+	}
+
+	&.stock-insufficient {
+		border: 4rpx solid #E6A23C !important;
+		background-color: #FDF6EC;
+	}
+}
+
+.stock-zero {
+	color: #F56C6C;
+	font-weight: bold;
+}
+
+.stock-insufficient-text {
+	color: #E6A23C;
+	font-weight: bold;
 }
 
 .batch-row {
-	font-size: 12px;
+	font-size: 24rpx;
 	color: #333;
-	margin-bottom: 2px;
+	margin-bottom: 4rpx;
 }
 
 .batch-no {
-	font-size: 12px;
+	font-size: 24rpx;
 	font-weight: bold;
 	color: #333;
 }
 
 .batch-expiry {
-	font-size: 11px;
+	font-size: 22rpx;
 	color: #666;
 }
 
 .batch-stock {
-	font-size: 11px;
+	font-size: 22rpx;
 	color: #666;
 	font-weight: bold;
 }
@@ -1330,45 +1009,45 @@ export default {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 16px 12px;
-	margin-bottom: 8px;
-	gap: 20px;
+	padding: 32rpx 24rpx;
+	margin-bottom: 16rpx;
+	gap: 40rpx;
 }
 
 .qty-value-display {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	min-width: 120px;
+	min-width: 240rpx;
 	/* Ensure visual stability */
 }
 
 .qty-val-group {
 	display: flex;
 	align-items: baseline;
-	margin: 4px 0;
+	margin: 8rpx 0;
 }
 
 .label {
-	font-size: 12px;
+	font-size: 24rpx;
 	color: #606266;
 }
 
 .qty-text {
-	font-size: 32px;
+	font-size: 64rpx;
 	font-weight: bold;
 	color: #303133;
 	line-height: 1;
 }
 
 .unit-text {
-	font-size: 12px;
+	font-size: 24rpx;
 	color: #909399;
-	margin-left: 4px;
+	margin-left: 8rpx;
 }
 
 .stock-hint {
-	font-size: 12px;
+	font-size: 24rpx;
 	color: #909399;
 }
 
@@ -1377,13 +1056,13 @@ export default {
 }
 
 .q-btn-circle {
-	width: 48px;
-	height: 48px;
+	width: 96rpx;
+	height: 96rpx;
 	border-radius: 50%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 16px;
+	font-size: 32rpx;
 	font-weight: bold;
 	background: #F2F3F5;
 	color: #606266;
@@ -1406,17 +1085,17 @@ export default {
 
 /* Clear Full Width - Match Keypad Width */
 .clear-action-bar {
-	margin-top: 10px;
+	margin-top: 20rpx;
 	display: flex;
 }
 
 .q-btn-full {
 	flex: 1;
-	height: 48px;
-	border-radius: 8px;
+	height: 96rpx;
+	border-radius: 16rpx;
 	background: #F5F7FA;
 	color: #909399;
-	font-size: 16px;
+	font-size: 32rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -1429,22 +1108,22 @@ export default {
 }
 
 .keypad-wrapper {
-	margin-top: 10px;
+	margin-top: 20rpx;
 }
 
 /* Old Quick Actions styles removed */
 
 .modal-footer {
-	padding: 16px 24px calc(16px + env(safe-area-inset-bottom)) 24px;
-	border-top: 1px solid #eee;
+	padding: 32rpx 48rpx calc(32rpx + env(safe-area-inset-bottom)) 48rpx;
+	border-top: 2rpx solid #eee;
 }
 
 .submit-btn {
 	background: #FF4D4F;
 	color: #fff;
-	border-radius: 24px;
-	height: 48px;
-	font-size: 16px;
+	border-radius: 48rpx;
+	height: 96rpx;
+	font-size: 32rpx;
 	font-weight: bold;
 
 	&[disabled] {
@@ -1473,7 +1152,7 @@ export default {
 }
 
 .bottom-spacer {
-	height: 40px;
+	height: 80rpx;
 }
 
 
@@ -1504,33 +1183,33 @@ export default {
 .floor-status-icons {
 	display: flex;
 	align-items: center;
-	margin-right: 8px;
+	margin-right: 16rpx;
 }
 
 .status-icon {
-	width: 24px;
-	height: 24px;
+	width: 48rpx;
+	height: 48rpx;
 	border-radius: 50%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	margin-left: 4px;
+	margin-left: 8rpx;
 	background: #f5f7fa;
 }
 
 .status-icon.warning {
 	background: #FEF0F0;
-	border: 1px solid #F56C6C;
+	border: 2rpx solid #F56C6C;
 }
 
 .status-icon.danger {
 	background: #FDF6EC;
-	border: 1px solid #E6A23C;
+	border: 2rpx solid #E89310;
 }
 
 .status-bg-icon {
-	width: 16px;
-	height: 16px;
+	width: 32rpx;
+	height: 32rpx;
 	background-size: contain;
 	background-repeat: no-repeat;
 	background-position: center;
@@ -1547,13 +1226,13 @@ export default {
 }
 
 .alert-bell {
-	width: 18px;
-	height: 18px;
+	width: 36rpx;
+	height: 36rpx;
 	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23F56C6C'%3E%3Cpath d='M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z'/%3E%3C/svg%3E");
 	background-size: contain;
 	background-repeat: no-repeat;
 	animation: bell-shake 1.2s infinite ease-in-out;
-	margin-right: 4px;
+	margin-right: 8rpx;
 }
 
 @keyframes bell-shake {
@@ -1596,24 +1275,74 @@ export default {
 
 /* Page Scroll Fix */
 page {
-	min-height: 100%;
-	height: auto;
-	overflow-y: auto;
+	height: 100vh;
+	overflow: hidden;
 	background-color: $sull-color-background;
 }
 
 .container {
 	display: flex;
 	flex-direction: column;
-	min-height: 100vh;
-	height: auto;
+	height: 100vh;
 	width: 100%;
-	overflow: visible;
+	overflow: hidden;
 	background-color: $sull-color-background;
 }
 
 .main-content {
 	flex: 1;
+	height: 0;
 	width: 100%;
+}
+
+/* Custom Refresher */
+.custom-refresher {
+	height: 120rpx;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: absolute;
+	top: -120rpx;
+	left: 0;
+	transition: transform 0.2s linear;
+}
+
+.refresher-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8rpx;
+}
+
+.refresher-icon {
+	width: 64rpx;
+	height: 64rpx;
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
+	background-size: contain;
+	background-repeat: no-repeat;
+	transition: transform 0.3s ease;
+}
+
+.refresher-icon.animating {
+	animation: ambulance-bounce 0.8s infinite ease-in-out;
+}
+
+.refresher-text {
+	font-size: 20rpx;
+	color: $sull-color-primary;
+	opacity: 0.8;
+}
+
+@keyframes ambulance-bounce {
+
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+
+	50% {
+		transform: translateY(-6px);
+	}
 }
 </style>

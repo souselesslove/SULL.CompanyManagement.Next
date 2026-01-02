@@ -2,10 +2,7 @@
 	<view class="container">
 		<!-- Login View -->
 		<view v-if="!isLoggedIn" class="login-container">
-			<view class="login-header">
-				<view class="back-btn-placeholder">
-					<view class="icon-arrow-left"></view>
-				</view>
+			<view class="login-header" :style="{ paddingTop: (statusBarHeight * 2 + 80) + 'rpx' }">
 				<view class="login-title-section">
 					<text class="login-title">{{ $t('login.title') }}</text>
 					<text class="login-subtitle">{{ $t('login.subtitle') }}</text>
@@ -15,14 +12,23 @@
 			<view class="login-form">
 				<!-- Username Login Mode -->
 				<template v-if="loginMethod === 'username'">
-					<!-- Username -->
-					<view class="form-group">
+					<view class="form-group" style="position: relative; z-index: 20;">
 						<text class="label">{{ $t('login.username_label') }}</text>
-						<input class="input" type="text" v-model="username"
-							:placeholder="$t('login.username_placeholder')" placeholder-class="placeholder" />
+						<view class="input-wrapper">
+							<input class="input" type="text" v-model="username"
+								:placeholder="$t('login.username_placeholder')" placeholder-class="placeholder" />
+							<view class="history-icon" @click="toggleHistory" v-if="loginHistory.length > 0">
+								<view class="icon-arrow-down" :class="{ 'rotated': showHistory }"></view>
+							</view>
+						</view>
+						<view class="history-dropdown" v-if="showHistory && loginHistory.length > 0">
+							<view class="history-item" v-for="(item, index) in loginHistory" :key="index"
+								@click="selectHistoryUser(item)">
+								<text>{{ item }}</text>
+								<view class="delete-icon" @click.stop="removeHistoryUser(index)">✕</view>
+							</view>
+						</view>
 					</view>
-
-					<!-- Password -->
 					<view class="form-group">
 						<text class="label">{{ $t('login.password_label') }}</text>
 						<view class="input-wrapper">
@@ -33,8 +39,6 @@
 							</view>
 						</view>
 					</view>
-
-					<!-- Verification Code (Captcha) -->
 					<view class="form-group">
 						<text class="label">{{ $t('login.code_label') }}</text>
 						<view class="code-input-row">
@@ -48,14 +52,11 @@
 
 				<!-- Phone Login Mode -->
 				<template v-else>
-					<!-- Phone Number -->
 					<view class="form-group">
 						<text class="label">{{ $t('login.phone_label') }}</text>
 						<input class="input" type="number" v-model="phone" :placeholder="$t('login.phone_placeholder')"
 							placeholder-class="placeholder" />
 					</view>
-
-					<!-- Verification Code -->
 					<view class="form-group">
 						<text class="label">{{ $t('login.code_label') }}</text>
 						<view class="code-input-row">
@@ -69,48 +70,17 @@
 					</view>
 				</template>
 
-				<!-- Forgot Password -->
 				<view class="form-actions" style="justify-content: flex-end;">
 					<text class="forgot-text">{{ $t('login.forgot_password') }}</text>
 				</view>
 
-				<!-- Sign In Button -->
 				<button class="btn-signin" @click="handleLogin">{{ $t('login.sign_in') }}</button>
 
-				<!-- Sign Up Link -->
 				<view class="signup-area">
 					<text class="no-account-text">{{ $t('login.no_account') }}</text>
 					<text class="signup-text" @click="navToRegister">{{ $t('login.sign_up') }}</text>
 				</view>
 
-				<!-- Social Login -->
-				<view class="social-login">
-					<view class="divider">
-						<view class="line"></view>
-						<text class="or-text">{{ $t('login.or_sign_in_with') }}</text>
-						<view class="line"></view>
-					</view>
-
-					<view class="social-icons">
-						<!-- Toggle to Phone Login -->
-						<view v-if="loginMethod === 'username'" class="social-btn mobile"
-							@click="switchLoginMethod('phone')">
-							<text class="social-icon">📱</text>
-						</view>
-
-						<!-- Toggle to Username Login -->
-						<view v-else class="social-btn username" @click="switchLoginMethod('username')">
-							<text class="social-icon">👤</text>
-						</view>
-
-						<!-- WeChat Login -->
-						<view class="social-btn wechat" @click="handleWechatLogin">
-							<text class="social-icon">💬</text>
-						</view>
-					</view>
-				</view>
-
-				<!-- Footer Terms -->
 				<view class="login-footer">
 					<text class="footer-text">{{ $t('login.terms_agree') }} <text class="footer-link">{{
 						$t('login.terms')
@@ -121,116 +91,146 @@
 			</view>
 		</view>
 
-		<!-- Profile View (Existing) -->
+		<!-- Profile View -->
 		<scroll-view v-else scroll-y class="main-scroll" refresher-enabled="true" :refresher-triggered="isRefreshing"
-			@refresherrefresh="onRefresh" refresher-default-style="none" refresher-background="#f0f5ff">
-			<view slot="refresher" class="custom-refresher">
+			:refresher-threshold="60" @refresherrefresh="onRefresh" @refresherpulling="onPulling"
+			@refresherrestore="onRestore" @refresherabort="onRestore" refresher-default-style="none"
+			refresher-background="#f8f9fb">
+
+			<view slot="refresher" class="custom-refresher"
+				:style="{ height: (isPulling || isRefreshing) ? '120rpx' : '0px', overflow: 'hidden' }">
 				<view class="refresher-content">
 					<view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
 					<text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
 					}}</text>
 				</view>
 			</view>
-			<!-- Header -->
-			<view class="header">
-				<text class="header-title">{{ $t('index.nav.profile') }}</text>
+
+			<!-- Premium Purple Header -->
+			<view class="premium-header-bg" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
+				<view class="header-content">
+					<view class="premium-user-section">
+						<view class="avatar-box" @click="handleAvatarClick">
+							<image class="avatar" :src="avatarUrl" mode="aspectFill" @error="handleAvatarError"></image>
+						</view>
+						<view class="user-info-text">
+							<text class="user-name">{{ userInfo.userTrueName || $t('profile.please_login') }}</text>
+							<text class="user-id">{{ userOrgText }}</text>
+						</view>
+						<view class="user-score-box">
+							<text class="user-role">{{ (userOrgInfo.User && userOrgInfo.User.Title) || userOrgInfo.Title
+								||
+								$t('profile.title_placeholder') }}</text>
+						</view>
+					</view>
+
+					<view v-if="showInviteBanner" class="invite-banner">
+						<text class="invite-dot">○</text>
+						<text class="invite-text">你知道抢救车的“五定”吗？</text>
+						<view class="icon-close-small" @click="showInviteBanner = false"></view>
+					</view>
+				</view>
+				<view class="header-curve"></view>
 			</view>
 
-			<view class="content">
-				<!-- User Profile -->
-				<view class="user-section">
-					<view class="avatar-container" @click="handleAvatarClick">
-						<image class="avatar" :src="avatarUrl" mode="aspectFill"></image>
-						<view class="edit-badge">
-							<view class="icon-edit"></view>
+			<view class="main-content-wrapper">
+				<!-- Dual Asset Cards -->
+				<view class="asset-cards-row">
+					<view class="asset-card" @click="navToOrgInfo">
+						<view class="asset-info">
+							<text class="asset-title text-primary">{{ orgBtnText }}</text>
+							<view class="asset-count-box">
+								<text class="asset-number">{{ userOrgInfo.Organization &&
+									userOrgInfo.Organization.DepartmentCounter || 0 }}</text>
+								<text class="asset-unit">{{ $t('profile.asset_unit_dept') }}</text>
+							</view>
 						</view>
+						<text class="asset-emoji">🏢</text>
 					</view>
-					<text class="user-name">{{ userInfo.userTrueName || 'Guest' }}</text>
-					<text class="user-email">{{ userInfo.remark || '' }}</text>
-				</view>
-
-				<!-- Settings Section -->
-				<view class="settings-section">
-					<view class="menu-list">
-						<!-- Organization -->
-						<view class="menu-item" @click="navToOrgInfo">
-							<view class="item-left">
-								<view class="menu-icon icon-org"></view>
-								<text class="menu-label">{{ orgBtnText }}</text>
-							</view>
-							<view class="item-right">
-								<view class="icon-arrow"></view>
+					<view class="asset-card" @click="navToDeptInfo">
+						<view class="asset-info">
+							<text class="asset-title text-warning">{{ deptBtnText }}</text>
+							<view class="asset-count-box">
+								<text class="asset-number">{{ userOrgInfo.Department &&
+									userOrgInfo.Department.UserCounter ||
+									0 }}</text>
+								<text class="asset-unit">{{ $t('profile.asset_unit_member') }}</text>
 							</view>
 						</view>
-
-						<!-- Department -->
-						<view class="menu-item" @click="navToDeptInfo">
-							<view class="item-left">
-								<view class="menu-icon icon-dept"></view>
-								<text class="menu-label">{{ deptBtnText }}</text>
-							</view>
-							<view class="item-right">
-								<view class="icon-arrow"></view>
-							</view>
-						</view>
-
-						<!-- Personal Info -->
-						<view class="menu-item" @click="navToPersonalInfo">
-							<view class="item-left">
-								<view class="menu-icon icon-user-info"></view>
-								<text class="menu-label">{{ $t('profile.personal_info') }}</text>
-							</view>
-							<view class="item-right">
-								<view class="icon-arrow"></view>
-							</view>
-						</view>
-
-						<!-- Notification -->
-						<view class="menu-item">
-							<view class="item-left">
-								<view class="menu-icon icon-bell"></view>
-								<text class="menu-label">{{ $t('profile.notification') }}</text>
-							</view>
-							<view class="item-right">
-								<view class="icon-arrow"></view>
-							</view>
-						</view>
-
-						<!-- Languages -->
-						<view class="menu-item" @click="navToLanguage">
-							<view class="item-left">
-								<view class="menu-icon icon-globe"></view>
-								<text class="menu-label">{{ $t('profile.languages') }}</text>
-							</view>
-							<view class="item-right">
-								<view class="icon-arrow"></view>
-							</view>
-						</view>
-
-						<!-- Help and Support -->
-						<view class="menu-item">
-							<view class="item-left">
-								<view class="menu-icon icon-info"></view>
-								<text class="menu-label">{{ $t('profile.help') }}</text>
-							</view>
-							<view class="item-right">
-								<view class="icon-arrow"></view>
-							</view>
-						</view>
-
-						<!-- Logout -->
-						<view class="menu-item logout-item" @click="handleLogout">
-							<view class="item-left">
-								<view class="menu-icon icon-logout"></view>
-								<text class="menu-label">{{ $t('profile.logout') }}</text>
-							</view>
-						</view>
+						<text class="asset-emoji">👥</text>
 					</view>
 				</view>
+
+				<!-- Quick Services Row -->
+				<!-- <view class="quick-services-card">
+					<view class="service-item" @click="navToOrgInfo">
+						<view class="service-icon">🎮</view>
+						<text class="service-label">游戏记录</text>
+					</view>
+					<view class="service-item">
+						<view class="service-icon">🎫</view>
+						<text class="service-label">积分兑换</text>
+					</view>
+					<view class="service-item">
+						<view class="service-icon"></view>
+						<text class="service-label">收货地址</text>
+					</view>
+				</view> -->
+
+				<!-- Vertical Menu List -->
+				<view class="menu-list-card">
+					<view class="menu-item" @click="navToPersonalInfo">
+						<view class="menu-item-left">
+							<image class="menu-icon" src="/static/imgs/person.png" mode="aspectFit"></image>
+							<text class="menu-label">{{ $t('profile.personal_info') }}</text>
+						</view>
+						<text class="menu-arrow">›</text>
+					</view>
+					<view class="menu-item" @click="navToNotification">
+						<view class="menu-item-left">
+							<image class="menu-icon" src="/static/imgs/notify.png" mode="aspectFit"></image>
+							<text class="menu-label">{{ $t('profile.notification') }}</text>
+							<view v-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</view>
+						</view>
+						<text class="menu-arrow">›</text>
+					</view>
+					<view class="menu-item" @click="navToLanguage">
+						<view class="menu-item-left">
+							<image class="menu-icon" src="/static/imgs/language.png" mode="aspectFit"></image>
+							<text class="menu-label">{{ $t('profile.languages') }}</text>
+						</view>
+						<text class="menu-arrow">›</text>
+					</view>
+					<view class="menu-item">
+						<view class="menu-item-left">
+							<image class="menu-icon" src="/static/imgs/help.png" mode="aspectFit"></image>
+							<text class="menu-label">{{ $t('profile.help') }}</text>
+						</view>
+						<text class="menu-arrow">›</text>
+					</view>
+					<!-- Config Manage -->
+					<view class="menu-item" @click="navToConfigManage">
+						<view class="menu-item-left">
+							<image class="menu-icon" src="/static/imgs/config.png" mode="aspectFit"></image>
+							<text class="menu-label">{{ $t('profile.config_manage') }}</text>
+						</view>
+						<text class="menu-arrow">›</text>
+					</view>
+					<view class="menu-item logout-item" @click="handleLogout">
+						<view class="menu-item-left">
+							<image class="menu-icon" src="/static/imgs/logout.png" mode="aspectFit"></image>
+							<text class="menu-label">{{ $t('profile.logout') }}</text>
+						</view>
+					</view>
+
+				</view>
+
+				<FooterInfo />
+				<view class="bottom-spacer"></view>
 			</view>
 		</scroll-view>
 
-		<!-- Bottom Navigation (Only show if logged in) -->
+		<!-- Bottom Navigation -->
 		<BottomNav v-if="isLoggedIn" activePage="profile" />
 
 		<!-- Confirm Modal -->
@@ -238,102 +238,187 @@
 			:confirmText="confirmModal.confirmText" :cancelText="confirmModal.cancelText"
 			:confirmColor="confirmModal.confirmColor" :cancelColor="confirmModal.cancelColor"
 			@confirm="handleConfirmAction" @cancel="handleCancelAction" />
-	</view>
 
+		<!-- Warning Modal -->
+		<WarningModal v-model:visible="warningModal.visible" :title="warningModal.title" :message="warningModal.message"
+			:buttonText="warningModal.buttonText" />
+
+		<!-- Success Modal -->
+		<SuccessModal v-model:visible="successModal.visible" :title="successModal.title" :message="successModal.message"
+			:buttonText="successModal.buttonText" />
+	</view>
 </template>
 
 <script>
 import BottomNav from '@/components/BottomNav/BottomNav.vue';
 import ConfirmModal from '@/components/ConfirmModal/ConfirmModal.vue';
+import WarningModal from '@/components/WarningModal/WarningModal.vue';
+import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
+import SuccessModal from '@/components/SuccessModal/SuccessModal.vue';
 
 export default {
 	components: {
 		BottomNav,
-		ConfirmModal
+		ConfirmModal,
+		WarningModal,
+		FooterInfo,
+		SuccessModal
 	},
 	data() {
 		return {
+			statusBarHeight: 20,
 			isLoggedIn: false,
 			isDarkMode: false,
-			// Login State
-			loginMethod: 'username', // 'username' or 'phone'
-
-			// Username Login Data
+			loginMethod: 'username',
 			username: '',
 			password: '',
 			showPassword: false,
-			verificationCode: '', // Captcha input
-			captchaBase64: '', // Captcha image
-			uuid: '', // Captcha UUID
-
-			// Phone Login Data
+			verificationCode: '',
+			captchaBase64: '',
+			uuid: '',
 			phone: '',
 			code: '',
 			countdown: 0,
-
-			// User Info
 			userInfo: {},
 			userOrgInfo: {},
-
-			// Refresher state
 			isRefreshing: false,
-
-			// Confirm Modal State
+			isPulling: false,
+			showInviteBanner: true,
+			// Login History
+			loginHistory: [],
+			showHistory: false,
+			avatarError: false,
+			unreadCount: 0,
 			confirmModal: {
 				visible: false,
 				title: '',
 				message: '',
-				confirmText: 'Confirm',
-				cancelText: 'Cancel',
+				confirmText: '',
+				cancelText: '',
 				confirmColor: '#92C5F7',
 				cancelColor: '#FF6B6B',
-				actionType: '' // 'joinOrg', 'logout', etc.
+				actionType: ''
+			},
+			warningModal: {
+				visible: false,
+				title: '',
+				message: '',
+				buttonText: ''
+			},
+			successModal: {
+				visible: false,
+				title: '',
+				message: '',
+				buttonText: ''
 			}
+		}
+	},
+	onBackPress(options) {
+		if (options.from === 'backbutton') {
+			uni.reLaunch({
+				url: '/pages/index/index'
+			});
+			return true;
+		}
+		return false;
+	},
+	onLoad() {
+		const sysInfo = uni.getSystemInfoSync();
+		this.statusBarHeight = sysInfo.statusBarHeight || 20;
+
+		// Ensure status bar text is white for dark headers
+		// #ifndef H5
+		uni.setNavigationBarColor({
+			frontColor: '#ffffff',
+			backgroundColor: '#009A97',
+			animation: { duration: 400, timingFunc: 'easeIn' }
+		});
+		// #endif
+
+		// Load Login History
+		try {
+			const history = storage.getLoginHistory();
+			if (history && Array.isArray(history)) {
+				this.loginHistory = history;
+				// Pre-fill latest
+				if (history.length > 0) {
+					this.username = history[0];
+				}
+			}
+		} catch (e) { }
+	},
+	onShow() {
+		// #ifdef APP-PLUS
+		if (uni.getSystemInfoSync().platform === 'android') {
+			plus.navigator.setStatusBarBackground('transparent');
+		}
+		// #endif
+
+		this.checkLogin();
+		if (!this.isLoggedIn) {
+			this.getCaptcha();
+		} else {
+			this.fetchUserInfo();
+			// Check for mandatory updates if not checked yet
+			// #ifdef APP-PLUS
+			getApp().checkUpdate();
+			// #endif
+		}
+	},
+	watch: {
+		userInfo() {
+			this.avatarError = false;
 		}
 	},
 	computed: {
 		avatarUrl() {
-			// Ensure correct property name from API response, typically lowercase or camelCase
-			// Also handle potential base URL requirement if headImageUrl is relative
+			if (this.avatarError) return '/static/avatar_placeholder.png';
 			const url = this.userInfo.headImageUrl || this.userInfo.HeadImageUrl;
 			if (url) {
-				// Check if it's a full URL or relative path
-				if (url.startsWith('http')) {
-					return url;
-				}
-				// If using global config for base URL, import and use it here
-				// For now assuming it might need base URL if relative
+				if (url.startsWith('http')) return url;
 				return request.config.RESOURCE_URL + url;
 			}
 			return '/static/avatar_placeholder.png';
 		},
 		orgBtnText() {
 			return (this.userOrgInfo && this.userOrgInfo.Organization && this.userOrgInfo.Organization.Name)
-				? this.userOrgInfo.Organization.Name
-				: this.$t('organization.title_info');
+				? this.$t('profile.asset_org_info')
+				: this.$t('profile.org_placeholder');
 		},
 		deptBtnText() {
 			return (this.userOrgInfo && this.userOrgInfo.Department && this.userOrgInfo.Department.Name)
-				? this.userOrgInfo.Department.Name
-				: this.$t('department.title_info');
-		}
-	},
-	onShow() {
-		this.checkLogin();
-		if (!this.isLoggedIn) {
-			this.getCaptcha();
-		} else {
-			this.fetchUserInfo();
+				? this.$t('profile.asset_dept_manage')
+				: this.$t('profile.dept_placeholder');
+		},
+		userOrgText() {
+			const dept = this.userOrgInfo.Department && this.userOrgInfo.Department.Name;
+			const org = this.userOrgInfo.Organization && this.userOrgInfo.Organization.Name;
+
+			if (dept && org) {
+				return `${dept} · ${org}`;
+			} else if (org) {
+				return `${this.$t('profile.dept_placeholder')} · ${org}`;
+			} else {
+				return this.$t('profile.org_placeholder');
+			}
 		}
 	},
 	methods: {
 		checkLogin() {
-			const token = uni.getStorageSync('token');
+			const token = storage.getToken();
 			this.isLoggedIn = !!token;
 			if (this.isLoggedIn) {
-				this.userInfo = uni.getStorageSync('userInfo') || {};
+				this.userInfo = storage.get('userInfo') || {};
+				// Recover org info too if needed
+				this.userOrgInfo = storage.get('userOrgInfo') || {};
+				this.updateUnreadCount();
 			}
+		},
+		updateUnreadCount() {
+			const list = storage.getNotifications();
+			this.unreadCount = list.filter(i => !i.isRead).length;
 		},
 		togglePassword() {
 			this.showPassword = !this.showPassword;
@@ -344,155 +429,166 @@ export default {
 		getVerificationCode() {
 			if (this.countdown > 0) return;
 			if (!this.phone) {
-				uni.showToast({
-					title: this.$t('login.phone_placeholder'),
-					icon: 'none'
-				});
+				uni.showToast({ title: this.$t('login.phone_placeholder'), icon: 'none' });
 				return;
 			}
-
-			// Mock sending code
-			uni.showToast({
-				title: 'Code sent: 1234',
-				icon: 'none'
-			});
-
+			uni.showToast({ title: 'Code sent: 1234', icon: 'none' });
 			this.countdown = 60;
 			const timer = setInterval(() => {
 				this.countdown--;
-				if (this.countdown <= 0) {
-					clearInterval(timer);
-				}
+				if (this.countdown <= 0) clearInterval(timer);
 			}, 1000);
 		},
 		getCaptcha() {
-			request.get('api/User/getVerificationCode')
-				.then(res => {
-					// Adjust this based on actual response structure
-					// Assuming res.img and res.uuid based on typical patterns, 
-					// or the prompt description: "base64 image and UUID"
-					if (res.status && res.data) {
-						this.captchaBase64 = 'data:image/png;base64,' + res.data.img;
-						this.uuid = res.data.uuid;
-					} else {
-						// Fallback if structure is flat
-						const imgData = res.img || res.data?.img;
-						if (imgData) {
-							this.captchaBase64 = 'data:image/png;base64,' + imgData;
-						}
-						this.uuid = res.uuid || res.data?.uuid;
-					}
-				})
-				.catch(err => {
-					console.error("Failed to get captcha", err);
-				});
+			request.get('api/User/getVerificationCode').then(res => {
+				if (res.status && res.data) {
+					this.captchaBase64 = 'data:image/png;base64,' + res.data.img;
+					this.uuid = res.data.uuid;
+				} else {
+					const imgData = res.img || res.data?.img;
+					if (imgData) this.captchaBase64 = 'data:image/png;base64,' + imgData;
+					this.uuid = res.uuid || res.data?.uuid;
+				}
+			}).catch(err => console.error(err));
+		},
+		handleAvatarError() {
+			this.avatarError = true;
 		},
 		handleLogin() {
 			if (this.loginMethod === 'username') {
 				if (!this.username || !this.password || !this.verificationCode) {
-					uni.showToast({
-						title: 'Please enter username, password and verification code',
-						icon: 'none'
-					});
+					this.warningModal = {
+						visible: true,
+						title: this.$t('modal.warning_title'),
+						message: this.$t('login.required_tip'),
+						buttonText: this.$t('modal.confirm_btn')
+					};
 					return;
 				}
+				const loginData = { userName: this.username, password: this.password, verificationCode: this.verificationCode, UUID: this.uuid };
+				request.post('api/user/login', loginData).then(res => {
+					if (res.status) {
+						const tempToken = res.token || res.data?.token || 'mock-token';
 
-				const loginData = {
-					userName: this.username,
-					password: this.password,
-					verificationCode: this.verificationCode,
-					UUID: this.uuid
-				};
-				const t = this;
-				request.post('api/user/login', loginData)
-					.then(res => {
-						if (res.status) {
-							uni.setStorageSync('token', res.token || res.data?.token || 'mock-token-if-missing');
-							// Fetch User Info
-							t.fetchUserInfo();
-							this.isLoggedIn = true;
-							uni.showToast({
-								title: 'Login Success',
-								icon: 'success'
+						// 1. Fetch User Info using temp token to get ID
+						request.post('api/user/GetCurrentUserInfo', {}, { 'Authorization': `Bearer ${tempToken}` })
+							.then(infoRes => {
+								if (infoRes.status && infoRes.data) {
+
+									// Unified Login Storage
+									storage.login(tempToken, infoRes.data);
+
+									this.userInfo = infoRes.data;
+									this.isLoggedIn = true;
+									this.getUserOrganization(); // Will safe org info to storage
+
+									// Save History
+									this.loginHistory = storage.addLoginHistory(this.username);
+
+									this.successModal = {
+										visible: true,
+										title: this.$t('login.signin_success'),
+										message: '',
+										buttonText: this.$t('modal.continue')
+									};
+
+									// Register Push Account (CID) to backend
+									this.registerPushAccount();
+
+									// Guide permission after successful login (first time)
+									setTimeout(() => {
+										// #ifdef APP-PLUS
+										getApp().checkUpdate();
+										// #endif
+										this.checkAndGuideNotification();
+									}, 1500);
+								} else {
+									this.warningModal = {
+										visible: true,
+										title: this.$t('login.signin_fail'),
+										message: this.$t('common.load_fail'),
+										buttonText: this.$t('common.confirm')
+									};
+								}
 							});
-						} else {
-							uni.showToast({
-								title: res.message || 'Login Failed',
-								icon: 'none'
-							});
-							// Refresh captcha on failure
-							this.getCaptcha();
-						}
-					})
-					.catch(err => {
-						console.error(err);
+					} else {
+						this.warningModal = {
+							visible: true,
+							title: this.$t('login.signin_fail'),
+							message: res.message || this.$t('login.signin_fail'),
+							buttonText: this.$t('modal.confirm_btn')
+						};
 						this.getCaptcha();
-					});
-
+					}
+				}).catch(err => {
+					console.error(err);
+					this.getCaptcha();
+					this.warningModal = {
+						visible: true,
+						title: this.$t('login.signin_fail'),
+						message: err.message || 'Network Error',
+						buttonText: this.$t('modal.confirm_btn')
+					};
+				});
 			} else {
-				// Phone login logic (kept as mock for now, or implement if API exists)
 				if (!this.phone || !this.code) {
-					uni.showToast({
-						title: this.$t('login.code_placeholder'),
-						icon: 'none'
-					});
+					uni.showToast({ title: this.$t('login.code_placeholder'), icon: 'none' });
 					return;
 				}
-				// Mock success for phone login
-				uni.setStorageSync('token', 'mock-token-phone-123456');
+				storage.set('token', 'mock-token-phone');
 				this.isLoggedIn = true;
-				uni.showToast({
-					title: this.$t('login.sign_in') + ' Success',
-					icon: 'success'
-				});
+				this.registerPushAccount();
+				this.successModal = {
+					visible: true,
+					title: this.$t('login.signin_success'),
+					message: '',
+					buttonText: this.$t('modal.continue')
+				};
 			}
 		},
-		handleWechatLogin() {
-			uni.showToast({
-				title: 'WeChat Login Clicked',
-				icon: 'none'
-			});
-		},
 		handleLogout() {
-			uni.removeStorageSync('token');
-			this.isLoggedIn = false;
-			// Reset form
-			this.username = '';
-			this.password = '';
-			this.phone = '';
-			this.code = '';
-			uni.showToast({
-				title: 'Logged Out',
-				icon: 'none'
-			});
-			this.getCaptcha();
+			this.confirmModal.title = this.$t('profile.logout_confirm_title');
+			this.confirmModal.message = this.$t('profile.logout_confirm_msg');
+			this.confirmModal.confirmText = this.$t('common.confirm');
+			this.confirmModal.cancelText = this.$t('common.cancel');
+			this.confirmModal.confirmColor = '#FF6B6B';
+			this.confirmModal.cancelColor = '#999';
+			this.confirmModal.actionType = 'logout';
+			this.confirmModal.visible = true;
 		},
-		navTo(page) {
-			// Navigation handled by BottomNav component
-		},
-		navToRegister() {
-			uni.navigateTo({
-				url: '/pages/register/register'
+		executeLogout() {
+			storage.remove('token');
+			storage.logout();
+			uni.reLaunch({
+				url: '/pages/profile/profile'
 			});
 		},
-		navToOrgInfo() {
-			uni.navigateTo({
-				url: '/pages/organization/organization'
-			});
-		},
+
+		navToRegister() { uni.navigateTo({ url: '/pages/register/register' }); },
+		navToOrgInfo() { uni.navigateTo({ url: '/pages/organization/organization' }); },
 		navToDeptInfo() {
-			uni.navigateTo({
-				url: '/pages/department/department'
-			});
+			if (!this.userOrgInfo.Organization || !this.userOrgInfo.Organization.Id) {
+				this.warningModal = {
+					visible: true,
+					title: this.$t('common.tip'),
+					message: this.$t('profile.please_join_org_first'),
+					buttonText: this.$t('common.confirm')
+				};
+				return;
+			}
+			uni.navigateTo({ url: '/pages/department/department' });
 		},
-		navToLanguage() {
+		navToLanguage() { uni.navigateTo({ url: '/pages/profile/language' }); },
+		navToPersonalInfo() { uni.navigateTo({ url: '/pages/profile/personal-info' }); },
+		navToConfigManage() { uni.navigateTo({ url: '/pages/profile/config-manage' }); },
+		navToNotification() {
 			uni.navigateTo({
-				url: '/pages/profile/language'
-			});
-		},
-		navToPersonalInfo() {
-			uni.navigateTo({
-				url: '/pages/profile/personal-info'
+				url: '/pages/profile/notification-list',
+				events: {
+					refreshUnread: () => {
+						this.updateUnreadCount();
+					}
+				}
 			});
 		},
 		handleAvatarClick() {
@@ -500,158 +596,220 @@ export default {
 				count: 1,
 				sizeType: ['compressed'],
 				success: (res) => {
-					const tempFilePaths = res.tempFilePaths;
-					let fileName = res.tempFiles[0].name;
-					// Fallback if name is missing (common in WeChat/App)
-					if (!fileName && tempFilePaths[0]) {
-						const path = tempFilePaths[0];
-						const lastSlash = path.lastIndexOf('/');
-						if (lastSlash !== -1) {
-							fileName = path.substring(lastSlash + 1);
-						} else {
-							fileName = path;
-						}
-					}
-					// Final fallback if parsing failed
+					let fileName = '';
+					const filePath = res.tempFilePaths[0];
+
+					// #ifdef H5
+					fileName = res.tempFiles[0].name;
+					// #endif
+
+					// #ifndef H5
+					// Extract filename from path for App/MP
+					fileName = filePath.substring(filePath.lastIndexOf('/') + 1);
+					// #endif
+
 					if (!fileName) {
-						fileName = `avatar_${new Date().getTime()}.jpg`;
+						uni.showToast({ title: this.$t('common.file_name_error'), icon: 'none' });
+						return;
 					}
-					this.uploadAvatar(tempFilePaths[0], fileName);
+					this.uploadAvatar(filePath, fileName);
 				}
 			});
 		},
 		uploadAvatar(filePath, fileName) {
-			const token = uni.getStorageSync('token');
+			const token = storage.getToken();
 			uni.uploadFile({
 				url: request.config.BASE_URL + 'api/sys_user/upload',
 				filePath: filePath,
 				name: 'fileInput',
-				header: {
-					'Authorization': token ? `Bearer ${token}` : ''
-				},
-				success: (uploadFileRes) => {
-					// Response is a string, needs parsing if JSON
+				header: { 'Authorization': token ? `Bearer ${token}` : '' },
+				success: (uploadRes) => {
 					let data;
-					try {
-						data = JSON.parse(uploadFileRes.data);
-					} catch (e) {
-						data = uploadFileRes.data;
-					}
-					if (uploadFileRes.statusCode === 200 && (data.status || data.success)) {
-						// Update avatar path
-						const newAvatarPath = data.data + fileName;
-						if (newAvatarPath) {
-							// Create update payload with existing user info and new avatar
-							const updateData = {
-								...this.userInfo,
-								img: request.config.RESOURCE_URL + this.userInfo.headImageUrl
-							};
-							updateData.headImageUrl = newAvatarPath;
-							request.post('api/user/updateUserInfo', updateData)
-								.then(updateRes => {
-									if (updateRes.statusCode === 200 || updateRes === '修改成功') {
-										uni.showToast({
-											title: 'Upload Success',
-											icon: 'success'
-										});
-										// Refresh User Info
-										this.fetchUserInfo();
-									} else {
-										uni.showToast({
-											title: updateRes.message || 'Update Failed',
-											icon: 'none'
-										});
-									}
-								})
-								.catch(err => {
-									console.error(err);
-									uni.showToast({
-										title: 'Update Error',
-										icon: 'none'
-									});
-								});
-						} else {
+					try { data = JSON.parse(uploadRes.data); } catch (e) { data = uploadRes.data; }
+					if (uploadRes.statusCode === 200 && (data.status || data.success)) {
+						const newPath = data.data + fileName;
+						const updateData = { ...this.userInfo, img: request.config.RESOURCE_URL + this.userInfo.headImageUrl, headImageUrl: newPath };
+						request.post('api/user/updateUserInfo', updateData).then(updateRes => {
+							uni.showToast({ title: 'Upload Success', icon: 'success' });
 							this.fetchUserInfo();
-						}
-					} else {
-						uni.showToast({
-							title: data.message || 'Upload Failed',
-							icon: 'none'
-						});
+						}).catch(err => console.error(err));
 					}
-				},
-				fail: (err) => {
-					console.error(err);
-					uni.showToast({
-						title: 'Upload Error',
-						icon: 'none'
-					});
 				}
 			});
 		},
 		fetchUserInfo() {
-			return request.post('api/user/GetCurrentUserInfo')
-				.then(infoRes => {
-					if (infoRes.status) {
-						uni.setStorageSync('userInfo', infoRes.data);
-						this.userInfo = infoRes.data;
-						// Fetch Org Info after user info
-						this.getUserOrganization();
-					}
-				})
-				.catch(err => console.error("Failed to get user info", err));
+			return request.post('api/user/GetCurrentUserInfo').then(res => {
+				if (res.status) {
+					storage.set('userInfo', res.data);
+					this.userInfo = res.data;
+					this.getUserOrganization();
+				}
+			}).catch(err => console.error(err));
 		},
 		getUserOrganization() {
-			request.get('api/ssbh/OrganizationUser/UserOrganization')
-				.then(res => {
-					if (res) {
-						const data = res;
-						// Store in local cache
-						uni.setStorageSync('userOrgInfo', data);
-						this.userOrgInfo = data;
-
-						// Check if Organization is missing
-						if (!data.Organization || !data.Organization.Id || data.Organization.Id === 0) {
-							this.showOrgMissingModal();
-						}
-					}
-				})
-				.catch(err => {
-					console.error("Failed to get user organization", err);
-				});
+			request.get('api/ssbh/OrganizationUser/UserOrganization').then(res => {
+				if (res) {
+					storage.set('userOrgInfo', res);
+					this.userOrgInfo = res;
+					if (!res.Organization || !res.Organization.Id) this.showOrgMissingModal();
+				}
+			}).catch(err => console.error(err));
 		},
 		showOrgMissingModal() {
-			this.confirmModal = {
-				visible: true,
-				title: this.$t('profile.org_required_title'),
-				message: this.$t('profile.org_required_msg'),
-				confirmText: this.$t('profile.join_now'),
-				cancelText: this.$t('profile.not_now'),
-				confirmColor: '#92C5F7',
-				cancelColor: '#999999',
-				actionType: 'joinOrg'
-			};
+			this.confirmModal = { visible: true, title: this.$t('profile.org_required_title'), message: this.$t('profile.org_required_msg'), confirmText: this.$t('profile.join_now'), cancelText: this.$t('profile.not_now'), confirmColor: '#92C5F7', cancelColor: '#999999', actionType: 'joinOrg' };
 		},
 		handleConfirmAction() {
 			if (this.confirmModal.actionType === 'joinOrg') {
 				this.navToOrgInfo();
+			} else if (this.confirmModal.actionType === 'logout') {
+				this.executeLogout();
 			}
 		},
-		handleCancelAction() {
-			// Do nothing or maybe logout if strict
-		},
+		handleCancelAction() { },
+		onPulling() { this.isPulling = true; },
+		onRestore() { this.isPulling = false; },
 		onRefresh() {
 			this.isRefreshing = true;
-			// Refresh user info
+			this.isPulling = true;
 			this.fetchUserInfo().finally(() => {
 				setTimeout(() => {
 					this.isRefreshing = false;
-					uni.showToast({
-						title: this.$t('index.refreshed'),
-						icon: 'none'
-					});
-				}, 1000); // Small delay for visual effect
+					this.isPulling = false;
+				}, 1000);
 			});
+		},
+
+		// History Logic
+		toggleHistory() {
+			this.showHistory = !this.showHistory;
+		},
+		selectHistoryUser(name) {
+			this.username = name;
+			this.showHistory = false;
+		},
+		removeHistoryUser(index) {
+			this.loginHistory = storage.removeLoginHistory(index);
+			if (this.loginHistory.length === 0) this.showHistory = false;
+		},
+
+		// --- Notification Permission Guide ---
+		checkAndGuideNotification() {
+			// #ifdef APP-PLUS
+			const guided = storage.get('notification_permission_guided');
+			if (guided) return;
+
+			this.getNotificationStatus((isEnabled) => {
+				if (!isEnabled) {
+					this.showPermissionGuide();
+				} else {
+					// Already enabled, mark as guided
+					storage.set('notification_permission_guided', true);
+				}
+			});
+			// #endif
+		},
+
+		getNotificationStatus(callback) {
+			if (uni.getSystemInfoSync().platform == "ios") {
+				let center = plus.ios.invoke('UNUserNotificationCenter', 'currentNotificationCenter');
+				plus.ios.invoke(center, 'getNotificationSettingsWithCompletionHandler:', plus.ios.implements("UNNotificationSettings", {
+					"getNotificationSettingsWithCompletionHandler:": function (settings) {
+						let authorizationStatus = plus.ios.invoke(settings, 'authorizationStatus');
+						// 3: Authorized, 2: Denied, 1: NotDetermined
+						callback(authorizationStatus === 3);
+					}
+				}));
+			} else {
+				let main = plus.android.runtimeMainActivity();
+				let pkName = main.getPackageName();
+				let NotificationManagerCompat = plus.android.importClass("androidx.core.app.NotificationManagerCompat");
+				let notificationManager = NotificationManagerCompat.from(main);
+				callback(notificationManager.areNotificationsEnabled());
+			}
+		},
+		registerPushAccount() {
+			// #ifdef APP-PLUS
+			uni.getPushClientId({
+				success: (cidRes) => {
+					if (cidRes && cidRes.cid) {
+						request.post('api/ssbh/UserAccount/Add', {
+							mainData: {
+								Account: cidRes.cid,
+								Category: 10
+							}
+						}).catch(err => console.error('Auto Register CID Error:', err));
+					}
+				}
+			});
+			// #endif
+		},
+
+		showPermissionGuide() {
+			uni.showModal({
+				title: this.$t('profile.permission_guide_title') || '开启消息通知',
+				content: this.$t('profile.permission_guide_msg') || '为了保证您能及时收到推送消息（如效期警告、库存预警、异常提醒等），建议您开启系统通知权限。',
+				confirmText: this.$t('profile.go_to_setting') || '去设置',
+				cancelText: this.$t('profile.not_now') || '暂不开启',
+				success: (res) => {
+					// #ifdef APP-PLUS
+					uni.getPushClientId({
+						success: (cidRes) => {
+							request.post('api/ssbh/UserAccount/Add', {
+								mainData: {
+									Account: cidRes.cid,
+									Category: 10
+								}
+							}).then(apiRes => {
+								if (apiRes.success || apiRes.status) {
+									storage.set('notification_permission_guided', true);
+								}
+							}).catch(err => console.error('Register CID Error:', err));
+						},
+						fail: (err) => {
+							console.error('Get CID Error:', err);
+						}
+					});
+					// #endif
+
+					// #ifndef APP-PLUS
+					storage.set('notification_permission_guided', true);
+					// #endif
+
+					if (res.confirm) {
+						this.openAppSettings();
+					}
+				}
+			});
+		},
+
+		openAppSettings() {
+			if (uni.getSystemInfoSync().platform == "ios") {
+				let UIApplication = plus.ios.import("UIApplication");
+				let NSURL = plus.ios.import("NSURL");
+				let setting = NSURL.URLWithString("app-settings:");
+				let application = UIApplication.sharedApplication();
+				application.openURL(setting);
+				plus.ios.deleteObject(setting);
+				plus.ios.deleteObject(application);
+			} else {
+				let main = plus.android.runtimeMainActivity();
+				let pkName = main.getPackageName();
+				let Intent = plus.android.importClass('android.content.Intent');
+				let Settings = plus.android.importClass('android.provider.Settings');
+				let Uri = plus.android.importClass('android.net.Uri');
+				let intent = new Intent();
+				let Build = plus.android.importClass("android.os.Build");
+
+				if (Build.VERSION.SDK_INT >= 26) {
+					intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+					intent.putExtra(Settings.EXTRA_APP_PACKAGE, pkName);
+				} else {
+					intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+					let uri = Uri.fromParts("package", pkName, null);
+					intent.setData(uri);
+				}
+				main.startActivity(intent);
+			}
 		}
 	}
 }
@@ -663,7 +821,17 @@ export default {
 	flex-direction: column;
 	height: 100vh;
 	width: 100%;
-	background-color: #ffffff;
+	background-color: #f8f9fb;
+}
+
+.main-scroll {
+	flex: 1;
+	height: 0;
+	width: 100%;
+}
+
+.bottom-spacer {
+	height: 120rpx;
 }
 
 /* Login Styles */
@@ -671,97 +839,98 @@ export default {
 	display: flex;
 	flex-direction: column;
 	height: 100vh;
-	background-color: #ffffff;
+	background-color: #fff;
 }
 
 .login-header {
-	padding: 60px 24px 40px;
+	padding: 120rpx 48rpx 80rpx;
 	background: linear-gradient(180deg, $sull-color-primary 0%, $sull-color-secondary-light 100%);
 	display: flex;
 	flex-direction: column;
 }
 
 .back-btn-placeholder {
-	width: 40px;
-	height: 40px;
-	background: #ffffff;
+	width: 80rpx;
+	height: 80rpx;
+	background: #fff;
 	border-radius: 50%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	margin-bottom: 24px;
+	margin-bottom: 48rpx;
 }
 
 .icon-arrow-left {
-	width: 20px;
-	height: 20px;
-	background-color: #000;
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z'/%3E%3C/svg%3E");
+	width: 40rpx;
+	height: 40rpx;
+	background-color: $sull-color-warning;
+	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z'/%3E%3C/svg%3E");
+	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z'/%3E%3C/svg%3E");
 	-webkit-mask-size: contain;
 	mask-size: contain;
-	-webkit-mask-repeat: no-repeat;
-	mask-repeat: no-repeat;
-	-webkit-mask-position: center;
-	mask-position: center;
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z'/%3E%3C/svg%3E");
 }
 
 .login-title {
-	font-size: 28px;
+	font-size: 56rpx;
 	font-weight: bold;
-	color: #ffffff;
-	margin-bottom: 8px;
+	color: #fff;
+	margin-bottom: 16rpx;
 	display: block;
 }
 
 .login-subtitle {
-	font-size: 16px;
+	font-size: 32rpx;
 	color: rgba(255, 255, 255, 0.9);
 }
 
 .login-form {
-	padding: 30px 24px;
-	background: #ffffff;
+	padding: 60rpx 48rpx;
+	background: #fff;
 	flex: 1;
-	border-radius: 24px 24px 0 0;
-	margin-top: -24px;
-	/* Slight overlap if needed, or just flow */
+	border-radius: 48rpx 48rpx 0 0;
+	margin-top: -48rpx;
 }
 
 .form-group {
-	margin-bottom: 20px;
+	margin-bottom: 40rpx;
 }
 
 .label {
-	font-size: 14px;
+	font-size: 28rpx;
 	font-weight: 600;
 	color: $sull-text-secondary;
-	margin-bottom: 8px;
+	margin-bottom: 16rpx;
 	display: block;
-}
-
-.input {
-	width: 100%;
-	height: 50px;
-	background: #F6F8FA;
-	border-radius: 16px;
-	padding: 0 16px;
-	font-size: 14px;
-	color: $sull-text-main;
-	box-sizing: border-box;
 }
 
 .input-wrapper {
 	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.input {
+	flex: 1;
+	height: 100rpx;
+	background: #F6F8FA;
+	border-radius: 32rpx;
+	padding: 0 32rpx;
+	font-size: 28rpx;
+	color: $sull-text-main;
+	box-sizing: border-box;
+}
+
+.placeholder {
+	color: $sull-text-placeholder;
 }
 
 .eye-icon {
 	position: absolute;
-	right: 16px;
+	right: 32rpx;
 	top: 50%;
 	transform: translateY(-50%);
-	width: 24px;
-	height: 24px;
+	width: 48rpx;
+	height: 48rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -771,371 +940,501 @@ export default {
 .code-input-row {
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: 20rpx;
+}
+
+.captcha-img {
+	width: 240rpx;
+	height: 100rpx;
+	border-radius: 24rpx;
+	background-color: #f0f0f0;
 }
 
 .code-btn {
-	height: 50px;
-	padding: 0 20px;
-	background: #F6F8FA;
-	border-radius: 16px;
+	width: 240rpx;
+	height: 100rpx;
+	background: rgba($sull-color-primary, 0.1);
+	border-radius: 24rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	white-space: nowrap;
-	transition: all 0.3s;
-	min-width: 100px;
-}
-
-.code-btn.disabled {
-	opacity: 0.6;
-	background: #eeeeee;
 }
 
 .code-btn-text {
 	color: $sull-color-primary;
-	font-size: 14px;
+	font-size: 28rpx;
 	font-weight: 600;
-}
-
-.code-btn.disabled .code-btn-text {
-	color: #999999;
-}
-
-.icon-eye {
-	width: 20px;
-	height: 20px;
-	background-color: $sull-text-placeholder;
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z'/%3E%3C/svg%3E");
-	-webkit-mask-size: contain;
-	mask-size: contain;
-	-webkit-mask-repeat: no-repeat;
-	mask-repeat: no-repeat;
-	-webkit-mask-position: center;
-	mask-position: center;
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z'/%3E%3C/svg%3E");
-}
-
-.icon-eye-off {
-	width: 20px;
-	height: 20px;
-	background-color: $sull-text-placeholder;
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 3.1 0 5.81-1.3 7.78-3.41l.95.95 2.27-2.27 1.62-.27L2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z'/%3E%3C/svg%3E");
-	-webkit-mask-size: contain;
-	mask-size: contain;
-	-webkit-mask-repeat: no-repeat;
-	mask-repeat: no-repeat;
-	-webkit-mask-position: center;
-	mask-position: center;
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 3.1 0 5.81-1.3 7.78-3.41l.95.95 2.27-2.27 1.62-.27L2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z'/%3E%3C/svg%3E");
 }
 
 .form-actions {
 	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 30px;
-}
-
-.remember-me {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-.checkbox {
-	width: 20px;
-	height: 20px;
-	border: 1px solid #ddd;
-	border-radius: 4px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.checkbox.checked {
-	background-color: $sull-color-primary;
-	border-color: $sull-color-primary;
-}
-
-.checkmark {
-	color: #fff;
-	font-size: 14px;
-	line-height: 1;
-}
-
-.action-text {
-	font-size: 14px;
-	color: $sull-text-secondary;
+	margin-bottom: 60rpx;
 }
 
 .forgot-text {
-	font-size: 14px;
-	color: $sull-color-error;
-}
-
-.btn-signin {
-	width: 100%;
-	height: 54px;
-	background: $sull-color-primary;
-	border-radius: 27px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: #ffffff;
-	font-size: 18px;
-	font-weight: 600;
-	margin-bottom: 24px;
+	font-size: 26rpx;
+	color: $sull-text-secondary;
 }
 
 .signup-area {
 	display: flex;
 	justify-content: center;
-	gap: 4px;
-	margin-bottom: 40px;
+	gap: 12rpx;
+	margin-top: 40rpx;
 }
 
 .no-account-text {
-	font-size: 14px;
+	font-size: 28rpx;
 	color: $sull-text-secondary;
 }
 
 .signup-text {
-	font-size: 14px;
+	font-size: 28rpx;
 	color: $sull-color-primary;
 	font-weight: 600;
 }
 
-.social-login {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 24px;
-}
-
-.divider {
-	display: flex;
-	align-items: center;
-	width: 100%;
-	gap: 16px;
-}
-
-.line {
-	flex: 1;
-	height: 1px;
-	background-color: #eee;
-}
-
-.or-text {
-	font-size: 14px;
-	color: $sull-text-secondary;
-}
-
-.social-icons {
-	display: flex;
-	gap: 20px;
-	margin-bottom: 40px;
-}
-
-.social-btn {
-	/* width: 50px; */
-	/* Make width auto to fit text */
-	height: 50px;
-	background: #f8f8f8;
-	border-radius: 12px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 0 16px;
-	/* Add padding */
-	gap: 8px;
-	/* Space between icon and text */
-}
-
-.social-icon {
-	font-size: 20px;
-	font-weight: bold;
-}
-
-.social-label {
-	font-size: 14px;
-	font-weight: 600;
-	color: $sull-text-main;
-}
-
-.social-btn.wechat .social-icon {
-	color: #07C160;
-}
-
-.social-btn.mobile .social-icon {
-	color: #000000;
-}
-
-.social-btn.username .social-icon {
-	color: #000000;
-}
-
 .login-footer {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	margin-top: auto;
-	gap: 4px;
-}
-
-.captcha-img {
-	width: 120px;
-	height: 50px;
-	border-radius: 16px;
-	background-color: #eee;
+	margin-top: 80rpx;
+	text-align: center;
 }
 
 .footer-text {
-	font-size: 12px;
-	color: $sull-text-secondary;
+	font-size: 24rpx;
+	color: $sull-gray-60;
+	line-height: 1.6;
 }
 
 .footer-link {
 	color: $sull-text-main;
-	font-weight: bold;
+	font-weight: 500;
+	margin: 0 4rpx;
 }
 
-
-/* Existing Profile Styles */
-.main-scroll {
-	flex: 1;
-	height: 0;
+.icon-eye,
+.icon-eye-off {
+	width: 40rpx;
+	height: 40rpx;
+	background-color: $sull-gray-60;
 }
 
-.header {
-	padding: 44px 24px 20px;
+.icon-eye {
+	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z'/%3E%3C/svg%3E");
+	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z'/%3E%3C/svg%3E");
+}
+
+.icon-eye-off {
+	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.82l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.74-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.34-4.3l1.82 1.82c.11-.01.22-.02.33-.02 1.66 0 3 1.34 3 3 0 .11-.01.22-.02.33l1.82 1.82c.32-.65.51-1.37.51-2.15 0-2.76-2.24-5-5-5-.78 0-1.5.19-2.15.51z'/%3E%3C/svg%3E");
+	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.82l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.74-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.34-4.3l1.82 1.82c.11-.01.22-.02.33-.02 1.66 0 3 1.34 3 3 0 .11-.01.22-.02.33l1.82 1.82c.32-.65.51-1.37.51-2.15 0-2.76-2.24-5-5-5-.78 0-1.5.19-2.15.51z'/%3E%3C/svg%3E");
+}
+
+.btn-signin {
+	width: 100%;
+	height: 108rpx;
+	background: $sull-color-primary;
+	border-radius: 54rpx;
 	display: flex;
+	align-items: center;
 	justify-content: center;
-	align-items: center;
+	color: #fff;
+	font-size: 36rpx;
+	font-weight: 600;
 }
 
-.header-title {
-	font-size: 18px;
-	font-weight: bold;
-	color: $sull-text-main;
-}
-
-.content {
-	padding: 0 24px 120px;
-}
-
-.user-section {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	margin-bottom: 40px;
-}
-
-.avatar-container {
+/* Premium Profile Styles */
+.premium-header-bg {
+	background: linear-gradient(135deg, $sull-color-primary 0%, lighten($sull-color-primary, 20%) 100%);
 	position: relative;
-	margin-bottom: 16px;
+	overflow: hidden;
+}
+
+.header-content {
+	padding: 0 40rpx 40rpx;
+	z-index: 2;
+	position: relative;
+}
+
+.header-curve {
+	position: absolute;
+	bottom: -100rpx;
+	right: -60rpx;
+	width: 400rpx;
+	height: 400rpx;
+	background: rgba($sull-color-secondary, 0.4);
+	border-radius: 50%;
+	filter: blur(60rpx);
+	z-index: 1;
+}
+
+.premium-user-section {
+	display: flex;
+	align-items: center;
+	padding: 40rpx 0;
+	gap: 24rpx;
+}
+
+.avatar-box {
+	position: relative;
 }
 
 .avatar {
-	width: 100px;
-	height: 100px;
+	width: 130rpx;
+	height: 130rpx;
 	border-radius: 50%;
-	background-color: #f0f0f0;
-	border: 4px solid #fff;
-	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
+	border: 4rpx solid rgba(255, 255, 255, 0.4);
 }
 
-.edit-badge {
-	position: absolute;
-	bottom: 0;
-	right: 0;
-	width: 32px;
-	height: 32px;
-	background: #FFD4C8;
+.user-info-text {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 4rpx;
+}
+
+.user-name {
+	font-size: 40rpx;
+	font-weight: bold;
+	color: #fff;
+}
+
+.user-id {
+	font-size: 24rpx;
+	color: rgba(255, 255, 255, 0.7);
+}
+
+.user-score-box {
+	background: rgba(255, 255, 255, 0.2);
+	padding: 8rpx 24rpx;
+	border-radius: 30rpx;
+	display: flex;
+	align-items: center;
+	border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.user-role {
+	font-size: 24rpx;
+	font-weight: 600;
+	color: #fff;
+}
+
+.score-badge {
+	display: flex;
+	align-items: center;
+	gap: 10rpx;
+}
+
+.score-icon {
+	font-size: 32rpx;
+}
+
+.score-value {
+	font-size: 28rpx;
+	font-weight: bold;
+	color: #4B5563;
+}
+
+.score-add {
+	width: 44rpx;
+	height: 44rpx;
+	background: $sull-color-primary;
+	color: #fff;
 	border-radius: 50%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	border: 3px solid #fff;
+	font-size: 32rpx;
+	margin-left: 12rpx;
 }
 
-.icon-edit {
-	width: 16px;
-	height: 16px;
-	background-color: #FF6B4A;
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z'/%3E%3C/svg%3E");
-	-webkit-mask-size: contain;
-	-webkit-mask-repeat: no-repeat;
-	-webkit-mask-position: center;
-	mask-size: contain;
-	mask-repeat: no-repeat;
-	mask-position: center;
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z'/%3E%3C/svg%3E");
-}
-
-.user-name {
-	font-size: 20px;
-	font-weight: bold;
-	color: $sull-text-main;
-	margin-bottom: 4px;
-}
-
-.user-email {
-	font-size: 14px;
-	color: $sull-text-secondary;
-}
-
-.settings-section {
+.invite-banner {
 	display: flex;
-	flex-direction: column;
+	align-items: center;
+	gap: 12rpx;
+	color: #fff;
+	font-size: 24rpx;
+	background: rgba(0, 0, 0, 0.1);
+	padding: 16rpx 24rpx;
+	border-radius: 20rpx;
+	margin-top: 10rpx;
 }
 
-.section-title {
-	font-size: 16px;
-	font-weight: bold;
-	color: $sull-text-secondary;
-	margin-bottom: 20px;
+.invite-dot {
 	opacity: 0.8;
 }
 
-.menu-list {
+.invite-text {
+	flex: 1;
+	opacity: 0.9;
+}
+
+.icon-close-small {
+	width: 32rpx;
+	height: 32rpx;
+	background-color: #fff;
+	opacity: 0.6;
+	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'/%3E%3C/svg%3E");
+	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'/%3E%3C/svg%3E");
+	-webkit-mask-size: contain;
+	mask-size: contain;
+}
+
+.main-content-wrapper {
+	padding: 0 30rpx 60rpx;
+	margin-top: -30rpx;
+	position: relative;
+	z-index: 10;
+}
+
+.asset-cards-row {
+	display: flex;
+	gap: 20rpx;
+	margin-bottom: 30rpx;
+}
+
+.asset-card {
+	flex: 1;
+	background: #fff;
+	border-radius: 32rpx;
+	padding: 30rpx;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.05);
+}
+
+.asset-info {
 	display: flex;
 	flex-direction: column;
+	gap: 8rpx;
+}
+
+.asset-title {
+	font-size: 28rpx;
+	font-weight: 600;
+}
+
+.asset-count-box {
+	display: flex;
+	align-items: baseline;
+	gap: 6rpx;
+}
+
+.asset-number {
+	font-size: 44rpx;
+	font-weight: bold;
+	color: #1F2937;
+}
+
+.asset-unit {
+	font-size: 22rpx;
+	color: #9CA3AF;
+}
+
+.asset-emoji {
+	font-size: 60rpx;
+	opacity: 0.8;
+}
+
+.asset-icon {
+	width: 80rpx;
+	height: 80rpx;
+}
+
+.text-primary {
+	color: $sull-color-primary;
+}
+
+.history-icon {
+	padding: 0 20rpx;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.icon-arrow-down {
+	width: 0;
+	height: 0;
+	border-left: 10rpx solid transparent;
+	border-right: 10rpx solid transparent;
+	border-top: 10rpx solid #999;
+	transition: transform 0.3s;
+}
+
+.icon-arrow-down.rotated {
+	transform: rotate(180deg);
+}
+
+.history-dropdown {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	background: #fff;
+	border-radius: 12rpx;
+	box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
+	z-index: 100;
+	margin-top: 8rpx;
+	overflow: hidden;
+	border: 1rpx solid #eee;
+}
+
+.history-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 24rpx;
+	font-size: 28rpx;
+	color: #333;
+	border-bottom: 1rpx solid #f5f5f5;
+}
+
+.history-item:active {
+	background: #f9f9f9;
+}
+
+.history-item:last-child {
+	border-bottom: none;
+}
+
+.delete-icon {
+	color: #ccc;
+	padding: 10rpx;
+	font-size: 24rpx;
+}
+
+.text-warning {
+	color: $sull-color-warning;
+}
+
+.quick-services-card {
+	background: #fff;
+	border-radius: 32rpx;
+	display: flex;
+	justify-content: space-around;
+	padding: 40rpx 0;
+	margin-bottom: 30rpx;
+	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
+}
+
+.service-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 16rpx;
+}
+
+.service-icon {
+	font-size: 50rpx;
+}
+
+.service-label {
+	font-size: 26rpx;
+	color: #4B5563;
+	font-weight: 500;
+}
+
+.menu-list-card {
+	background: #fff;
+	border-radius: 32rpx;
+	padding: 10rpx 30rpx;
+	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
+}
+
+.menu-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 40rpx 0;
+	border-bottom: 2rpx solid #F3F4F6;
+}
+
+.menu-item:last-child {
+	border-bottom: none;
+}
+
+.menu-label-group {
+	display: flex;
+	align-items: center;
+	gap: 16rpx;
+}
+
+.menu-item-left {
+	display: flex;
+	align-items: center;
+	gap: 24rpx;
+}
+
+.menu-icon {
+	width: 44rpx;
+	height: 44rpx;
+}
+
+.menu-label {
+	font-size: 30rpx;
+	color: #1F2937;
+	font-weight: 500;
+}
+
+.menu-tag {
+	font-size: 22rpx;
+	color: $sull-color-primary;
+	background: rgba($sull-color-primary, 0.1);
+	padding: 4rpx 12rpx;
+	border-radius: 20rpx;
+}
+
+.menu-arrow {
+	font-size: 40rpx;
+	color: #D1D5DB;
+}
+
+.logout-item .menu-label {
+	color: $sull-text-placeholder;
+}
+
+.cache-actions {
+	display: flex;
+	gap: 20rpx;
+	padding: 0 30rpx 30rpx;
+}
+
+.btn-cache {
+	flex: 1;
+	font-size: 24rpx;
+	height: 60rpx;
+	line-height: 60rpx;
+	background: #f0f2f5;
+	color: #606266;
+	border-radius: 30rpx;
+	text-align: center;
 }
 
 /* Custom Refresher */
 .custom-refresher {
-	height: 60px;
+	height: 120rpx;
 	width: 100%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 }
 
-.refresher-content {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 4px;
-}
-
 .refresher-icon {
-	width: 32px;
-	height: 32px;
+	width: 64rpx;
+	height: 64rpx;
 	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
 	background-size: contain;
 	background-repeat: no-repeat;
-	transition: transform 0.3s ease;
+}
+
+.refresher-text {
+	font-size: 20rpx;
+	color: $sull-color-primary;
+	opacity: 0.8;
 }
 
 .refresher-icon.animating {
 	animation: ambulance-bounce 0.8s infinite ease-in-out;
-}
-
-.refresher-text {
-	font-size: 10px;
-	color: $sull-color-primary;
-	opacity: 0.8;
 }
 
 @keyframes ambulance-bounce {
@@ -1146,129 +1445,21 @@ export default {
 	}
 
 	50% {
-		transform: translateY(-6px);
+		transform: translateY(-12rpx);
 	}
 }
 
-.menu-item {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	padding: 16px 0;
-	position: relative;
-}
-
-.menu-item::after {
-	content: '';
-	position: absolute;
-	bottom: 0;
-	left: 40px;
-	right: 0;
-	height: 1px;
-	background-color: rgba(0, 0, 0, 0.06);
-}
-
-.menu-item:last-child::after {
-	display: none;
-}
-
-.item-left {
+.unread-badge {
+	background-color: #FF4D4F;
+	color: #fff;
+	font-size: 20rpx;
+	min-width: 32rpx;
+	height: 32rpx;
+	border-radius: 16rpx;
 	display: flex;
 	align-items: center;
-	gap: 16px;
-}
-
-.menu-icon {
-	width: 24px;
-	height: 24px;
-	background-color: $sull-text-main;
-	-webkit-mask-size: contain;
-	-webkit-mask-repeat: no-repeat;
-	-webkit-mask-position: center;
-	mask-size: contain;
-	mask-repeat: no-repeat;
-	mask-position: center;
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z'/%3E%3C/svg%3E");
-}
-
-.menu-label {
-	font-size: 16px;
-	font-weight: 500;
-	color: $sull-text-main;
-}
-
-.icon-arrow {
-	width: 20px;
-	height: 20px;
-	background-color: #C4C4C4;
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z'/%3E%3C/svg%3E");
-	-webkit-mask-size: contain;
-	-webkit-mask-repeat: no-repeat;
-	-webkit-mask-position: center;
-	mask-size: contain;
-	mask-repeat: no-repeat;
-	mask-position: center;
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z'/%3E%3C/svg%3E");
-}
-
-/* Icons */
-.icon-cart {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z'/%3E%3C/svg%3E");
-}
-
-.icon-card {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z'/%3E%3C/svg%3E");
-}
-
-/* Icons */
-.icon-org {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z'/%3E%3C/svg%3E");
-}
-
-.icon-dept {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z'/%3E%3C/svg%3E");
-}
-
-.icon-user-info {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E");
-}
-
-.icon-bell {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z'/%3E%3C/svg%3E");
-}
-
-.icon-globe {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.91-4.33-3.56zm2.95-8H5.08c.96-1.65 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.35.16-2h4.68c.09.65.16 1.32.16 2 0 .68-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.91-4.33-3.56zm2.95-8H5.08c.96-1.65 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.35.16-2h4.68c.09.65.16 1.32.16 2 0 .68-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z'/%3E%3C/svg%3E");
-}
-
-.icon-moon {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M9 21c-4.97 0-9-4.03-9-9s4.03-9 9-9c.25 0 .5.01.74.04-.42.71-.67 1.53-.67 2.41 0 2.76 2.24 5 5 5 .88 0 1.7-.25 2.41-.67.03.24.04.49.04.74 0 4.97-4.03 9-9 9z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M9 21c-4.97 0-9-4.03-9-9s4.03-9 9-9c.25 0 .5.01.74.04-.42.71-.67 1.53-.67 2.41 0 2.76 2.24 5 5 5 .88 0 1.7-.25 2.41-.67.03.24.04.49.04.74 0 4.97-4.03 9-9 9z'/%3E%3C/svg%3E");
-}
-
-.icon-info {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z'/%3E%3C/svg%3E");
-}
-
-
-.icon-logout {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z'/%3E%3C/svg%3E");
-}
-
-.logout-item .menu-label {
-	color: $sull-text-placeholder;
-}
-
-.logout-item .menu-icon {
-	background-color: $sull-text-placeholder;
+	justify-content: center;
+	padding: 0 8rpx;
+	margin-left: 12rpx;
 }
 </style>

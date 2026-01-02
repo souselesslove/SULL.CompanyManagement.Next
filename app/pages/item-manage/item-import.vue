@@ -1,7 +1,7 @@
 <template>
     <view class="container">
         <!-- Navigation Bar -->
-        <view class="custom-nav" :style="{ paddingTop: statusBarHeight + 'px' }">
+        <view class="custom-nav" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
             <view class="nav-content">
                 <view class="nav-left">
                     <BackButton class="nav-back-btn" @click="goBack" />
@@ -11,7 +11,7 @@
             </view>
         </view>
 
-        <scroll-view class="import-content" scroll-y :style="{ marginTop: (statusBarHeight + 44) + 'px' }">
+        <scroll-view class="import-content" scroll-y :style="{ marginTop: (statusBarHeight * 2 + 88) + 'rpx' }">
 
             <!-- Step 1: File Selection -->
             <view class="step-card">
@@ -110,9 +110,11 @@
 <script>
 import BackButton from '@/components/BackButton/BackButton.vue';
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
 import * as XLSX from 'xlsx';
 
 const CACHE_KEY = 'ITEM_IMPORT_CACHE';
+const PERSIST_MAPPING_KEY = 'ITEM_IMPORT_FIELD_MAPPINGS';
 
 export default {
     components: { BackButton },
@@ -143,7 +145,10 @@ export default {
                 OrderBy: { label: '排序', required: false }, // Default to (index+1)*10
                 SearchCode: { label: '检索码', required: false },
                 Remark: { label: '备注', required: false },
-                Tag: { label: '标签', required: false }
+                Tag: { label: '标签', required: false },
+                Layer: { label: '层数', required: false },
+                LayerNO: { label: '层号', required: false },
+                ColumnNO: { label: '位置号', required: false }
             },
 
             mapping: {}, // key (sysField) -> value (excelHeaderName)
@@ -180,7 +185,7 @@ export default {
     onLoad() {
         const sysInfo = uni.getSystemInfoSync();
         this.statusBarHeight = sysInfo.statusBarHeight || 20;
-        const uInfo = uni.getStorageSync('userOrgInfo');
+        const uInfo = storage.get('userOrgInfo');
         if (uInfo) {
             this.userOrgInfo = uInfo;
         }
@@ -192,7 +197,7 @@ export default {
     methods: {
         loadCache() {
             try {
-                const cache = uni.getStorageSync(CACHE_KEY);
+                const cache = storage.get(CACHE_KEY);
                 if (cache) {
                     this.fileName = cache.fileName || '';
                     this.sheetNames = cache.sheetNames || [];
@@ -221,14 +226,14 @@ export default {
                     mapping: this.mapping,
                     importResults: this.importResults
                 };
-                uni.setStorageSync(CACHE_KEY, data);
+                storage.set(CACHE_KEY, data);
             } catch (e) {
                 console.error('Save cache failed', e);
             }
         },
         clearCache() {
             try {
-                uni.removeStorageSync(CACHE_KEY);
+                storage.remove(CACHE_KEY);
             } catch (e) {
                 console.error('Clear cache failed', e);
             }
@@ -241,63 +246,194 @@ export default {
                 uni.showToast({ title: this.fileName, icon: 'none' });
             }
         },
-        chooseFile() {
-            // uni.chooseFile works on H5 and some MP. 
-            // For WeChat MP, use wx.chooseMessageFile.
-            // We'll try uni.chooseFile first or fallback.
+        async chooseFile() {
+            // #ifdef APP-PLUS
+            if (uni.getSystemInfoSync().platform === 'android') {
+                const permission = 'android.permission.READ_EXTERNAL_STORAGE';
+                const hasPermission = await new Promise((resolve) => {
+                    plus.android.requestPermissions([permission], (res) => {
+                        resolve(res.granted.length > 0);
+                    }, () => resolve(false));
+                });
+                if (!hasPermission) {
+                    uni.showModal({
+                        title: '读取权限',
+                        content: '导入文件需要读取存储空间权限，请在设置中开启',
+                        confirmText: '去设置',
+                        success: (res) => { if (res.confirm) plus.runtime.openAppSettings(); }
+                    });
+                    return;
+                }
+            }
+            // #endif
 
-            //#ifdef MP-WEIXIN
-            wx.chooseMessageFile({
+            const options = {
                 count: 1,
                 type: 'file',
-                extension: ['xls', 'xlsx'],
-                success: (res) => {
-                    this.clearCache(); // Start fresh
-                    this.processFile(res.tempFiles[0]);
-                }
-            });
-            //#endif
-
-            //#ifndef MP-WEIXIN
-            uni.chooseFile({
-                count: 1,
                 extension: ['.xls', '.xlsx'],
                 success: (res) => {
-                    this.clearCache(); // Start fresh
+                    this.clearCache();
                     this.processFile(res.tempFiles[0]);
+                },
+                fail: (err) => {
+                    if (err && err.errMsg && err.errMsg.indexOf('cancel') === -1) {
+                        uni.showToast({ title: '选择操作已取消或失败', icon: 'none' });
+                    }
                 }
+            };
+
+            // #ifdef MP-WEIXIN
+            uni.chooseMessageFile(options);
+            // #endif
+
+            // #ifdef APP-PLUS
+            if (typeof uni.chooseFile === 'function') {
+                uni.chooseFile(options);
+            } else if (typeof uni.chooseMessageFile === 'function') {
+                uni.chooseMessageFile({ type: 'file', ...options });
+            } else if (uni.getSystemInfoSync().platform === 'android') {
+                this.androidFilePicker(options.success);
+            } else {
+                uni.showToast({ title: '当前环境不支持文件选择', icon: 'none' });
+            }
+            // #endif
+
+            // #ifdef H5
+            uni.chooseFile({
+                extension: ['.xls', '.xlsx'],
+                ...options
             });
-            //#endif
+            // #endif
+        },
+        androidFilePicker(successCallback) {
+            const Intent = plus.android.importClass("android.content.Intent");
+            const intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("*/*"); // Try to pick any, XLS/XLSX filter is harder via intent
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            const main = plus.android.runtimeMainActivity();
+            main.onActivityResult = (requestCode, resultCode, data) => {
+                if (resultCode === -1 && data) { // -1 is RESULT_OK
+                    try {
+                        const uri = data.getData();
+                        const path = uri ? uri.toString() : '';
+                        successCallback({
+                            tempFiles: [{
+                                path: path,
+                                name: 'Selected_File_' + Date.now() + '.xlsx'
+                            }]
+                        });
+                    } catch (e) {
+                        uni.hideLoading();
+                        uni.showToast({ title: '选取文件失败', icon: 'none' });
+                    }
+                } else {
+                    uni.hideLoading();
+                }
+            };
+            main.startActivityForResult(intent, 1000);
         },
         processFile(file) {
             this.fileName = file.name;
+            const filePath = file.path;
 
-            // Read File
-            // On H5: file.path is blob url or object. FileReader needed.
-            // On MP: file.path is tmp path. FileSystemManager needed.
+            uni.showLoading({ title: '文件读取中...' });
 
-            //#ifdef H5
+            // #ifdef H5
             const reader = new FileReader();
             reader.onload = (e) => {
+                uni.hideLoading();
                 const data = new Uint8Array(e.target.result);
                 this.parseExcel(data);
             };
-            reader.readAsArrayBuffer(file); // Note: chooseFile in H5 might return File object directly in tempFiles[0]
-            //#endif
+            reader.readAsArrayBuffer(file);
+            // #endif
 
-            //#ifdef MP-WEIXIN
-            const fs = wx.getFileSystemManager();
-            fs.readFile({
-                filePath: file.path,
-                success: (res) => {
-                    this.parseExcel(new Uint8Array(res.data));
+            // #ifdef APP-PLUS || MP-WEIXIN
+            const timeout = setTimeout(() => {
+                uni.hideLoading();
+                uni.showToast({ title: '读取超时', icon: 'none' });
+            }, 15000);
+
+            // Special handling for Android Content URIs using native Java
+            if (uni.getSystemInfoSync().platform === 'android') {
+                try {
+                    const contentUri = filePath;
+                    const main = plus.android.runtimeMainActivity();
+                    const resolver = plus.android.invoke(main, "getContentResolver");
+                    const Uri = plus.android.importClass("android.net.Uri");
+                    const uri = Uri.parse(contentUri);
+                    const inputStream = plus.android.invoke(resolver, "openInputStream", uri);
+
+                    if (inputStream) {
+                        const available = plus.android.invoke(inputStream, "available");
+                        if (available > 0) {
+                            const buf = plus.android.newObject("byte[]", available);
+                            plus.android.invoke(inputStream, "read", buf);
+                            plus.android.invoke(inputStream, "close");
+
+                            const Base64 = plus.android.importClass("android.util.Base64");
+                            const base64Data = Base64.encodeToString(buf, Base64.NO_WRAP);
+
+                            clearTimeout(timeout);
+                            uni.hideLoading();
+                            // Directly use base64 type for better performance
+                            this.parseExcel(base64Data, 'base64');
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Native read failed', e);
+                    // Don't hide loading yet, try fallback
                 }
-            });
-            //#endif
+            }
+
+            const readData = (path) => {
+                const fs = uni.getFileSystemManager();
+                fs.readFile({
+                    filePath: path,
+                    success: (res) => {
+                        clearTimeout(timeout);
+                        uni.hideLoading();
+                        try {
+                            this.parseExcel(new Uint8Array(res.data));
+                        } catch (err) {
+                            uni.showToast({ title: 'Excel格式解析失败', icon: 'none' });
+                        }
+                    },
+                    fail: (err) => {
+                        // iOS/fallback plus.io logic
+                        // #ifdef APP-PLUS
+                        plus.io.resolveLocalFileSystemURL(path, (entry) => {
+                            entry.file((fileObj) => {
+                                const reader = new plus.io.FileReader();
+                                reader.onloadend = (e) => {
+                                    clearTimeout(timeout);
+                                    uni.hideLoading();
+                                    this.parseExcel(new Uint8Array(e.target.result));
+                                };
+                                reader.readAsArrayBuffer(fileObj);
+                            }, () => { clearTimeout(timeout); uni.hideLoading(); uni.showToast({ title: '访问文件失败', icon: 'none' }); });
+                        }, () => {
+                            clearTimeout(timeout);
+                            uni.hideLoading();
+                            uni.showToast({ title: '路径解析失败', icon: 'none' });
+                        });
+                        // #endif
+                        // #ifndef APP-PLUS
+                        clearTimeout(timeout);
+                        uni.hideLoading();
+                        uni.showToast({ title: '读取失败', icon: 'none' });
+                        // #endif
+                    }
+                });
+            };
+
+            readData(filePath);
+            // #endif
         },
-        parseExcel(data) {
+        parseExcel(data, type = 'array') {
             try {
-                const workbook = XLSX.read(data, { type: 'array' });
+                const workbook = XLSX.read(data, { type: type });
                 this.workbook = workbook;
                 this.sheetNames = workbook.SheetNames;
 
@@ -325,8 +461,23 @@ export default {
             const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); // Header: 1 gives array of arrays
 
             if (jsonData && jsonData.length > 0) {
-                this.excelHeaders = jsonData[0]; // First row is header
-                // Auto mapping based on similarity?
+                this.excelHeaders = jsonData[0].filter(h => h !== undefined && h !== null && String(h).trim() !== ''); // Clean headers
+
+                // Load persistent mapping first
+                const persistMapping = storage.get(PERSIST_MAPPING_KEY) || {};
+
+                // Initialize mapping
+                this.mapping = {};
+
+                // 1. First apply persistent mappings if headers exist in current file
+                Object.keys(this.sysFields).forEach(key => {
+                    const savedHeader = persistMapping[key];
+                    if (savedHeader && this.excelHeaders.includes(savedHeader)) {
+                        this.$set(this.mapping, key, savedHeader);
+                    }
+                });
+
+                // 2. For remaining unmapped fields, try auto fuzzy matching
                 this.autoMapInfo();
 
                 // Parse Data
@@ -337,12 +488,16 @@ export default {
             }
         },
         autoMapInfo() {
-            // Simple auto map
-            this.mapping = {};
+            // Fuzzy match for fields not already mapped
             this.excelHeaders.forEach(header => {
+                const headerStr = String(header).trim();
                 for (const key in this.sysFields) {
-                    if (header.includes(this.sysFields[key].label) || this.sysFields[key].label.includes(header)) {
-                        this.mapping[key] = header;
+                    // Skip if already mapped by persistence
+                    if (this.mapping[key]) continue;
+
+                    const label = this.sysFields[key].label;
+                    if (headerStr.includes(label) || label.includes(headerStr)) {
+                        this.$set(this.mapping, key, headerStr);
                     }
                 }
             });
@@ -355,12 +510,34 @@ export default {
         },
         onMappingChange(e, key) {
             const index = Number(e.detail.value);
+            const persistMapping = storage.get(PERSIST_MAPPING_KEY) || {};
+
             if (index === 0) {
+                // Manual unmap for this session - do NOT delete from persistMapping
+                // This allows the user to temporarily skip a field without LOSING the memory
                 this.$set(this.mapping, key, null);
             } else {
-                this.$set(this.mapping, key, this.excelHeaders[index - 1]);
+                const selectedHeader = this.excelHeaders[index - 1];
+
+                // "Replaced" logic: If this Column is already assigned to another field, 
+                // clear that field's mapping because it's being "replaced" by the current field.
+                Object.keys(persistMapping).forEach(k => {
+                    if (persistMapping[k] === selectedHeader && k !== key) {
+                        delete persistMapping[k];
+                        // If it's also in current session mapping, clear it
+                        if (this.mapping[k] === selectedHeader) {
+                            this.$set(this.mapping, k, null);
+                        }
+                    }
+                });
+
+                this.$set(this.mapping, key, selectedHeader);
+                persistMapping[key] = selectedHeader;
             }
-            this.saveCache(); // Save mapping change
+
+            // Save to both persistent storage and session cache
+            storage.set(PERSIST_MAPPING_KEY, persistMapping);
+            this.saveCache();
         },
         getPreviewData(key) {
             const header = this.mapping[key];
@@ -404,7 +581,7 @@ export default {
                 // Type Checks (Basic)
                 if (rowErrors.length === 0) {
                     // Check Number types
-                    const numFields = ['Category', 'Cardinality', 'OrderBy', 'KindCounter', 'AvailableStock'];
+                    const numFields = ['Category', 'Cardinality', 'OrderBy', 'KindCounter', 'AvailableStock', 'Layer', 'LayerNO', 'ColumnNO'];
                     numFields.forEach(f => {
                         if (this.mapping[f]) {
                             const val = row[this.mapping[f]];
@@ -563,69 +740,69 @@ export default {
     left: 0;
     width: 100%;
     z-index: 999;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+    box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.03);
 
     .nav-content {
-        height: 44px;
+        height: 88rpx;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 16px;
+        padding: 0 32rpx;
 
         .nav-left {
-            width: 40px;
+            width: 80rpx;
         }
 
         .nav-title {
-            font-size: 16px;
+            font-size: 32rpx;
             font-weight: 600;
         }
 
         .nav-right {
-            width: 40px;
+            width: 80rpx;
         }
     }
 }
 
 .import-content {
     flex: 1;
-    padding: 16px;
+    padding: 32rpx;
     width: 100%;
     box-sizing: border-box;
 }
 
 .step-card {
     background: #fff;
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 16px;
+    border-radius: 24rpx;
+    padding: 32rpx;
+    margin-bottom: 32rpx;
 }
 
 .step-header {
     display: flex;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 32rpx;
 }
 
 .tab-header {
     display: flex;
     background: #fff;
-    border-radius: 25px;
-    padding: 4px;
-    margin-bottom: 16px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+    border-radius: 50rpx;
+    padding: 8rpx;
+    margin-bottom: 32rpx;
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
 }
 
 .tab-item {
     flex: 1;
-    height: 42px;
+    height: 84rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
+    font-size: 28rpx;
     color: $sull-text-secondary;
     font-weight: 500;
-    border-radius: 21px;
+    border-radius: 42rpx;
     transition: all 0.3s;
     position: relative;
 }
@@ -634,7 +811,7 @@ export default {
     background: $sull-color-primary;
     color: #fff;
     font-weight: 600;
-    box-shadow: 0 2px 6px rgba(149, 202, 255, 0.4);
+    box-shadow: 0 4rpx 12rpx rgba(149, 202, 255, 0.4);
 }
 
 .tab-item.active::after {
@@ -644,15 +821,15 @@ export default {
 .badge {
     position: absolute;
     top: 0px;
-    right: 10px;
+    right: 20rpx;
     background: #ff4d4f;
     color: #fff;
-    font-size: 10px;
-    height: 16px;
-    min-width: 16px;
-    line-height: 16px;
-    padding: 0 4px;
-    border-radius: 8px;
+    font-size: 20rpx;
+    height: 32rpx;
+    min-width: 32rpx;
+    line-height: 32rpx;
+    padding: 0 8rpx;
+    border-radius: 16rpx;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -660,26 +837,26 @@ export default {
 }
 
 .step-num {
-    width: 24px;
-    height: 24px;
+    width: 48rpx;
+    height: 48rpx;
     background: $sull-color-primary;
     color: #fff;
     border-radius: 50%;
     text-align: center;
-    line-height: 24px;
-    font-size: 14px;
-    margin-right: 8px;
+    line-height: 48rpx;
+    font-size: 28rpx;
+    margin-right: 16rpx;
 }
 
 .step-title {
     font-weight: bold;
-    font-size: 16px;
+    font-size: 32rpx;
 }
 
 .file-area {
-    height: 80px;
-    border: 1px dashed $sull-color-line;
-    border-radius: 8px;
+    height: 160rpx;
+    border: 2rpx dashed $sull-color-line;
+    border-radius: 16rpx;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -688,15 +865,15 @@ export default {
     .upload-placeholder {
         text-align: center;
         color: $sull-text-secondary;
-        font-size: 14px;
+        font-size: 28rpx;
         display: flex;
         flex-direction: column;
         align-items: center;
     }
 
     .icon {
-        font-size: 24px;
-        margin-bottom: 4px;
+        font-size: 48rpx;
+        margin-bottom: 8rpx;
     }
 
     .file-info {
@@ -705,58 +882,58 @@ export default {
         align-items: center;
         justify-content: space-between;
         width: 100%;
-        padding: 0 16px;
+        padding: 0 32rpx;
         box-sizing: border-box;
     }
 
     .name {
         font-weight: bold;
-        font-size: 14px;
+        font-size: 28rpx;
         margin-bottom: 0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: calc(100% - 50px);
+        max-width: calc(100% - 100rpx);
     }
 
     .change-btn {
-        font-size: 12px;
+        font-size: 24rpx;
         color: $sull-color-primary;
         white-space: nowrap;
     }
 }
 
 .sheet-select {
-    margin-top: 16px;
+    margin-top: 32rpx;
 }
 
 .sheet-select .label {
-    font-size: 14px;
+    font-size: 28rpx;
     color: #666;
-    margin-bottom: 8px;
+    margin-bottom: 16rpx;
     display: block;
 }
 
 .picker-view {
     background: #f5f5f5;
-    height: 40px;
-    border-radius: 4px;
+    height: 80rpx;
+    border-radius: 8rpx;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 12px;
-    font-size: 14px;
+    padding: 0 24rpx;
+    font-size: 28rpx;
 }
 
 .mapping-list {
-    border: 1px solid #eee;
-    border-radius: 8px;
+    border: 2rpx solid #eee;
+    border-radius: 16rpx;
 }
 
 .mapping-row {
     display: flex;
-    border-bottom: 1px solid #eee;
-    min-height: 40px;
+    border-bottom: 2rpx solid #eee;
+    min-height: 80rpx;
     align-items: center;
 }
 
@@ -767,29 +944,29 @@ export default {
 .header {
     background: #f9f9f9;
     font-weight: bold;
-    font-size: 13px;
+    font-size: 26rpx;
     color: #666;
 }
 
 .col-sys {
-    width: 100px;
-    padding: 8px;
-    border-right: 1px solid #eee;
+    width: 200rpx;
+    padding: 16rpx;
+    border-right: 2rpx solid #eee;
     flex-shrink: 0;
 }
 
 .col-excel {
-    width: 120px;
-    padding: 8px;
-    border-right: 1px solid #eee;
+    width: 240rpx;
+    padding: 16rpx;
+    border-right: 2rpx solid #eee;
     flex-shrink: 0;
 }
 
 .col-preview {
     flex: 1;
-    padding: 8px;
+    padding: 16rpx;
     color: #999;
-    font-size: 12px;
+    font-size: 24rpx;
     overflow: hidden;
 }
 
@@ -797,20 +974,21 @@ export default {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
 }
 
 .field-label {
-    font-size: 14px;
+    font-size: 28rpx;
 }
 
 .required-mark {
     color: red;
-    margin-left: 2px;
+    margin-left: 4rpx;
 }
 
 .picker-cell {
-    font-size: 14px;
+    font-size: 28rpx;
     color: #333;
 }
 
@@ -819,16 +997,16 @@ export default {
 }
 
 .action-area {
-    padding: 16px 0;
+    padding: 32rpx 0;
 }
 
 .submit-btn {
     background: $sull-color-primary;
     color: #fff;
-    border-radius: 24px;
-    font-size: 16px;
-    height: 48px;
-    line-height: 48px;
+    border-radius: 48rpx;
+    font-size: 32rpx;
+    height: 96rpx;
+    line-height: 96rpx;
 }
 
 .submit-btn[disabled] {
@@ -836,23 +1014,23 @@ export default {
 }
 
 .result-list {
-    min-height: 200px;
+    min-height: 400rpx;
 }
 
 .result-empty {
-    padding: 40px 0;
+    padding: 80rpx 0;
     text-align: center;
     color: #999;
-    font-size: 14px;
+    font-size: 28rpx;
 }
 
 .result-item {
-    padding: 8px 12px;
-    border-bottom: 1px solid #f5f5f5;
+    padding: 16rpx 24rpx;
+    border-bottom: 2rpx solid #f5f5f5;
 }
 
 .error-msg {
     color: #ff4d4f;
-    font-size: 13px;
+    font-size: 26rpx;
 }
 </style>

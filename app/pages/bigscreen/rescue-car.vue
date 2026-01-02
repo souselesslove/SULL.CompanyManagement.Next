@@ -1,6 +1,17 @@
 <template>
 	<view class="container">
-		<scroll-view scroll-y class="main-scroll">
+		<scroll-view scroll-y class="main-scroll" refresher-enabled="true" :refresher-triggered="isRefreshing"
+			:refresher-threshold="60" @refresherrefresh="onRefresh" @refresherpulling="onPulling"
+			@refresherrestore="onRestore" @refresherabort="onRestore" refresher-default-style="none"
+			refresher-background="#f0f5ff">
+			<view slot="refresher" class="custom-refresher"
+				:style="{ transform: (isPulling || isRefreshing) ? 'translateY(120rpx)' : 'translateY(0)' }">
+				<view class="refresher-content">
+					<view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
+					<text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
+					}}</text>
+				</view>
+			</view>
 			<!-- Header -->
 			<view class="header">
 				<text class="title">{{ $t('bigScreen.rescueCar.title') }}</text>
@@ -9,13 +20,16 @@
 			<view class="scroll-content">
 				<view class="info-section">
 					<view class="card-header">
-						<view class="header-left">
+						<view class="header-left" @click="openStatusModal">
 							<view class="header-icon">🚑</view>
-							<text class="header-title">{{ rescueCar.DisplayName || rescueCar.Name || '骨伤一科' }}</text>
+							<text class="header-title">{{ rescueCar.DisplayName || rescueCar.Name || '' }}</text>
+							<text class="status-tag" :class="statusConfig.class">
+								{{ statusConfig.text }}
+							</text>
 						</view>
 						<view class="header-right">
 							<text class="manager-label">{{ $t('bigScreen.rescueCar.manager') }}:</text>
-							<text class="manager-value">{{ rescueCar.Manager || '李秋水' }}</text>
+							<text class="manager-value">{{ rescueCar.DutyUser || '未指定' }}</text>
 						</view>
 					</view>
 					<!-- Info Carousel -->
@@ -68,7 +82,7 @@
 						</swiper-item>
 
 						<!-- Slide 2: Tasks Overview -->
-						<swiper-item>
+						<!-- <swiper-item>
 							<view class="tasks-grid-2x2">
 								<view class="task-item-compact">
 									<view class="task-header">
@@ -134,10 +148,10 @@
 									</view>
 								</view>
 							</view>
-						</swiper-item>
+						</swiper-item> -->
 
 						<!-- Slide 3: Handover Stats -->
-						<swiper-item>
+						<!-- <swiper-item>
 							<view class="stats-slide">
 								<view class="stats-left">
 									<text class="stats-title">{{ $t('bigScreen.rescueCar.handoverRate') }}</text>
@@ -151,10 +165,10 @@
 									<SimpleLineChart :data="[92, 95, 98]" color="#52c41a" :height="80" />
 								</view>
 							</view>
-						</swiper-item>
+						</swiper-item> -->
 
 						<!-- Slide 4: Expiry Stats -->
-						<swiper-item>
+						<!-- <swiper-item>
 							<view class="stats-slide">
 								<view class="stats-left">
 									<text class="stats-title">{{ $t('bigScreen.rescueCar.expiryIssueRate') }}</text>
@@ -168,10 +182,10 @@
 									<SimpleLineChart :data="[1.2, 0.8, 0.5]" color="#faad14" :height="80" />
 								</view>
 							</view>
-						</swiper-item>
+						</swiper-item> -->
 
 						<!-- Slide 5: Cleaning Stats -->
-						<swiper-item>
+						<!-- <swiper-item>
 							<view class="stats-slide">
 								<view class="stats-left">
 									<text class="stats-title">{{ $t('bigScreen.rescueCar.cleaningRate') }}</text>
@@ -185,10 +199,10 @@
 									<SimpleLineChart :data="[99, 100, 100]" color="#1890ff" :height="80" />
 								</view>
 							</view>
-						</swiper-item>
+						</swiper-item> -->
 
 						<!-- Slide 6: Abnormality Stats -->
-						<swiper-item>
+						<!-- <swiper-item>
 							<view class="stats-slide">
 								<view class="stats-left">
 									<text class="stats-title">{{ $t('bigScreen.rescueCar.abnormalRate') }}</text>
@@ -202,7 +216,8 @@
 									<SimpleLineChart :data="[2.5, 1.8, 1.2]" color="#f5222d" :height="80" />
 								</view>
 							</view>
-						</swiper-item>
+						</swiper-item> -->
+
 					</swiper>
 				</view>
 
@@ -245,8 +260,9 @@
 											<view class="card-row top-row">
 												<view class="item-name-wrapper">
 													<text class="item-name-text"
-														:class="{ 'scrolling': item.name.length > 6 }">{{ i + 1 }}.
-														{{ item.name }}</text>
+														:class="{ 'scrolling': $getStringLen(item.name) > 20 }">{{ i + 1
+														}}. {{
+															item.name }}</text>
 												</view>
 												<view v-if="item.days <= 30" class="status-icon"
 													:class="{ 'icon-warn': item.days < 30 && item.days >= 0, 'shaking': item.days < 0 }">
@@ -271,10 +287,7 @@
 											<view class="card-row bottom-row">
 												<view class="progress-container"
 													:class="{ 'shimmer': item.days < 30 && item.days >= 0 }"
-													:style="{ backgroundColor: getProgressColor(item.days) }">
-													<view class="progress-green"
-														:style="{ width: getGreenProgress(item.days) + '%' }">
-													</view>
+													:style="{ background: getProgressGradient(item.days) }">
 												</view>
 											</view>
 										</view>
@@ -298,6 +311,38 @@
 		</scroll-view>
 
 		<BottomNav activePage="bigscreen" />
+
+		<!-- Status Selection Modal (Handover Style) -->
+		<view class="modal-overlay" v-if="showStatusModal" @click.stop="doNothing" @touchmove.stop.prevent="doNothing">
+			<view class="modal-content" @click.stop="doNothing">
+				<view class="modal-header">
+					<text class="modal-title">{{ $t('bigScreen.rescueCar.statusTitle') || 'Update Status' }}</text>
+					<text class="close-btn" @click="closeStatusModal">✖️</text>
+				</view>
+				<view class="modal-body">
+					<!-- Status Select -->
+					<view class="form-item">
+						<text class="label">状态</text>
+						<view class="status-selector">
+							<view v-for="(opt, i) in statusOptions" :key="i" class="status-chip"
+								:class="{ active: statusForm.status === opt.value }" @click="selectStatus(opt)">
+								{{ opt.label }}
+							</view>
+						</view>
+					</view>
+					<!-- Remark -->
+					<view class="form-item">
+						<text class="label">备注</text>
+						<textarea class="remark-textarea" v-model="statusForm.remark"
+							placeholder="请输入备注信息..."></textarea>
+					</view>
+				</view>
+				<view class="modal-footer">
+					<button class="modal-btn cancel" @click="closeStatusModal">取消</button>
+					<button class="modal-btn confirm" @click="submitStatusUpdate">确定</button>
+				</view>
+			</view>
+		</view>
 	</view>
 </template>
 
@@ -305,6 +350,9 @@
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import SimpleLineChart from '@/components/SimpleLineChart/SimpleLineChart.vue';
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
+import { getRescueCarStatusText } from '@/utils/rescueCarUtils.js';
+import dayjs from 'dayjs';
 
 export default {
 	components: {
@@ -313,7 +361,7 @@ export default {
 	},
 	data() {
 		return {
-			userOrgInfo: uni.getStorageSync('userOrgInfo') || {},
+			userOrgInfo: storage.get('userOrgInfo') || {},
 			selectedRescueCarId: null,
 			rescueCar: {},
 			layers: [],
@@ -325,16 +373,71 @@ export default {
 				expiryWarning: 0,
 				itemValue: 0
 			},
-			initialFilterType: null
+			initialFilterType: null,
+			isRefreshing: false,
+			isPulling: false,
+			showStatusModal: false,
+			statusOptions: [],
+			statusForm: {
+				status: null,
+				remark: ''
+			}
 		}
+	},
+	onBackPress(options) {
+		if (options.from === 'backbutton') {
+			uni.reLaunch({
+				url: '/pages/index/index'
+			});
+			return true;
+		}
+		return false;
 	},
 	onLoad(options) {
 		if (options && options.type) {
 			this.initialFilterType = parseInt(options.type);
 		}
-		this.fetchRescueCars();
+		if (options && options.id) {
+			this.selectedRescueCarId = options.id;
+		}
+		this.fetchData();
+	},
+	computed: {
+		statusConfig() {
+			const status = this.rescueCar.Status || 0;
+			const map = {
+				0: { class: 'tag-normal', text: this.$t('bigScreen.rescueCar.statusNormal') || '正常' },
+				10: { class: 'tag-abnormal', text: this.$t('bigScreen.rescueCar.statusAbnormal') || '异常' },
+				11: { class: 'tag-confirming', text: this.$t('bigScreen.rescueCar.statusConfirming') || '确认中' },
+				20: { class: 'tag-dirty', text: this.$t('bigScreen.rescueCar.statusDirty') || '脏污' },
+				21: { class: 'tag-cleaning', text: this.$t('bigScreen.rescueCar.statusCleaning') || '清洁中' },
+				30: { class: 'tag-repair', text: this.$t('bigScreen.rescueCar.statusRepair') || '报修' },
+				31: { class: 'tag-fixing', text: this.$t('bigScreen.rescueCar.statusFixing') || '维修中' }
+			};
+			return map[status] || map[0];
+		}
 	},
 	methods: {
+		onPulling() {
+			this.isPulling = true;
+		},
+		onRestore() {
+			this.isPulling = false;
+		},
+		onRefresh() {
+			this.isRefreshing = true;
+			this.isPulling = true;
+			this.fetchData().then(() => {
+				setTimeout(() => {
+					this.isRefreshing = false;
+					this.isPulling = false;
+					uni.showToast({ title: '已刷新', icon: 'none' });
+				}, 800);
+			});
+		},
+		async fetchData() {
+			await this.fetchRescueCars();
+		},
 		async fetchRescueCars() {
 			try {
 				if (!this.userOrgInfo.Organization || !this.userOrgInfo.Department) return;
@@ -350,11 +453,26 @@ export default {
 				});
 				const cars = res.rows || [];
 				if (cars.length > 0) {
-					this.rescueCar = cars[0];
+					const lastId = this.selectedRescueCarId || storage.get('lastSelectedRescueCarId');
+					let targetCar = cars[0];
+					if (lastId) {
+						// Use loose comparison to handle potential string/number mismatch
+						const found = cars.find(c => c.Id == lastId);
+						if (found) targetCar = found;
+					}
+					this.rescueCar = targetCar;
 					this.selectedRescueCarId = this.rescueCar.Id;
+
+					// Ensure storage is synced with the current selection
+					storage.set('lastSelectedRescueCarId', this.selectedRescueCarId);
+					storage.set('currentRescueCarInfo', {
+						Id: this.rescueCar.Id,
+						Name: this.rescueCar.DisplayName || this.rescueCar.Name
+					});
+
 					this.fetchDashboardStats(this.selectedRescueCarId);
-					// Fetch floors/layers detailed view
-					this.fetchFloors(this.selectedRescueCarId);
+					// Combined fetch for floors and serials
+					this.fetchRescueCarPositions(this.selectedRescueCarId);
 				} else {
 					this.rescueCar = {};
 					this.selectedRescueCarId = null;
@@ -364,52 +482,35 @@ export default {
 				console.error(e);
 			}
 		},
-		async fetchFloors(parentId) {
-			if (!parentId) return;
+		async fetchRescueCarPositions(warehouseId) {
+			if (!warehouseId) return;
 			try {
 				const res = await request.post('api/ssbh/Position/GetPageData', {
-					page: 1, rows: 100,
+					page: 1, rows: 1000,
 					wheres: JSON.stringify([
-						{ name: 'Category', value: 100 },
-						{ name: 'WarehouseId', value: parentId },
+						{ name: 'WarehouseId', value: warehouseId },
+						{ name: 'Category', value: '100,110', DisplayType: 'in' },
 						{ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
 						{ name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
 					]),
-					sort: 'OrderBy', order: 'asc'
+					sort: 'OrderBy,SerialId', order: 'asc'
 				});
-				const floors = res.rows || [];
+				const allItems = res.rows || [];
+				const floors = allItems.filter(p => p.Category === 100);
+				const serials = allItems.filter(p => p.Category === 110);
+
 				if (floors.length > 0) {
-					// In position-manage, it filters locally, here we query. 
-					// We need to fetch serials for ALL floors found.
-					const floorIds = floors.map(f => f.Id);
-					await this.fetchSerialsByFloors(floorIds, floors);
+					const itemIds = serials.filter(s => s.ItemId > 0).map(s => s.ItemId);
+					if (itemIds.length > 0) {
+						await this.fetchItemDetails([...new Set(itemIds)]);
+					}
+					this.transformToLayers(floors, serials);
 				} else {
 					this.layers = [];
 				}
-			} catch (e) { console.error(e); }
-		},
-		async fetchSerialsByFloors(floorIds, floors) {
-			if (!floorIds || floorIds.length === 0) return;
-			try {
-				// Use 'ParentId' with array of floorIds, assuming backend supports 'value' as array or we need to check backend behavior. 
-				// position-manage sends array: { name: 'ParentId', value: floorIds }
-				const res = await request.post('api/ssbh/Position/GetPageData', {
-					page: 1, rows: 500,
-					wheres: JSON.stringify([
-						{ name: 'Category', value: 110 },
-						{ name: 'ParentId', value: floorIds.join(','), DisplayType: 'in' }
-					]),
-					sort: 'OrderBy', order: 'asc'
-				});
-				this.serialList = res.rows || [];
-
-				const itemIds = this.serialList.filter(s => s.ItemId > 0).map(s => s.ItemId);
-				if (itemIds.length > 0) {
-					await this.fetchItemDetails([...new Set(itemIds)]);
-				}
-
-				this.transformToLayers(floors, this.serialList);
-			} catch (e) { console.error(e); }
+			} catch (e) {
+				console.error("Fetch Rescue Car Positions Error", e);
+			}
 		},
 		async fetchDashboardStats(warehouseId) {
 			try {
@@ -430,34 +531,33 @@ export default {
 			}
 		},
 		async fetchItemDetails(ids) {
-			const distinctIds = [...new Set(ids)];
-			// We can try fetching all at once if API supports IN, but let's loop or fetch batch if possible
-			// Given previous code usage, we might be fetching individually or in small batches.
-			// Ideally we fetch all relevant items. For now, let's assume one by one or small batch isn't too slow for this demo,
-			// OR use a bulk fetch if available. Previous code used loop.
-			// Let's optimize slightly by just looping efficiently
-			const promises = distinctIds.map(id => {
-				if (this.itemsMap[id]) return Promise.resolve();
-				return request.post('api/ssbh/Item/GetPageData', {
-					page: 1, rows: 1,
+			const distinctIds = ids.filter(id => !this.itemsMap[id]);
+			if (distinctIds.length === 0) return;
+
+			try {
+				const res = await request.post('api/ssbh/Item/GetPageData', {
+					page: 1, rows: 500,
 					wheres: JSON.stringify([
-						{ name: 'Id', value: id },
+						{ name: 'Id', value: distinctIds.join(','), DisplayType: 'in' },
 						// Secure fetch with Org/Dept
 						{ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
 						{ name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
 					])
-				}).then(res => {
-					if (res.rows && res.rows.length > 0) {
-						this.$set(this.itemsMap, id, res.rows[0]);
-					}
 				});
-			});
-			await Promise.all(promises);
+
+				if (res.rows && res.rows.length > 0) {
+					res.rows.forEach(item => {
+						this.$set(this.itemsMap, item.Id, item);
+					});
+				}
+			} catch (e) {
+				console.error("Batch fetch item details failed", e);
+			}
 		},
 		getDaysUntil(dateStr) {
 			if (!dateStr) return '999';
 			const now = new Date();
-			const target = new Date(dateStr);
+			const target = dayjs(dateStr).toDate();
 			return Math.ceil((target.getTime() - now.getTime()) / (1000 * 3600 * 24));
 		},
 		transformToLayers(floors, serials) {
@@ -527,19 +627,16 @@ export default {
 		toggleLayer(index) {
 			this.layers[index].expanded = !this.layers[index].expanded;
 		},
-		getProgress(days) {
-			return Math.min(100, (days / 365) * 100);
+		getDangerProgress(days) {
+			if (days < 0) return 100;
+			if (days >= 90) return 0;
+			return ((90 - days) / 90) * 100;
 		},
-		getGreenProgress(days) {
-			if (days < 0) return 0;
-			if (days >= 90) return 100;
-			return (days / 90) * 100;
-		},
-		getProgressColor(days) {
+		getProgressGradient(days) {
 			if (days < 0) return '#000000';
-			if (days < 30) return '#F56C6C';
-			if (days <= 60) return '#E6A23C';
-			return '#67C23A';
+			if (days >= 90) return '#67C23A';
+			const p = this.getDangerProgress(days);
+			return `linear-gradient(110deg, #F56C6C ${p}%, #67C23A ${p}%)`;
 		},
 		getLayerAbnormalCount(layer) {
 			if (!layer || !layer.items) return 0;
@@ -566,7 +663,96 @@ export default {
 			if (filter === 'expired') return layer.items.filter(item => item.days < 0);
 			if (filter === 'nearExpiry') return layer.items.filter(item => item.days >= 0 && item.days <= 30);
 			return layer.items;
-		}
+		},
+		getStatusText(status) {
+			return getRescueCarStatusText(status, this.$t);
+		},
+		openStatusModal() {
+			if (!this.rescueCar || !this.rescueCar.Id) return;
+
+			const currentStatus = this.rescueCar.Status || 0;
+			let options = [];
+
+			// Logic based on current status
+			if (currentStatus === 0) {
+				options = [
+					{ label: this.$t('bigScreen.rescueCar.statusAbnormal') || '异常', value: 10 },
+					{ label: this.$t('bigScreen.rescueCar.statusDirty') || '脏污', value: 20 },
+					{ label: this.$t('bigScreen.rescueCar.statusRepair') || '报修', value: 30 }
+				];
+			} else if (currentStatus === 10) {
+				options = [
+					{ label: this.$t('bigScreen.rescueCar.statusConfirming') || '确认中', value: 11 },
+					{ label: this.$t('bigScreen.rescueCar.statusNormal') || '正常', value: 0 }
+				];
+			} else if (currentStatus === 20) {
+				options = [
+					{ label: this.$t('bigScreen.rescueCar.statusCleaning') || '清洁中', value: 21 },
+					{ label: this.$t('bigScreen.rescueCar.statusNormal') || '正常', value: 0 }
+				];
+			} else if (currentStatus === 30) {
+				options = [
+					{ label: this.$t('bigScreen.rescueCar.statusFixing') || '维修中', value: 31 },
+					{ label: this.$t('bigScreen.rescueCar.statusNormal') || '正常', value: 0 }
+				];
+			} else if ([11, 21, 31].includes(currentStatus)) {
+				options = [
+					{ label: this.$t('bigScreen.rescueCar.statusNormal') || '正常', value: 0 }
+				];
+			} else {
+				options = [
+					{ label: this.$t('bigScreen.rescueCar.statusNormal') || '正常', value: 0 }
+				];
+			}
+
+			this.statusOptions = options;
+			this.statusForm.status = options.length > 0 ? options[0].value : null;
+			this.statusForm.remark = '';
+			this.showStatusModal = true;
+		},
+		closeStatusModal() {
+			this.showStatusModal = false;
+		},
+		selectStatus(option) {
+			this.statusForm.status = option.value;
+		},
+		submitStatusUpdate() {
+			if (this.statusForm.status === null) {
+				uni.showToast({ title: '请选择状态', icon: 'none' });
+				return;
+			}
+			this.updateStatus(this.statusForm.status, this.statusForm.remark);
+		},
+		updateStatus(newStatus, remark) {
+			uni.showLoading({ title: 'Updating...' });
+			const payload = {
+				mainData: {
+					OrganizationId: this.userOrgInfo.Organization.Id,
+					DepartmentId: this.userOrgInfo.Department.Id,
+					ItemId: this.rescueCar.Id,
+					Status: newStatus,
+					Remark: remark,
+					Category: 20 // Rescue Car Type
+				}
+			};
+
+			request.post('api/ssbh/ItemStatusHistory/Add', payload).then(res => {
+				uni.hideLoading();
+				if (res.success || res.status) {
+					uni.showToast({ title: '成功' });
+					this.rescueCar.Status = newStatus;
+					this.closeStatusModal();
+					this.fetchDashboardStats(this.rescueCar.Id); // Refresh stats too
+				} else {
+					uni.showToast({ title: res.msg || '失败', icon: 'none' });
+				}
+			}).catch(err => {
+				uni.hideLoading();
+				console.error(err);
+				uni.showToast({ title: 'Error', icon: 'none' });
+			});
+		},
+		doNothing() { }
 	}
 }
 </script>
@@ -610,7 +796,13 @@ page {
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	background-color: $sull-color-background;
+	background: linear-gradient(135deg, $sull-color-primary 0%, lighten($sull-color-primary, 10%) 100%);
+
+	.title {
+		color: #fff;
+		font-size: 36rpx;
+		font-weight: bold;
+	}
 }
 
 .main-scroll {
@@ -620,6 +812,57 @@ page {
 
 .scroll-content {
 	padding: 10px 24px 160px 24px;
+}
+
+/* Refresher */
+.custom-refresher {
+	height: 120rpx;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: absolute;
+	top: -120rpx;
+	left: 0;
+	transition: transform 0.2s linear;
+}
+
+.refresher-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8rpx;
+}
+
+.refresher-icon {
+	width: 64rpx;
+	height: 64rpx;
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
+	background-size: contain;
+	background-repeat: no-repeat;
+	transition: transform 0.3s ease;
+}
+
+.refresher-icon.animating {
+	animation: ambulance-bounce 0.8s infinite ease-in-out;
+}
+
+.refresher-text {
+	font-size: 20rpx;
+	color: $sull-color-primary;
+	opacity: 0.8;
+}
+
+@keyframes ambulance-bounce {
+
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+
+	50% {
+		transform: translateY(-6px);
+	}
 }
 
 /* Info Section - Premium Design */
@@ -689,6 +932,63 @@ page {
 	font-size: $font-size-body-sm;
 	font-weight: $font-weight-semibold;
 	color: $sull-color-primary;
+}
+
+.status-tag {
+	padding: 4rpx 12rpx;
+	border-radius: 40rpx;
+	font-size: 20rpx;
+	font-weight: 600;
+}
+
+/* Status-Based Colors */
+/* Normal #2E7D32 */
+.tag-normal {
+	background: rgba(46, 125, 50, 0.1);
+	color: #2E7D32;
+	border: 1px solid rgba(46, 125, 50, 0.2);
+}
+
+/* Confirming #F9A825 */
+.tag-confirming {
+	background: rgba(249, 168, 37, 0.1);
+	color: #F9A825;
+	border: 1px solid rgba(249, 168, 37, 0.2);
+}
+
+/* Dirty #C0A16B */
+.tag-dirty {
+	background: rgba(192, 161, 107, 0.1);
+	color: #C0A16B;
+	border: 1px solid rgba(192, 161, 107, 0.2);
+}
+
+/* Abnormal #C62828 */
+.tag-abnormal {
+	background: rgba(198, 40, 40, 0.1);
+	color: #C62828;
+	border: 1px solid rgba(198, 40, 40, 0.2);
+}
+
+/* Repair #B71C1C */
+.tag-repair {
+	background: rgba(183, 28, 28, 0.1);
+	color: #B71C1C;
+	border: 1px solid rgba(183, 28, 28, 0.2);
+}
+
+/* Cleaning #1976D2 */
+.tag-cleaning {
+	background: rgba(25, 118, 210, 0.1);
+	color: #1976D2;
+	border: 1px solid rgba(25, 118, 210, 0.2);
+}
+
+/* Fixing #546E7A */
+.tag-fixing {
+	background: rgba(84, 110, 122, 0.1);
+	color: #546E7A;
+	border: 1px solid rgba(84, 110, 122, 0.2);
 }
 
 .info-grid {
@@ -1045,6 +1345,7 @@ page {
 .layer-title {
 	font-weight: $font-weight-bold;
 	color: $sull-text-main;
+	font-size: 30rpx;
 }
 
 .layer-info {
@@ -1099,7 +1400,7 @@ page {
 }
 
 .info-icon {
-	font-size: 16px;
+	font-size: 32rpx;
 	line-height: 1;
 }
 
@@ -1141,23 +1442,27 @@ page {
 
 
 .item-name-wrapper {
-	width: 100%;
-	height: 24px;
+	flex: 1;
+	height: 32px;
 	overflow: hidden;
 	white-space: nowrap;
 	margin-bottom: 4px;
 	position: relative;
+	display: flex;
+	align-items: center;
 }
 
 .item-name-text {
-	display: block;
-	font-size: 16px;
+	display: inline-block;
+	font-size: 32rpx;
+	line-height: 32px;
 	font-weight: bold;
 	color: $sull-text-main;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	width: 100%;
+	padding-left: 8rpx;
 }
 
 .item-name-text.scrolling {
@@ -1297,6 +1602,58 @@ page {
 	margin-right: 2px;
 }
 
+.status-tag {
+	font-size: 24rpx;
+	padding: 4rpx 12rpx;
+	border-radius: 8rpx;
+	margin-left: 16rpx;
+	font-weight: normal;
+
+	&.status-0 {
+		background: rgba(82, 196, 26, 0.1);
+		color: #52c41a;
+		border: 1px solid rgba(82, 196, 26, 0.2);
+	}
+
+	&.status-10 {
+		background: rgba(245, 34, 45, 0.1);
+		color: #f5222d;
+		border: 1px solid rgba(245, 34, 45, 0.2);
+	}
+
+	&.status-11 {
+		background: rgba(250, 173, 20, 0.1);
+		color: #faad14;
+		border: 1px solid rgba(250, 173, 20, 0.2);
+	}
+
+	&.status-20 {
+		background: rgba(114, 46, 209, 0.1);
+		color: #722ed1;
+		border: 1px solid rgba(114, 46, 209, 0.2);
+	}
+
+	&.status-21 {
+		background: rgba(19, 194, 194, 0.1);
+		color: #13c2c2;
+		border: 1px solid rgba(19, 194, 194, 0.2);
+	}
+
+	&.status-30 {
+		background: rgba(235, 47, 150, 0.1);
+		color: #eb2f96;
+		border: 1px solid rgba(235, 47, 150, 0.2);
+	}
+
+	&.status-31 {
+		background: rgba(24, 144, 255, 0.1);
+		color: #1890ff;
+		border: 1px solid rgba(24, 144, 255, 0.2);
+	}
+}
+
+
+
 .days-num {
 	color: #fff;
 	font-size: 14px;
@@ -1312,6 +1669,85 @@ page {
 	margin-bottom: 0;
 }
 
+/* Modal Styles */
+.member-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(0, 0, 0, 0.5);
+	z-index: 3000;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	backdrop-filter: blur(4rpx);
+}
+
+.member-modal {
+	width: 100%;
+	background: $sull-color-white;
+	border-radius: 40rpx 40rpx 0 0;
+	padding: 40rpx;
+	padding-bottom: 80rpx;
+	display: flex;
+	flex-direction: column;
+	max-height: 60vh;
+	animation: slideUp 0.3s ease;
+}
+
+.member-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 32rpx;
+	gap: 24rpx;
+
+	.modal-title {
+		font-size: 32rpx;
+		font-weight: bold;
+		color: $sull-text-main;
+	}
+
+	.close-btn {
+		font-size: 36rpx;
+		color: $sull-text-secondary;
+		padding: 8rpx;
+	}
+}
+
+.member-list {
+	flex: 1;
+	height: 0;
+	min-height: 400rpx;
+}
+
+.member-item {
+	padding: 32rpx;
+	border-bottom: 2rpx solid #eee;
+	font-size: 32rpx;
+	color: $sull-text-main;
+
+	&:active {
+		background: #f9f9f9;
+	}
+
+	.member-name {
+		font-size: 32rpx;
+		color: $sull-text-main;
+	}
+}
+
+@keyframes slideUp {
+	from {
+		transform: translateY(100%);
+	}
+
+	to {
+		transform: translateY(0);
+	}
+}
+
 .progress-container {
 	width: 100%;
 	height: 10px;
@@ -1322,14 +1758,7 @@ page {
 }
 
 .progress-green {
-	height: 100%;
-	background-color: #67C23A;
-	transition: width 0.3s ease;
-	position: absolute;
-	right: 0;
-	top: 0;
-	transform: skewX(-45deg);
-	transform-origin: bottom right;
+	display: none;
 }
 
 
@@ -1403,5 +1832,171 @@ page {
 
 .text-warning {
 	color: #faad14;
+}
+
+/* Modal Base - Same as handover.vue for consistency */
+.modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.6);
+	backdrop-filter: blur(5px);
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 40rpx;
+}
+
+.modal-content {
+	width: 100%;
+	background: #fff;
+	border-radius: 40rpx;
+	overflow: hidden;
+	animation: modal-zoom 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes modal-zoom {
+	from {
+		transform: scale(0.8);
+		opacity: 0;
+	}
+
+	to {
+		transform: scale(1);
+		opacity: 1;
+	}
+}
+
+.modal-header {
+	padding: 40rpx;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	border-bottom: 2rpx solid #f5f5f5;
+}
+
+.modal-title {
+	font-size: 34rpx;
+	font-weight: bold;
+	color: #333;
+}
+
+.close-btn {
+	font-size: 40rpx;
+	color: #999;
+	padding: 10rpx;
+}
+
+.modal-body {
+	padding: 40rpx;
+}
+
+.form-item {
+	margin-bottom: 40rpx;
+
+	&:last-child {
+		margin-bottom: 0;
+	}
+
+	.label {
+		display: block;
+		font-size: 28rpx;
+		color: #999;
+		margin-bottom: 20rpx;
+		font-weight: 500;
+	}
+
+	.value {
+		font-size: 30rpx;
+		color: #333;
+		font-weight: bold;
+		min-height: 48rpx;
+		display: flex;
+		align-items: center;
+
+		&.disabled {
+			background: #f9f9f9;
+			padding: 24rpx 32rpx;
+			border-radius: 16rpx;
+			border: 2rpx solid #f0f0f0;
+		}
+
+		&.text-placeholder {
+			color: #ccc;
+		}
+	}
+}
+
+/* Status Selector */
+.status-selector {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 20rpx;
+}
+
+.status-chip {
+	padding: 16rpx 32rpx;
+	border-radius: 40rpx;
+	background: #f5f5f5;
+	font-size: 26rpx;
+	color: #666;
+	border: 2rpx solid #f0f0f0;
+	transition: all 0.2s;
+}
+
+.status-chip.active {
+	background: #e6f7ff;
+	color: #1890ff;
+	border-color: #91d5ff;
+	font-weight: bold;
+}
+
+/* Textarea */
+.remark-textarea {
+	width: 100%;
+	height: 160rpx;
+	background: #f9f9f9;
+	border-radius: 16rpx;
+	padding: 24rpx;
+	box-sizing: border-box;
+	font-size: 28rpx;
+	color: #333;
+	border: 2rpx solid #f0f0f0;
+}
+
+.modal-footer {
+	padding: 0 40rpx 40rpx;
+	display: flex;
+	gap: 24rpx;
+}
+
+.modal-btn {
+	flex: 1;
+	height: 90rpx;
+	border-radius: 45rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 30rpx;
+	font-weight: bold;
+
+	&::after {
+		border: none;
+	}
+
+	&.cancel {
+		background: #f5f5f5;
+		color: #999;
+	}
+
+	&.confirm {
+		background: linear-gradient(90deg, #1890ff 0%, #36cfc9 100%);
+		color: #fff;
+		box-shadow: 0 10rpx 20rpx rgba(24, 144, 255, 0.2);
+	}
 }
 </style>

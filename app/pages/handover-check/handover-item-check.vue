@@ -1,7 +1,7 @@
 <template>
 	<view class="container">
 		<!-- Navigation Bar -->
-		<view class="custom-nav" :style="{ paddingTop: statusBarHeight + 'px' }">
+		<view class="custom-nav" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
 			<view class="nav-content">
 				<view class="nav-left">
 					<BackButton class="nav-back-btn" @click="goBack" />
@@ -12,11 +12,13 @@
 		</view>
 
 		<scroll-view class="main-scroll" scroll-y :enable-back-to-top="true" :refresher-enabled="true"
-			:refresher-triggered="isRefreshing" @refresherrefresh="onRefresh" refresher-default-style="none"
-			refresher-background="#f0f5ff" :scroll-top="scrollTopValue" @scroll="onScroll"
-			:style="{ marginTop: (statusBarHeight + 44) + 'px' }">
+			:refresher-threshold="80" :refresher-triggered="isRefreshing" @refresherrefresh="onRefresh"
+			@refresherpulling="onPulling" @refresherrestore="onRestore" @refresherabort="onRestore"
+			refresher-default-style="none" refresher-background="#f0f5ff" :scroll-top="scrollTopValue"
+			@scroll="onScroll" :style="{ marginTop: (statusBarHeight * 2 + 88) + 'rpx' }">
 
-			<view slot="refresher" class="custom-refresher">
+			<view slot="refresher" class="custom-refresher"
+				:style="{ height: (isPulling || isRefreshing) ? '120rpx' : '0px', overflow: 'hidden' }">
 				<view class="refresher-content">
 					<view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
 					<text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
@@ -28,8 +30,7 @@
 			<view class="warning-section" v-if="warningItems.length > 0">
 				<view class="section-header">
 					<text class="warning-icon">⚠️</text>
-					<text class="warning-title">{{ $t('handoverCheck.warningTitle', { count: warningItems.length })
-					}}</text>
+					<text class="warning-title">{{ warningTitle }}</text>
 				</view>
 				<view class="warning-list">
 					<view class="warning-card" v-for="(item, index) in warningItems" :key="'warn-' + index"
@@ -149,6 +150,7 @@ import BackButton from '@/components/BackButton/BackButton.vue';
 import BackToTop from '@/components/BackToTop/BackToTop.vue';
 import request from '@/utils/request.js';
 import dayjs from 'dayjs';
+import { formatMessage } from '@/utils/i18n.js';
 
 export default {
 	components: {
@@ -160,6 +162,7 @@ export default {
 		return {
 			statusBarHeight: 20,
 			isRefreshing: false,
+			isPulling: false,
 			loading: false,
 			scrollTop: 0,
 			scrollTopValue: 0,
@@ -187,6 +190,15 @@ export default {
 		},
 		isAuditMode() {
 			return this.todoListId > 0;
+		},
+		warningTitle() {
+			// #ifdef H5
+			return this.$t('handoverCheck.warningTitle', { count: this.warningItems.length });
+			// #endif
+			// #ifndef H5
+			const text = this.$t('handoverCheck.warningTitle');
+			return formatMessage(text, { count: this.warningItems.length });
+			// #endif
 		}
 	},
 	onLoad(options) {
@@ -223,9 +235,17 @@ export default {
 		},
 		onRefresh() {
 			this.isRefreshing = true;
+			this.isPulling = true;
 			this.fetchItemList().then(() => {
 				this.isRefreshing = false;
+				this.isPulling = false;
 			});
+		},
+		onPulling() {
+			this.isPulling = true;
+		},
+		onRestore() {
+			this.isPulling = false;
 		},
 		onScroll(e) {
 			this.scrollTop = e.detail.scrollTop;
@@ -294,7 +314,7 @@ export default {
 		getDaysUntil(dateStr) {
 			if (!dateStr) return 9999;
 			const now = new Date();
-			const target = new Date(dateStr);
+			const target = dayjs(dateStr).toDate();
 			return Math.ceil((target.getTime() - now.getTime()) / (1000 * 3600 * 24));
 		},
 		getExpiryClass(dateStr) {
@@ -307,7 +327,13 @@ export default {
 		getExpiryText(dateStr) {
 			const days = this.getDaysUntil(dateStr);
 			if (days < 0) return this.$t('handoverCheck.expired');
+			// #ifdef H5
 			return this.$t('handoverCheck.daysLeft', { days: days });
+			// #endif
+			// #ifndef H5
+			const text = this.$t('handoverCheck.daysLeft');
+			return formatMessage(text, { days: days });
+			// #endif
 		},
 		isAbnormal(item) {
 			return item.ItemRealCounter !== item.ItemCounter;
@@ -390,10 +416,18 @@ export default {
 }
 </script>
 
+<style>
+page {
+	height: 100%;
+	overflow: hidden;
+}
+</style>
+
 <style lang="scss" scoped>
 .container {
 	background-color: $sull-color-background;
-	min-height: 100vh;
+	height: 100vh;
+	overflow: hidden;
 	display: flex;
 	flex-direction: column;
 	font-family: $font-family-main;
@@ -406,17 +440,17 @@ export default {
 	left: 0;
 	width: 100%;
 	z-index: 999;
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+	box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.03);
 
 	.nav-content {
-		height: 44px;
+		height: 88rpx;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0 16px;
+		padding: 0 32rpx;
 
 		.nav-left {
-			width: 40px;
+			width: 80rpx;
 		}
 
 		.nav-title {
@@ -426,7 +460,7 @@ export default {
 		}
 
 		.nav-right {
-			width: 40px;
+			width: 80rpx;
 		}
 	}
 }
@@ -437,24 +471,24 @@ export default {
 }
 
 .warning-section {
-	margin: 16px;
+	margin: 32rpx;
 	background: #FFF0F0;
-	border: 1px solid #FFCDCD;
+	border: 2rpx solid #FFCDCD;
 	border-radius: $radius-lg;
-	padding: 12px;
+	padding: 24rpx;
 
 	.section-header {
 		display: flex;
 		align-items: center;
-		margin-bottom: 8px;
+		margin-bottom: 16rpx;
 
 		.warning-icon {
-			font-size: 18px;
-			margin-right: 6px;
+			font-size: 36rpx;
+			margin-right: 12rpx;
 		}
 
 		.warning-title {
-			font-size: 14px;
+			font-size: 28rpx;
 			font-weight: bold;
 			color: $sull-color-error;
 		}
@@ -463,14 +497,14 @@ export default {
 	.warning-list {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 16rpx;
 	}
 
 	.warning-card {
 		background: #fff;
-		border-radius: 8px;
-		padding: 8px 12px;
-		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+		border-radius: 16rpx;
+		padding: 16rpx 24rpx;
+		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
 
 		.card-row {
 			display: flex;
@@ -478,40 +512,40 @@ export default {
 			align-items: center;
 
 			&.top {
-				margin-bottom: 4px;
+				margin-bottom: 8rpx;
 			}
 		}
 
 		.item-name {
 			font-weight: bold;
 			color: $sull-text-main;
-			font-size: 14px;
+			font-size: 28rpx;
 		}
 
 		.expiry-tag {
-			font-size: 12px;
+			font-size: 24rpx;
 			font-weight: bold;
 		}
 
 		.info-text {
-			font-size: 12px;
+			font-size: 24rpx;
 			color: #666;
 		}
 	}
 }
 
 .list-content {
-	padding: 16px;
+	padding: 32rpx;
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: 24rpx;
 }
 
 .list-header {
-	margin-bottom: 4px;
+	margin-bottom: 8rpx;
 
 	.list-title {
-		font-size: 14px;
+		font-size: 28rpx;
 		font-weight: bold;
 		color: $sull-text-secondary;
 	}
@@ -520,15 +554,15 @@ export default {
 .item-card {
 	background: $sull-color-white;
 	border-radius: $radius-lg;
-	padding: 16px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+	padding: 32rpx;
+	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
 	display: flex;
 	flex-direction: column;
 	transition: background 0.3s;
 
 	&.abnormal-bg {
 		background-color: #FEF0F0; // Light red bg for abnormal
-		border: 1px solid #FFCDCD;
+		border: 2rpx solid #FFCDCD;
 	}
 }
 
@@ -542,7 +576,7 @@ export default {
 	flex: 1;
 
 	.item-name {
-		font-size: 16px;
+		font-size: 32rpx;
 		font-weight: bold;
 		color: $sull-text-main;
 	}
@@ -550,11 +584,11 @@ export default {
 
 .modify-btn {
 	/* Small button style */
-	padding: 4px 12px;
+	padding: 8rpx 24rpx;
 	background: #E8F3FF;
 	color: $sull-color-primary;
-	border-radius: 14px;
-	font-size: 12px;
+	border-radius: 28rpx;
+	font-size: 24rpx;
 	font-weight: bold;
 
 	&:active {
@@ -565,28 +599,28 @@ export default {
 .mid-row,
 .bot-row {
 	justify-content: flex-start;
-	gap: 24px;
+	gap: 48rpx;
 }
 
 .info-group {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 12rpx;
 
 	.label {
-		font-size: 13px;
+		font-size: 26rpx;
 		color: #999;
 	}
 
 	.value {
-		font-size: 14px;
+		font-size: 28rpx;
 		color: $sull-text-main;
 		font-weight: 500;
 	}
 
 	.value.highlight {
 		font-weight: bold;
-		font-size: 15px;
+		font-size: 30rpx;
 	}
 
 	&.remark-group {
@@ -596,7 +630,7 @@ export default {
 			white-space: nowrap;
 			overflow: hidden;
 			text-overflow: ellipsis;
-			max-width: 150px;
+			max-width: 300rpx;
 		}
 	}
 }
@@ -623,31 +657,31 @@ export default {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	padding: 40px;
+	padding: 80rpx;
 
 	.empty-icon-bg {
-		width: 100px;
-		height: 100px;
+		width: 200rpx;
+		height: 200rpx;
 		background: #f9f9f9;
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		margin-bottom: 20px;
+		margin-bottom: 40rpx;
 	}
 
 	.empty-icon {
-		font-size: 40px;
+		font-size: 80rpx;
 	}
 
 	.empty-title {
-		font-size: 16px;
+		font-size: 32rpx;
 		color: #999;
 	}
 }
 
 .bottom-spacer {
-	height: 80px;
+	height: 160rpx;
 }
 
 .bottom-action-bar {
@@ -656,9 +690,9 @@ export default {
 	left: 0;
 	width: 100%;
 	background: $sull-color-white;
-	padding: 16px 24px;
-	padding-bottom: calc(16px + env(safe-area-inset-bottom));
-	box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+	padding: 32rpx 48rpx;
+	padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+	box-shadow: 0 -4rpx 20rpx rgba(0, 0, 0, 0.05);
 	z-index: 99;
 	box-sizing: border-box;
 }
@@ -667,10 +701,10 @@ export default {
 	background: $sull-color-primary;
 	color: #fff;
 	border-radius: $radius-pill;
-	font-size: 16px;
+	font-size: 32rpx;
 	font-weight: bold;
-	height: 48px;
-	line-height: 48px;
+	height: 96rpx;
+	line-height: 96rpx;
 	border: none;
 
 	&:active {
@@ -695,56 +729,56 @@ export default {
 .modal-content {
 	width: 80%;
 	background: #fff;
-	border-radius: 16px;
+	border-radius: 32rpx;
 	overflow: hidden;
 }
 
 .modal-header {
-	padding: 16px;
-	border-bottom: 1px solid $sull-color-line;
+	padding: 32rpx;
+	border-bottom: 2rpx solid $sull-color-line;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
 
 	.modal-title {
-		font-size: 18px;
+		font-size: 36rpx;
 		font-weight: bold;
 	}
 
 	.close-btn {
-		font-size: 24px;
+		font-size: 48rpx;
 		color: #999;
-		padding: 4px;
+		padding: 8rpx;
 	}
 }
 
 .modal-body {
-	padding: 20px;
+	padding: 40rpx;
 
 	.form-item {
-		margin-bottom: 20px;
+		margin-bottom: 40rpx;
 
 		.label {
 			display: block;
-			margin-bottom: 8px;
+			margin-bottom: 16rpx;
 			color: #666;
-			font-size: 14px;
+			font-size: 28rpx;
 		}
 
 		.input-wrapper {
 			display: flex;
 			align-items: center;
-			gap: 12px;
+			gap: 24rpx;
 
 			.qty-btn {
-				width: 40px;
-				height: 40px;
+				width: 80rpx;
+				height: 80rpx;
 				background: #f5f5f5;
-				border-radius: 8px;
+				border-radius: 16rpx;
 				display: flex;
 				align-items: center;
 				justify-content: center;
-				font-size: 20px;
+				font-size: 40rpx;
 				color: #666;
 
 				&:active {
@@ -754,42 +788,42 @@ export default {
 
 			.qty-input {
 				flex: 1;
-				height: 40px;
-				border: 1px solid #ddd;
-				border-radius: 8px;
+				height: 80rpx;
+				border: 2rpx solid #ddd;
+				border-radius: 16rpx;
 				text-align: center;
-				font-size: 18px;
+				font-size: 36rpx;
 				font-weight: bold;
 			}
 		}
 
 		.textarea {
 			width: 100%;
-			height: 80px;
-			border: 1px solid #ddd;
-			border-radius: 8px;
-			padding: 8px;
+			height: 160rpx;
+			border: 2rpx solid #ddd;
+			border-radius: 16rpx;
+			padding: 16rpx;
 			box-sizing: border-box;
-			font-size: 14px;
+			font-size: 28rpx;
 		}
 	}
 }
 
 .modal-footer {
 	display: flex;
-	border-top: 1px solid $sull-color-line;
+	border-top: 2rpx solid $sull-color-line;
 
 	.btn {
 		flex: 1;
 		background: #fff;
 		border: none;
-		height: 50px;
-		font-size: 16px;
+		height: 100rpx;
+		font-size: 32rpx;
 		border-radius: 0;
 
 		&.confirm {
 			color: $sull-color-primary;
-			border-left: 1px solid $sull-color-line;
+			border-left: 2rpx solid $sull-color-line;
 		}
 
 		&.cancel {
@@ -804,7 +838,7 @@ export default {
 
 /* Refresher */
 .custom-refresher {
-	height: 60px;
+	height: 120rpx;
 	width: 100%;
 	display: flex;
 	align-items: center;
@@ -815,12 +849,12 @@ export default {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 4px;
+	gap: 8rpx;
 }
 
 .refresher-icon {
-	width: 32px;
-	height: 32px;
+	width: 64rpx;
+	height: 64rpx;
 	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
 	background-size: contain;
 	background-repeat: no-repeat;
@@ -832,7 +866,7 @@ export default {
 }
 
 .refresher-text {
-	font-size: 10px;
+	font-size: 20rpx;
 	color: $sull-color-primary;
 	opacity: 0.8;
 }
@@ -845,7 +879,7 @@ export default {
 	}
 
 	50% {
-		transform: translateY(-6px);
+		transform: translateY(-12rpx);
 	}
 }
 </style>

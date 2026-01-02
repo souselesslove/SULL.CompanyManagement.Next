@@ -1,5 +1,5 @@
 <template>
-	<view class="chart-container" :style="{ height: height + 'px' }">
+	<view class="chart-container" :style="{ height: height * 2 + 'rpx' }">
 		<svg :width="width" :height="height" viewBox="0 0 100 50" preserveAspectRatio="none">
 			<!-- Gradient Definition -->
 			<defs>

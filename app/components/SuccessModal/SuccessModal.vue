@@ -13,12 +13,13 @@
             </view>
 
             <!-- Text Content -->
-            <text class="modal-title">{{ title || 'Success' }}</text>
-            <text class="modal-message">{{ message || 'Operation completed successfully.' }}</text>
+            <view class="modal-title" v-if="title !== ''">{{ title || $t('modal.success_title') }}</view>
+            <view class="modal-message" v-if="message !== ''">{{ message === null ? $t('modal.success_message') :
+                message }}</view>
 
             <!-- Action Button -->
             <view class="modal-btn" @click="handleConfirm">
-                <text class="btn-text">{{ buttonText || 'Continue' }}</text>
+                <text class="btn-text">{{ buttonText || $t('modal.continue') }}</text>
             </view>
         </view>
     </view>
@@ -34,15 +35,15 @@ export default {
         },
         title: {
             type: String,
-            default: 'Success'
+            default: ''
         },
         message: {
             type: String,
-            default: ''
+            default: null
         },
         buttonText: {
             type: String,
-            default: 'Continue'
+            default: ''
         },
         maskClosable: {
             type: Boolean,
@@ -78,28 +79,30 @@ export default {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 999;
+    z-index: 9999;
+    pointer-events: auto;
 }
 
 .modal-content {
-    width: 300px;
+    width: 600rpx;
     background-color: #ffffff;
-    border-radius: 24px;
-    padding: 32px 24px;
+    border-radius: 48rpx;
+    padding: 64rpx 48rpx;
     display: flex;
     flex-direction: column;
     align-items: center;
     animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-sizing: border-box;
 }
 
 .illustration-container {
-    margin-bottom: 24px;
+    margin-bottom: 48rpx;
     position: relative;
 }
 
 .thumb-circle {
-    width: 100px;
-    height: 100px;
+    width: 200rpx;
+    height: 200rpx;
     background-color: #FFF0EB;
     /* Light reddish/pinkish background */
     border-radius: 50%;
@@ -110,7 +113,7 @@ export default {
 }
 
 .thumb-icon {
-    font-size: 48px;
+    font-size: 96rpx;
     // Use a transform to match the hand angle roughly if needed, 
     // but standard emoji is fine for MVP.
 }
@@ -122,55 +125,59 @@ export default {
 }
 
 .dot-1 {
-    width: 12px;
-    height: 12px;
+    width: 24rpx;
+    height: 24rpx;
     background-color: #F8B4B4;
     /* reddish */
-    top: 10px;
-    left: 0px;
+    top: 20rpx;
+    left: 0;
 }
 
 .dot-2 {
-    width: 10px;
-    height: 10px;
+    width: 20rpx;
+    height: 20rpx;
     background-color: #7EC0EE;
     /* blue */
-    top: 20px;
-    right: 0px;
+    top: 40rpx;
+    right: 0;
 }
 
 .dot-3 {
-    width: 8px;
-    height: 8px;
+    width: 16rpx;
+    height: 16rpx;
     background-color: #EBC0A5;
     /* brownish */
-    bottom: 10px;
-    right: 10px;
+    bottom: 20rpx;
+    right: 20rpx;
 }
 
 .modal-title {
-    font-size: 24px;
+    font-size: 48rpx;
     font-weight: bold;
     color: #000000;
-    margin-bottom: 12px;
+    margin-bottom: 24rpx;
     text-align: center;
+    width: 100%;
+    word-break: break-all;
 }
 
 .modal-message {
-    font-size: 14px;
+    font-size: 28rpx;
     color: #666666;
-    margin-bottom: 32px;
+    margin-bottom: 64rpx;
     text-align: center;
     line-height: 1.4;
-    max-width: 240px;
+    width: 100%;
+    word-break: break-all;
+    white-space: pre-wrap;
 }
 
 .modal-btn {
     width: 100%;
-    height: 50px;
+    height: 100rpx;
     background-color: #92C5F7;
     /* Light Blue similar to screenshot */
-    border-radius: 25px;
+    border-radius: 50rpx;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -183,7 +190,7 @@ export default {
 
 .btn-text {
     color: #ffffff;
-    font-size: 16px;
+    font-size: 32rpx;
     font-weight: 600;
 }
 

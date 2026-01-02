@@ -1,23 +1,29 @@
 const path = require('path')
+const webpack = require('webpack')
 
 module.exports = {
   css: {
     preprocessorOptions: {
       scss: {
-        // 注意：这里使用 additionalData 而不是 prependData
-        // 在 sass-loader v10+ 中需要用 additionalData
         additionalData: `
           @import "@/sull.scss";
         `
       }
     }
   },
-  // 配置路径别名
   configureWebpack: {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src')
       }
     }
+  },
+  chainWebpack: (config) => {
+    config.plugin('define').tap((args) => {
+      args[0]['__VUE_I18N_FULL_INSTALL__'] = JSON.stringify(true)
+      args[0]['__VUE_I18N_LEGACY_API__'] = JSON.stringify(false)
+      args[0]['__INTLIFY_PROD_DEVTOOLS__'] = JSON.stringify(false)
+      return args
+    })
   }
 }

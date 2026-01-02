@@ -117,9 +117,9 @@ export default {
 			// Success Modal State
 			successModal: {
 				visible: false,
-				title: 'Success',
+				title: '',
 				message: '',
-				buttonText: 'Continue'
+				buttonText: ''
 			}
 		}
 	},
@@ -166,7 +166,7 @@ export default {
 			// Basic validation
 			if (!this.username || !this.password || !this.fullname) {
 				uni.showToast({
-					title: 'Please fill in all required fields (Username, Password, Fullname)',
+					title: this.$t('register.required_fields'),
 					icon: 'none'
 				});
 				return;
@@ -190,13 +190,13 @@ export default {
 				.then(res => {
 					if (res.status) {
 						// Show custom success modal
-						this.successModal.message = res.message || 'Registration successfully created';
+						this.successModal.title = this.$t('register.reg_success_title');
+						this.successModal.buttonText = this.$t('modal.continue');
+						this.successModal.message = res.message || this.$t('register.reg_success_msg');
 						this.successModal.visible = true;
-
-						// uni.showToast replaced by modal
 					} else {
 						uni.showToast({
-							title: res.message || 'Registration Failed',
+							title: res.message || this.$t('register.fail_msg'),
 							icon: 'none'
 						});
 					}
@@ -230,68 +230,68 @@ export default {
 }
 
 .login-header {
-	padding: 60px 24px 40px;
+	padding: 120rpx 48rpx 80rpx;
 	background: linear-gradient(180deg, $sull-color-primary 0%, $sull-color-secondary-light 100%);
 	display: flex;
 	flex-direction: column;
 }
 
 .back-btn-placeholder {
-	width: 40px;
-	height: 40px;
+	width: 80rpx;
+	height: 80rpx;
 	background: #ffffff;
 	border-radius: 50%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	margin-bottom: 24px;
+	margin-bottom: 48rpx;
 }
 
 .login-title {
-	font-size: 28px;
+	font-size: 56rpx;
 	font-weight: bold;
 	color: #ffffff;
-	margin-bottom: 8px;
+	margin-bottom: 16rpx;
 	display: block;
 }
 
 .login-subtitle {
-	font-size: 16px;
+	font-size: 32rpx;
 	color: rgba(255, 255, 255, 0.9);
 }
 
 .login-form-scroll {
 	flex: 1;
 	background: #ffffff;
-	border-radius: 24px 24px 0 0;
-	margin-top: -24px;
-	padding-top: 30px;
+	border-radius: 48rpx 48rpx 0 0;
+	margin-top: -48rpx;
+	padding-top: 60rpx;
 	overflow: hidden;
 }
 
 .login-form {
-	padding: 0 24px 40px;
+	padding: 0 48rpx 80rpx;
 }
 
 .form-group {
-	margin-bottom: 20px;
+	margin-bottom: 40rpx;
 }
 
 .label {
-	font-size: 14px;
+	font-size: 28rpx;
 	font-weight: 600;
 	color: $sull-text-secondary;
-	margin-bottom: 8px;
+	margin-bottom: 16rpx;
 	display: block;
 }
 
 .input {
 	width: 100%;
-	height: 50px;
+	height: 100rpx;
 	background: #F6F8FA;
-	border-radius: 16px;
-	padding: 0 16px;
-	font-size: 14px;
+	border-radius: 32rpx;
+	padding: 0 32rpx;
+	font-size: 28rpx;
 	color: $sull-text-main;
 	box-sizing: border-box;
 }
@@ -302,11 +302,11 @@ export default {
 
 .eye-icon {
 	position: absolute;
-	right: 16px;
+	right: 32rpx;
 	top: 50%;
 	transform: translateY(-50%);
-	width: 24px;
-	height: 24px;
+	width: 48rpx;
+	height: 48rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -314,8 +314,8 @@ export default {
 }
 
 .icon-eye {
-	width: 20px;
-	height: 20px;
+	width: 40rpx;
+	height: 40rpx;
 	background-color: $sull-text-placeholder;
 	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z'/%3E%3C/svg%3E");
 	-webkit-mask-size: contain;
@@ -328,8 +328,8 @@ export default {
 }
 
 .icon-eye-off {
-	width: 20px;
-	height: 20px;
+	width: 40rpx;
+	height: 40rpx;
 	background-color: $sull-text-placeholder;
 	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 3.1 0 5.81-1.3 7.78-3.41l.95.95 2.27-2.27 1.62-.27L2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z'/%3E%3C/svg%3E");
 	-webkit-mask-size: contain;
@@ -344,20 +344,20 @@ export default {
 .code-input-row {
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: 24rpx;
 }
 
 .code-btn {
-	height: 50px;
-	padding: 0 20px;
+	height: 100rpx;
+	padding: 0 40rpx;
 	background: #F6F8FA;
-	border-radius: 16px;
+	border-radius: 32rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	white-space: nowrap;
 	transition: all 0.3s;
-	min-width: 100px;
+	min-width: 200rpx;
 }
 
 .code-btn.disabled {
@@ -367,7 +367,7 @@ export default {
 
 .code-btn-text {
 	color: $sull-color-primary;
-	font-size: 14px;
+	font-size: 28rpx;
 	font-weight: 600;
 }
 
@@ -377,33 +377,33 @@ export default {
 
 .btn-signin {
 	width: 100%;
-	height: 54px;
+	height: 108rpx;
 	background: $sull-color-primary;
-	border-radius: 27px;
+	border-radius: 54rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	color: #ffffff;
-	font-size: 18px;
+	font-size: 36rpx;
 	font-weight: 600;
-	margin-bottom: 24px;
-	margin-top: 20px;
+	margin-bottom: 48rpx;
+	margin-top: 40rpx;
 }
 
 .signup-area {
 	display: flex;
 	justify-content: center;
-	gap: 4px;
-	margin-bottom: 40px;
+	gap: 8rpx;
+	margin-bottom: 80rpx;
 }
 
 .no-account-text {
-	font-size: 14px;
+	font-size: 28rpx;
 	color: $sull-text-secondary;
 }
 
 .signup-text {
-	font-size: 14px;
+	font-size: 28rpx;
 	color: $sull-color-primary;
 	font-weight: 600;
 }
@@ -413,12 +413,12 @@ export default {
 	flex-direction: column;
 	align-items: center;
 	margin-top: auto;
-	gap: 4px;
-	padding-bottom: 20px;
+	gap: 8rpx;
+	padding-bottom: 40rpx;
 }
 
 .footer-text {
-	font-size: 12px;
+	font-size: 24rpx;
 	color: $sull-text-secondary;
 }
 

@@ -1,20 +1,31 @@
 <template>
 	<view class="page-container" @click="closeAllMenus">
-		<!-- 自定义导航栏 -->
-		<view class="custom-nav" :style="{ paddingTop: statusBarHeight + 'px' }">
-			<view class="nav-content">
-				<view class="nav-left">
-					<BackButton class="nav-back-btn" @click="goBack" />
-				</view>
-				<text class="nav-title">{{ $t('sealing.title') }}</text>
-				<view class="nav-right"></view>
-			</view>
-		</view>
-
 		<!-- 主要内容 -->
 		<scroll-view class="scroll-content" scroll-y :enable-back-to-top="true" :refresher-enabled="true"
-			:refresher-triggered="isRefreshing" @refresherrefresh="onRefresh" @scrolltolower="loadMore"
-			@scroll="onScroll" :scroll-top="scrollTopVal" :style="{ paddingTop: (statusBarHeight + 44) + 'px' }">
+			:refresher-triggered="isRefreshing" :refresher-threshold="60" @refresherrefresh="onRefresh"
+			@refresherpulling="onPulling" @refresherrestore="onRestore" @refresherabort="onRestore"
+			@scrolltolower="loadMore" @scroll="onScroll" :scroll-top="scrollTopVal" refresher-default-style="none"
+			refresher-background="#f0f5ff">
+
+			<view slot="refresher" class="custom-refresher"
+				:style="{ transform: (isPulling || isRefreshing) ? 'translateY(120rpx)' : 'translateY(0)' }">
+				<view class="refresher-content">
+					<view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
+					<text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
+					}}</text>
+				</view>
+			</view>
+
+			<!-- 自定义导航栏 (现在在滚动视图内) -->
+			<view class="custom-nav" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
+				<view class="nav-content">
+					<view class="nav-left">
+						<BackButton class="nav-back-btn" @click="goBack" />
+					</view>
+					<text class="nav-title">{{ $t('sealing.title') }}</text>
+					<view class="nav-right"></view>
+				</view>
+			</view>
 
 			<view class="content-wrapper">
 				<!-- 统计卡片 -->
@@ -105,9 +116,10 @@
 									<view class="action-menu" @click.stop="toggleActionMenu(item)">
 										<text class="menu-icon">⋯</text>
 										<!-- 操作菜单 -->
-										<view class="action-dropdown" v-if="activeActionItemId === item.Id">
+										<view class="action-dropdown"
+											v-if="getRecordId(activeActionItemId) === getRecordId(item)">
 											<view class="action-item" @click.stop="confirmSeal(item)"
-												v-if="item.Status === 0">
+												v-if="getRecordStatus(item) === 0">
 												<text class="action-icon">✅</text>
 												<text class="action-text">{{ $t('sealing.confirm') }}</text>
 											</view>
@@ -116,7 +128,7 @@
 												<text class="action-text">{{ $t('sealing.edit') }}</text>
 											</view>
 											<view class="action-item delete-item" @click.stop="deleteSeal(item)"
-												v-if="item.Status === 0">
+												v-if="getRecordStatus(item) === 0">
 												<text class="action-icon">🗑️</text>
 												<text class="action-text">{{ $t('sealing.delete') }}</text>
 											</view>
@@ -125,18 +137,18 @@
 								</view>
 							</view>
 
-							<!-- 行2: 编码、备注 -->
+							<!-- 行2: 编码、确认人、备注 -->
 							<view class="item-content">
 								<text class="item-code">{{ item.Code || $t('sealing.noCode') }}</text>
+								<text class="item-assign" v-if="item.AssignUser">{{ $t('sealing.confirmer') }}: {{
+									item.AssignUser }}</text>
 								<text class="item-remark" v-if="item.Remark">{{ item.Remark }}</text>
 							</view>
 
-							<!-- 行3: 操作人、确认人 -->
+							<!-- 行3: 操作人 -->
 							<view class="item-footer">
-								<text class="item-creator">{{ $t('sealing.operator') }}: {{ item.Creator || '-'
-								}}</text>
-								<text class="item-assign" v-if="item.AssignUser">{{ $t('sealing.confirmer') }}: {{
-									item.AssignUser }}</text>
+								<text class="item-creator">{{ $t('sealing.operator') }}: {{ item.Creator ||
+									item.CreatorUser || item.CreateUser || item.UserName || '-' }}</text>
 							</view>
 
 						</view>
@@ -144,7 +156,7 @@
 				</view>
 
 				<!-- 底部版权信息 -->
-				<FooterInfo />
+				<FooterInfo :showFinished="sealList.length > 0" />
 				<view class="bottom-spacer"></view>
 			</view>
 		</scroll-view>
@@ -162,6 +174,13 @@
 				</view>
 				<view class="modal-body">
 					<view class="form-item">
+						<text class="label">部门</text>
+						<view class="value disabled">
+							<text class="text-main">{{ userOrgInfo.Department ? userOrgInfo.Department.Name : '-'
+							}}</text>
+						</view>
+					</view>
+					<view class="form-item">
 						<text class="label">{{ $t('sealing.status') }}</text>
 						<view class="shift-selector">
 							<view v-for="(status, index) in sealStatusOptions" :key="index" class="shift-chip"
@@ -173,7 +192,7 @@
 					<view class="form-item">
 						<text class="label">{{ $t('sealing.operator') }}</text>
 						<view class="value disabled">
-							<text class="text-main">{{ userOrgInfo.User?.UserTrueName || '-' }}</text>
+							<text class="text-main">{{ currentUserDisplayName }}</text>
 						</view>
 					</view>
 					<view class="form-item">
@@ -181,13 +200,6 @@
 						<view class="value">
 							<input v-model="sealForm.Code" :placeholder="$t('sealing.codePlaceholder')"
 								class="value-input" />
-						</view>
-					</view>
-					<view class="form-item">
-						<text class="label">{{ $t('sealing.remark') }}</text>
-						<view class="value">
-							<textarea v-model="sealForm.Remark" :placeholder="$t('sealing.remarkPlaceholder')"
-								class="value-textarea" style="height: 120rpx;"></textarea>
 						</view>
 					</view>
 					<view class="form-item">
@@ -200,6 +212,13 @@
 						</view>
 						<text v-if="showConfirmerError" class="error-msg">{{ $t('sealing.selectConfirmerError')
 						}}</text>
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('sealing.remark') }}</text>
+						<view class="value">
+							<textarea v-model="sealForm.Remark" :placeholder="$t('sealing.remarkPlaceholder')"
+								class="value-textarea" auto-height></textarea>
+						</view>
 					</view>
 				</view>
 				<view class="modal-footer">
@@ -229,6 +248,8 @@
 				</scroll-view>
 			</view>
 		</view>
+		<WarningModal v-model:visible="warningModal.visible" :title="warningModal.title" :message="warningModal.message"
+			:buttonText="warningModal.buttonText" @confirm="onWarningConfirm" />
 	</view>
 </template>
 
@@ -236,14 +257,18 @@
 import BackButton from '@/components/BackButton/BackButton.vue';
 import BackToTop from '@/components/BackToTop/BackToTop.vue';
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
+import WarningModal from '@/components/WarningModal/WarningModal.vue';
 import config from '@/config.js';
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
+import dayjs from 'dayjs';
 
 export default {
 	components: {
 		BackButton,
 		BackToTop,
-		FooterInfo
+		FooterInfo,
+		WarningModal
 	},
 	data() {
 		return {
@@ -251,6 +276,7 @@ export default {
 			scrollTop: 0,
 			scrollTopVal: 0,
 			isRefreshing: false,
+			isPulling: false,
 			isLoading: false,
 			userOrgInfo: {},
 			selectedDate: '',
@@ -283,7 +309,14 @@ export default {
 			selectedConfirmer: '',
 			relatedId: '',
 			relatedName: '',
-			todoListId: ''
+			todoListId: '',
+			userInfo: {},
+			warningModal: {
+				visible: false,
+				title: '',
+				message: '',
+				buttonText: ''
+			}
 		}
 	},
 	onLoad(options) {
@@ -304,14 +337,15 @@ export default {
 		}
 	},
 	onShow() {
-		const token = uni.getStorageSync('token');
+		const token = storage.getToken();
 		if (!token) {
 			uni.reLaunch({
 				url: '/pages/profile/profile'
 			});
 			return;
 		}
-		this.userOrgInfo = uni.getStorageSync('userOrgInfo') || {};
+		this.userOrgInfo = storage.get('userOrgInfo') || {};
+		this.userInfo = storage.get('userInfo') || {};
 		this.fetchSealData();
 		this.checkTodayStatus();
 	},
@@ -324,6 +358,11 @@ export default {
 			return this.confirmerOptions.filter(member =>
 				member.UserTrueName && member.UserTrueName.toLowerCase().includes(searchKey)
 			);
+		},
+		currentUserDisplayName() {
+			const user = this.userInfo || {};
+			const orgUser = this.userOrgInfo?.User || {};
+			return user.userTrueName || user.UserTrueName || orgUser.UserTrueName || orgUser.UserName || user.userName || '-';
 		}
 	},
 	methods: {
@@ -334,37 +373,35 @@ export default {
 			const systemInfo = uni.getSystemInfoSync();
 			this.statusBarHeight = systemInfo.statusBarHeight || 20;
 
-			// 设置当前选中日期
-			this.selectedDate = new Date().toISOString().split('T')[0];
+			// 设置当前选中日期 (使用 dayjs 确保本地时间一致)
+			this.selectedDate = dayjs().format('YYYY-MM-DD');
 			this.initCalendar();
 			this.initSealStatusOptions();
 		},
 		initCalendar() {
-			const today = new Date();
-			const year = today.getFullYear();
-			const month = today.getMonth();
-			this.currentMonthYear = `${year}年${month + 1}月`;
+			const today = dayjs();
+			this.currentMonthYear = today.format('YYYY年M月');
 
 			const weekDays = [];
 			const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+			const startOfWeek = today.startOf('week');
 
 			for (let i = 0; i < 7; i++) {
-				const date = new Date(today);
-				date.setDate(today.getDate() - today.getDay() + i);
-				const fullDate = date.toISOString().split('T')[0];
+				const date = startOfWeek.add(i, 'day');
+				const fullDate = date.format('YYYY-MM-DD');
 				weekDays.push({
 					name: dayNames[i],
-					date: date.getDate(),
+					date: date.date(),
 					fullDate: fullDate,
-					hasData: fullDate === new Date().toISOString().split('T')[0] && this.todaySealCount === 0
+					hasData: false // 初始设为 false，由后续 fetch/check 更新
 				});
 			}
 			this.weekDays = weekDays;
 		},
 		updateWeekDaysDot() {
-			const todayStr = new Date().toISOString().split('T')[0];
+			const todayStr = dayjs().format('YYYY-MM-DD');
 			this.weekDays.forEach(day => {
-				day.hasData = (day.fullDate === todayStr && this.todaySealCount === 0);
+				day.hasData = (day.fullDate === todayStr && this.todaySealCount > 0);
 			});
 		},
 		initSealStatusOptions() {
@@ -400,8 +437,15 @@ export default {
 			this.selectedDate = date;
 			this.fetchSealData();
 		},
+		onPulling() {
+			this.isPulling = true;
+		},
+		onRestore() {
+			this.isPulling = false;
+		},
 		onRefresh() {
 			this.isRefreshing = true;
+			this.isPulling = true;
 			this.fetchSealData();
 		},
 		onScroll(e) {
@@ -477,7 +521,8 @@ export default {
 					}));
 
 					// 如果是已选日期是今天，更新todaySealCount
-					if (this.selectedDate === new Date().toISOString().split('T')[0]) {
+					const today = dayjs().format('YYYY-MM-DD');
+					if (this.selectedDate === today) {
 						this.todaySealCount = res.total !== undefined ? res.total : this.sealList.length;
 						this.updateWeekDaysDot();
 					}
@@ -493,19 +538,23 @@ export default {
 				})
 				.finally(() => {
 					this.isLoading = false;
-					this.isRefreshing = false;
+					setTimeout(() => {
+						this.isRefreshing = false;
+						this.isPulling = false;
+						uni.showToast({ title: '已刷新', icon: 'none' });
+					}, 800);
 				});
 		},
 		checkTodayStatus() {
-			const today = new Date().toISOString().split('T')[0];
+			const today = dayjs().format('YYYY-MM-DD');
 			if (this.selectedDate === today) return;
 
-			const d = new Date();
-			d.setDate(d.getDate() + 1);
-			const tmr = d.toISOString().split('T')[0];
+			const tmr = dayjs().add(1, 'day').format('YYYY-MM-DD');
 
 			const wheres = [
-				{ name: 'CreationTime', value: [today + ' 00:00:00', today + ' 23:59:59'], displayType: 'between' }
+				{ name: 'RelatedId', value: this.relatedId },
+				{ name: 'CreationTime', value: today + ' 00:00:00', displayType: 'thanorequal' },
+				{ name: 'CreationTime', value: tmr + ' 00:00:00', displayType: 'lt' }
 			];
 
 			const params = {
@@ -526,7 +575,7 @@ export default {
 			});
 		},
 		updateStats() {
-			const today = new Date().toISOString().split('T')[0];
+			const today = dayjs().format('YYYY-MM-DD');
 			const todayList = this.sealList.filter(item =>
 				item.CreationTime && item.CreationTime.startsWith(today)
 			);
@@ -580,47 +629,54 @@ export default {
 				return;
 			}
 
-			if (!this.selectedConfirmer) {
-				this.showConfirmerError = true;
-				return;
-			}
-
 			const selectedStatus = this.sealStatusOptions[this.sealForm.StatusIndex];
-			const selectedConfirmerObj = this.confirmerOptions[this.sealForm.ConfirmerIndex];
+			const selectedConfirmerObj = this.confirmerOptions[this.sealForm.ConfirmerIndex] || {};
 
 			const data = {
 				RelatedId: this.relatedId,
 				Category: selectedStatus.value, // 封存类型
-				AssignUserId: selectedConfirmerObj.Id,
-				AssignUser: selectedConfirmerObj.UserTrueName,
+				AssignUserId: selectedConfirmerObj.Id || null,
+				AssignUser: selectedConfirmerObj.UserTrueName || this.selectedConfirmer,
 				Code: this.sealForm.Code.trim(),
 				Remark: this.sealForm.Remark.trim()
 			};
 
-			uni.showLoading({ title: this.$t('sealing.submitting') });
+			uni.showLoading({ title: this.$t('sealing.submitting'), mask: true });
 
 			request.post('api/ssbh/SealHistory/Add', { mainData: data })
 				.then(res => {
-					if (res.status) {
+					// Extremely flexible success detection
+					let isSuccess = false;
+					if (res) {
+						if (res === '保存成功' || res.status === true || res.success === true) {
+							isSuccess = true;
+						} else if (typeof res === 'object' && !res.message && (res.Id || res.id)) {
+							isSuccess = true;
+						}
+					}
+
+					if (isSuccess) {
 						uni.showToast({
 							title: this.$t('sealing.submitSuccess'),
 							icon: 'success'
 						});
 						this.closeNewSealModal();
 						this.fetchSealData();
-						// 如果刚刚提交的是今天的（通常是），更新红点状态
-						const todayStr = new Date().toISOString().split('T')[0];
-						this.todaySealCount++; // 假设成功增加了一条
+						// Update stats/dot
+						const todayStr = dayjs().format('YYYY-MM-DD');
+						this.todaySealCount++;
 						this.updateWeekDaysDot();
 					} else {
-						throw new Error(res.message || '提交失败');
+						const msg = res.message || res.msg || (typeof res === 'string' ? res : '');
+						throw new Error(msg || '接口返回异常');
 					}
 				})
 				.catch(err => {
 					console.error('提交封存记录失败:', err);
-					uni.showToast({
-						title: this.$t('sealing.submitError'),
-						icon: 'none'
+					uni.showModal({
+						title: this.$t('common.fail'),
+						content: err.message || this.$t('sealing.submitError'),
+						showCancel: false
 					});
 				})
 				.finally(() => {
@@ -628,21 +684,59 @@ export default {
 				});
 		},
 		validateForm() {
-			if (!this.sealForm.Code.trim()) {
-				uni.showToast({
-					title: this.$t('sealing.codeRequired'),
-					icon: 'none'
-				});
+			// 0. Check Related Context
+			if (!this.relatedId) {
+				console.error('Validation Failed: relatedId is missing');
+				this.showWarning(this.$t('common.fail'));
 				return false;
 			}
+
+			// 1. Check Code
+			const code = (this.sealForm.Code || '').toString().trim();
+			if (!code) {
+				console.warn('Validation Failed: Code is empty');
+				this.showWarning(this.$t('sealing.codeRequired'));
+				return false;
+			}
+
+			// 2. Check Confirmer
+			if (!this.selectedConfirmer) {
+				console.warn('Validation Failed: Confirmer is not selected');
+				this.showConfirmerError = true;
+				this.showWarning(this.$t('sealing.selectConfirmerError'));
+				return false;
+			}
+
+			this.showConfirmerError = false;
 			return true;
 		},
+		showWarning(msg) {
+			this.warningModal = {
+				visible: true,
+				title: this.$t('modal.warning_title'),
+				message: msg,
+				buttonText: this.$t('modal.confirm_btn')
+			};
+		},
+		onWarningConfirm() {
+			this.warningModal.visible = false;
+		},
 		toggleActionMenu(item) {
-			if (this.activeActionItemId === item.Id) {
+			const id = this.getRecordId(item);
+			if (this.activeActionItemId === id) {
 				this.activeActionItemId = null;
 			} else {
-				this.activeActionItemId = item.Id;
+				this.activeActionItemId = id;
 			}
+		},
+		getRecordId(item) {
+			if (!item) return null;
+			if (typeof item === 'string' || typeof item === 'number') return item;
+			return item.Id !== undefined ? item.Id : item.id;
+		},
+		getRecordStatus(item) {
+			if (!item) return -1;
+			return item.Status !== undefined ? item.Status : (item.status !== undefined ? item.status : -1);
 		},
 		closeAllMenus() {
 			this.activeActionItemId = null;
@@ -677,12 +771,9 @@ export default {
 		},
 		formatTime(timeStr) {
 			if (!timeStr) return '';
-			const date = new Date(timeStr);
-			if (isNaN(date.getTime())) return timeStr;
-
-			const h = date.getHours().toString().padStart(2, '0');
-			const m = date.getMinutes().toString().padStart(2, '0');
-			return `${h}:${m}`;
+			const date = dayjs(timeStr);
+			if (!date.isValid()) return timeStr;
+			return date.format('HH:mm');
 		},
 		confirmSeal(item) {
 			uni.showModal({
@@ -711,8 +802,16 @@ export default {
 			};
 			request.post('api/ssbh/SealHistory/Update', { mainData: updateData })
 				.then(res => {
-					if (res.status) {
-						// 2. If successfully updated, and we represent a TodoList task, close it.
+					let isSuccess = false;
+					if (res) {
+						if (res === '修改成功' || res.status === true || res.success === true) {
+							isSuccess = true;
+						} else if (typeof res === 'object' && !res.message) {
+							isSuccess = true;
+						}
+					}
+
+					if (isSuccess) {
 						if (this.todoListId) {
 							this.completeTodoList(item);
 						} else {
@@ -721,12 +820,17 @@ export default {
 							this.activeActionItemId = null;
 						}
 					} else {
-						throw new Error(res.message || 'Update failed');
+						const msg = res.message || res.msg || (typeof res === 'string' ? res : '');
+						throw new Error(msg || 'Update failed');
 					}
 				})
 				.catch(err => {
 					console.error("Confirm seal failed", err);
-					uni.showToast({ title: this.$t('sealing.submitError'), icon: 'none' });
+					uni.showModal({
+						title: this.$t('common.fail'),
+						content: err.message || this.$t('sealing.submitError'),
+						showCancel: false
+					});
 				})
 				.finally(() => {
 					if (!this.todoListId) uni.hideLoading(); // If todolist logic runs, it will handle hideLoading
@@ -764,10 +868,7 @@ export default {
 		},
 		editSeal(item) {
 			// 编辑功能（可选实现）
-			uni.showToast({
-				title: this.$t('sealing.editComingSoon'),
-				icon: 'none'
-			});
+
 			this.activeActionItemId = null;
 		},
 		deleteSeal(item) {
@@ -838,12 +939,13 @@ page {
 }
 
 .custom-nav {
-	position: fixed;
-	top: 0;
-	left: 0;
-	right: 0;
+	/* Removed fixed position */
+	/* position: fixed; */
+	/* top: 0; */
+	/* left: 0; */
+	/* right: 0; */
 	background: $sull-color-white;
-	border-bottom: 1px solid $sull-color-line;
+	border-bottom: 2rpx solid $sull-color-line;
 	z-index: 999;
 }
 
@@ -851,13 +953,71 @@ page {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	height: 44px;
-	padding: 0 16px;
+	height: 88rpx;
+	padding: 0 32rpx;
 }
+
+// ... existing styles ...
+
+.bottom-spacer {
+	height: 40rpx;
+}
+
+/* Custom Refresher */
+.custom-refresher {
+	height: 120rpx;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: absolute;
+	top: -120rpx;
+	left: 0;
+	transition: transform 0.2s linear;
+}
+
+.refresher-content {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8rpx;
+}
+
+.refresher-icon {
+	width: 64rpx;
+	height: 64rpx;
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
+	background-size: contain;
+	background-repeat: no-repeat;
+	transition: transform 0.3s ease;
+}
+
+.refresher-icon.animating {
+	animation: ambulance-bounce 0.8s infinite ease-in-out;
+}
+
+.refresher-text {
+	font-size: 20rpx;
+	color: $sull-color-primary;
+	opacity: 0.8;
+}
+
+@keyframes ambulance-bounce {
+
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+
+	50% {
+		transform: translateY(-12rpx);
+	}
+}
+
 
 .nav-left,
 .nav-right {
-	width: 60px;
+	width: 120rpx;
 	display: flex;
 	align-items: center;
 }
@@ -867,7 +1027,7 @@ page {
 }
 
 .nav-title {
-	font-size: $font-size-body-lg;
+	font-size: 34rpx;
 	font-weight: $font-weight-semibold;
 	color: $sull-text-main;
 }
@@ -878,16 +1038,16 @@ page {
 }
 
 .content-wrapper {
-	padding: 16px 24px;
+	padding: 32rpx 48rpx;
 }
 
 /* 统计卡片 */
 .stats-card {
 	border-radius: $radius-lg;
-	padding: 16px;
-	margin-bottom: 16px;
+	padding: 32rpx;
+	margin-bottom: 32rpx;
 	background: $sull-color-white;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
 }
 
 .stats-row {
@@ -906,7 +1066,7 @@ page {
 .stat-num {
 	font-size: $font-size-h4;
 	font-weight: $font-weight-bold;
-	margin-bottom: 4px;
+	margin-bottom: 8rpx;
 }
 
 .stat-label {
@@ -915,81 +1075,88 @@ page {
 }
 
 .stat-divider {
-	width: 1px;
-	height: 40px;
+	width: 2rpx;
+	height: 80rpx;
 	background-color: $sull-color-line;
-	margin: 0 16px;
+	margin: 0 32rpx;
 }
 
 /* 日历部分 */
 .calendar-section {
-	margin-bottom: 20px;
-}
-
-.calendar-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 16px;
-}
-
-.section-title {
-	font-size: $font-size-body-lg;
-	font-weight: $font-weight-semibold;
-	color: $sull-text-main;
-}
-
-.date-picker-btn {
-	padding: 8px;
 	background: $sull-color-white;
-	border-radius: $radius-md;
-	border: 1px solid $sull-color-line;
-}
+	border-radius: $radius-lg;
+	padding: 32rpx;
+	margin-bottom: 40rpx;
+	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.02);
 
-.week-row {
-	display: flex;
-	justify-content: space-between;
-}
+	.calendar-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 24rpx;
 
-.day-item {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	padding: 8px 12px;
-	border-radius: $radius-md;
-	position: relative;
-	cursor: pointer;
-	transition: all 0.3s ease;
-}
+		.section-title {
+			font-size: $font-size-body-lg;
+			font-weight: $font-weight-semibold;
+			color: $sull-text-main;
+		}
 
-.day-item.active {
-	background: $sull-color-primary;
-}
+		.date-picker-btn {
+			padding: 8rpx 16rpx;
+			background: #F5F7FA;
+			border-radius: 12rpx;
+			border: none;
+		}
+	}
 
-.day-item.active .day-name,
-.day-item.active .day-num {
-	color: $sull-color-white;
-}
+	.week-row {
+		display: flex;
+		justify-content: space-between;
+		width: 100%;
+		gap: 8rpx;
 
-.day-name {
-	font-size: $font-size-body-xs;
-	color: $sull-text-secondary;
-	margin-bottom: 4px;
-}
+		.day-item {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			padding: 16rpx 0;
+			border-radius: $radius-sm;
+			min-width: 0;
+			box-sizing: border-box;
 
-.day-num {
-	font-size: $font-size-body-md;
-	font-weight: $font-weight-medium;
-	color: $sull-text-main;
-}
+			&.active {
+				background-color: $sull-color-primary;
 
-.day-dot {
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background: $sull-color-primary;
-	position: absolute;
-	bottom: 2px;
+				.day-name,
+				.day-num {
+					color: $sull-color-white;
+				}
+			}
+
+			.day-name {
+				font-size: 22rpx;
+				color: $sull-text-secondary;
+				margin-bottom: 8rpx;
+			}
+
+			.day-num {
+				font-size: 30rpx;
+				font-weight: $font-weight-semibold;
+				color: $sull-text-main;
+			}
+
+			.day-dot {
+				width: 8rpx;
+				height: 8rpx;
+				background-color: $sull-color-error;
+				border-radius: 50%;
+				margin-top: 8rpx;
+				/* Remove absolute positioning to match flex layout in handover */
+				position: static;
+			}
+		}
+	}
 }
 
 /* 3. Controls Row */
@@ -997,7 +1164,7 @@ page {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 16px;
+	margin-bottom: 32rpx;
 
 	.new-seal-btn {
 		display: flex;
@@ -1006,18 +1173,18 @@ page {
 		background: $sull-color-primary;
 		color: $sull-color-white;
 		font-size: $font-size-body-md;
-		padding: 0 16px;
-		height: 36px;
-		border-radius: 18px;
-		box-shadow: 0 4px 8px rgba(149, 202, 255, 0.4);
+		padding: 0 32rpx;
+		height: 72rpx;
+		border-radius: 36rpx;
+		box-shadow: 0 8rpx 16rpx rgba(149, 202, 255, 0.4);
 		transition: all 0.2s;
 
 		.plus-icon {
-			font-size: 20px;
-			margin-right: 4px;
+			font-size: 40rpx;
+			margin-right: 8rpx;
 			line-height: 1;
 			font-weight: 400;
-			margin-top: -2px;
+			margin-top: -4rpx;
 		}
 
 		.btn-text {
@@ -1026,24 +1193,24 @@ page {
 
 		&:active {
 			transform: scale(0.96);
-			box-shadow: 0 2px 4px rgba(149, 202, 255, 0.3);
+			box-shadow: 0 4rpx 8rpx rgba(149, 202, 255, 0.3);
 		}
 	}
 
 	.end-controls {
 		display: flex;
-		gap: 12px;
+		gap: 24rpx;
 
 		.icon-btn {
-			width: 36px;
-			height: 36px;
+			width: 72rpx;
+			height: 72rpx;
 			background: $sull-color-white;
 			border-radius: 50%;
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-			font-size: 18px;
+			box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.05);
+			font-size: 36rpx;
 
 			&:active {
 				transform: scale(0.95);
@@ -1054,7 +1221,7 @@ page {
 
 /* 列表部分 */
 .list-section {
-	margin-bottom: 20px;
+	margin-bottom: 40rpx;
 }
 
 .loading-state,
@@ -1063,12 +1230,12 @@ page {
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	padding: 60px 20px;
+	padding: 120rpx 40rpx;
 }
 
 .loading-spinner {
-	font-size: 24px;
-	margin-bottom: 12px;
+	font-size: 48rpx;
+	margin-bottom: 24rpx;
 	animation: spin 1s linear infinite;
 }
 
@@ -1083,8 +1250,8 @@ page {
 }
 
 .empty-icon {
-	font-size: 48px;
-	margin-bottom: 12px;
+	font-size: 96rpx;
+	margin-bottom: 24rpx;
 	opacity: 0.5;
 }
 
@@ -1096,28 +1263,28 @@ page {
 .seal-list {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: 24rpx;
 }
 
 .seal-item {
 	background: $sull-color-white;
 	border-radius: $radius-lg;
-	padding: 16px;
-	border: 1px solid $sull-color-line;
+	padding: 32rpx;
+	border: 2rpx solid $sull-color-line;
 	position: relative;
 	transition: all 0.3s ease;
 }
 
 .seal-item.new-item {
 	border-color: $sull-color-primary;
-	box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
+	box-shadow: 0 0 0 4rpx rgba(64, 158, 255, 0.1);
 }
 
 .item-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 8px;
+	margin-bottom: 16rpx;
 }
 
 .item-time {
@@ -1129,11 +1296,11 @@ page {
 .item-meta-right {
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: 24rpx;
 }
 
 .status-tag {
-	padding: 4px 8px;
+	padding: 8rpx 16rpx;
 	border-radius: $radius-sm;
 	font-size: $font-size-body-xs;
 	font-weight: $font-weight-medium;
@@ -1165,8 +1332,8 @@ page {
 }
 
 .action-menu {
-	width: 32px;
-	height: 32px;
+	width: 64rpx;
+	height: 64rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -1181,19 +1348,19 @@ page {
 }
 
 .menu-icon {
-	font-size: 18px;
+	font-size: 36rpx;
 	color: $sull-text-secondary;
 }
 
 .item-content {
-	margin-bottom: 8px;
+	margin-bottom: 16rpx;
 }
 
 .item-code {
 	font-size: $font-size-body-md;
 	color: $sull-text-main;
 	font-weight: $font-weight-medium;
-	margin-bottom: 4px;
+	margin-bottom: 8rpx;
 	display: block;
 }
 
@@ -1223,19 +1390,19 @@ page {
 	right: 0;
 	background: $sull-color-white;
 	border-radius: $radius-md;
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-	border: 1px solid $sull-color-line;
+	box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.15);
+	border: 2rpx solid $sull-color-line;
 	z-index: 100;
-	min-width: 120px;
+	min-width: 240rpx;
 	overflow: hidden;
-	margin-top: 4px;
+	margin-top: 8rpx;
 	/* Space between button and menu */
 }
 
 .action-item {
 	display: flex;
 	align-items: center;
-	padding: 12px 16px;
+	padding: 24rpx 32rpx;
 	cursor: pointer;
 	transition: background-color 0.2s ease;
 }
@@ -1249,8 +1416,8 @@ page {
 }
 
 .action-icon {
-	margin-right: 8px;
-	font-size: 16px;
+	margin-right: 16rpx;
+	font-size: 32rpx;
 }
 
 .action-text {
@@ -1270,7 +1437,7 @@ page {
 	right: 0;
 	bottom: 0;
 	background: rgba(0, 0, 0, 0.5);
-	backdrop-filter: blur(2px);
+	backdrop-filter: blur(4rpx);
 	z-index: 2000;
 	display: flex;
 	align-items: center;
@@ -1287,8 +1454,8 @@ page {
 	animation: slideUp 0.3s ease;
 
 	.modal-header {
-		padding: 16px;
-		border-bottom: 1px solid $sull-color-line;
+		padding: 32rpx;
+		border-bottom: 2rpx solid $sull-color-line;
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -1299,55 +1466,55 @@ page {
 		}
 
 		.close-btn {
-			padding: 4px;
-			font-size: 18px;
+			padding: 8rpx;
+			font-size: 36rpx;
 			color: $sull-text-secondary;
 		}
 	}
 
 	.modal-body {
-		padding: 20px;
+		padding: 40rpx;
 		overflow-y: auto;
 
 		.form-item {
-			margin-bottom: 20px;
+			margin-bottom: 40rpx;
 			display: flex;
 			flex-direction: column;
 
 			.label {
 				font-size: $font-size-body-sm;
 				color: $sull-text-secondary;
-				margin-bottom: 8px;
+				margin-bottom: 16rpx;
 				display: block;
 			}
 
 			.error-msg {
-				font-size: 12px;
+				font-size: 24rpx;
 				color: $sull-color-error;
-				margin-top: 4px;
+				margin-top: 8rpx;
 			}
 
 			.value {
 				font-size: $font-size-body-md;
 				font-weight: 500;
 				color: $sull-text-main;
-				padding: 10px 0;
-				border-bottom: 1px solid #eee;
+				padding: 20rpx 0;
+				border-bottom: 2rpx solid #eee;
 				display: flex;
 				flex-direction: column;
-				gap: 4px;
+				gap: 8rpx;
 			}
 
 			.value.disabled {
 				color: $sull-text-secondary;
 				background: #f9f9f9;
-				padding-left: 8px;
-				border-radius: 4px;
+				padding-left: 16rpx;
+				border-radius: 8rpx;
 				border-bottom: none;
 				flex-direction: row;
 				justify-content: space-between;
 				align-items: center;
-				padding-right: 6px;
+				padding-right: 12rpx;
 			}
 
 			.value.disabled .text-main {
@@ -1366,23 +1533,23 @@ page {
 			}
 
 			.picker-arrow {
-				font-size: 12px;
+				font-size: 24rpx;
 				color: $sull-text-secondary;
 			}
 
 			.shift-selector {
 				display: flex;
-				gap: 12px;
+				gap: 24rpx;
 
 				.shift-chip {
 					flex: 1;
 					text-align: center;
-					padding: 10px 0;
+					padding: 20rpx 0;
 					background: #F5F7FA;
 					color: $sull-text-secondary;
-					border-radius: 8px;
-					font-size: 14px;
-					border: 1px solid transparent;
+					border-radius: 16rpx;
+					font-size: 28rpx;
+					border: 2rpx solid transparent;
 					transition: all 0.2s;
 
 					&.active {
@@ -1413,14 +1580,15 @@ page {
 
 			.value-textarea {
 				width: 100%;
-				min-height: 60px;
+				min-height: 60rpx;
 				border: none;
 				outline: none;
 				font-size: $font-size-body-md;
+				line-height: 40rpx;
 				font-weight: 500;
 				color: $sull-text-main;
 				background: transparent;
-				padding: 0;
+				padding: 10rpx 0;
 				margin: 0;
 				resize: none;
 			}
@@ -1434,27 +1602,26 @@ page {
 
 	.modal-footer {
 		display: flex;
-		border-top: 1px solid $sull-color-line;
+		border-top: 2rpx solid $sull-color-line;
 
 		.modal-btn {
 			flex: 1;
 			border: none;
 			background: #fff;
 			border-radius: 0;
-			padding: 14px 0;
+			padding: 28rpx 0;
 			font-size: $font-size-body-md;
 			line-height: normal;
 
 			&.cancel {
-				color: $sull-text-secondary;
-				border-right: 1px solid $sull-color-line;
-				border-bottom-left-radius: 16px;
+				border-right: 2rpx solid $sull-color-line;
+				border-bottom-left-radius: 32rpx;
 			}
 
 			&.confirm {
 				color: $sull-color-primary;
 				font-weight: $font-weight-medium;
-				border-bottom-right-radius: 16px;
+				border-bottom-right-radius: 32rpx;
 			}
 
 			&:active {
@@ -1466,7 +1633,7 @@ page {
 
 @keyframes slideUp {
 	0% {
-		transform: translateY(20px);
+		transform: translateY(40rpx);
 		opacity: 0;
 	}
 
@@ -1490,15 +1657,15 @@ page {
 	align-items: flex-end;
 	/* Bottom sheet style or center */
 	justify-content: center;
-	backdrop-filter: blur(2px);
+	backdrop-filter: blur(4rpx);
 }
 
 .member-modal {
 	width: 100%;
 	background: $sull-color-white;
-	border-radius: 20px 20px 0 0;
-	padding: 20px;
-	padding-bottom: 40px;
+	border-radius: 40rpx 40rpx 0 0;
+	padding: 40rpx;
+	padding-bottom: 80rpx;
 	display: flex;
 	flex-direction: column;
 	max-height: 60vh;
@@ -1509,18 +1676,18 @@ page {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-bottom: 16px;
-	gap: 12px;
+	margin-bottom: 32rpx;
+	gap: 24rpx;
 }
 
 .member-search-input {
 	flex: 1;
-	height: 40px;
+	height: 80rpx;
 	background: #F5F7FA;
-	border-radius: 20px;
-	padding: 0 36px 0 16px;
+	border-radius: 40rpx;
+	padding: 0 72rpx 0 32rpx;
 	/* Right padding for clear icon */
-	font-size: 14px;
+	font-size: 28rpx;
 }
 
 .search-box {
@@ -1532,10 +1699,10 @@ page {
 
 .clear-icon {
 	position: absolute;
-	right: 12px;
+	right: 24rpx;
 	color: #999;
-	font-size: 14px;
-	padding: 4px;
+	font-size: 28rpx;
+	padding: 8rpx;
 	z-index: 10;
 }
 
@@ -1543,13 +1710,13 @@ page {
 	flex: 1;
 	height: 0;
 	/* Important for flex scroll */
-	min-height: 200px;
+	min-height: 400rpx;
 }
 
 .member-item {
-	padding: 16px;
-	border-bottom: 1px solid #eee;
-	font-size: 16px;
+	padding: 32rpx;
+	border-bottom: 2rpx solid #eee;
+	font-size: 32rpx;
 	color: $sull-text-main;
 
 	&:active {
@@ -1557,18 +1724,18 @@ page {
 	}
 
 	.member-name {
-		font-size: 16px;
+		font-size: 32rpx;
 		color: $sull-text-main;
 	}
 }
 
 .empty-state-small {
-	padding: 20px;
+	padding: 40rpx;
 	text-align: center;
 	color: $sull-text-secondary;
 }
 
 .bottom-spacer {
-	height: 20px;
+	height: 40rpx;
 }
 </style>

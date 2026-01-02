@@ -1,4 +1,4 @@
 export default {
-    version: '1.0.0',
-    company: 'SULL Healthcare Technology Co., Ltd.'
+    version: '1.2.17',
+    company: '思蜀邦护（广州）医院管理有限公司'
 }

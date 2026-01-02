@@ -2,11 +2,13 @@ import App from './App'
 import { createI18n } from 'vue-i18n'
 import en from './locale/en.json'
 import zhHans from './locale/zh-Hans.json'
+import { getStringLen } from '@/utils/stringUtils.js'
 
 // #ifndef VUE3
 import Vue from 'vue'
 import './uni.promisify.adaptor'
 Vue.config.productionTip = false
+Vue.prototype.$getStringLen = getStringLen
 App.mpType = 'app'
 const app = new Vue({
     ...App
@@ -37,6 +39,7 @@ const i18n = createI18n({
 export function createApp() {
     const app = createSSRApp(App)
     app.use(i18n)
+    app.config.globalProperties.$getStringLen = getStringLen
     return {
         app
     }

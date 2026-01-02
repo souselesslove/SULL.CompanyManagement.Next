@@ -53,6 +53,7 @@
 
 <script>
 import request from '@/utils/request.js';
+import { storage } from '@/utils/storage.js';
 import BackButton from '@/components/BackButton/BackButton.vue';
 
 export default {
@@ -72,8 +73,8 @@ export default {
         }
     },
     onLoad() {
-        this.userInfo = uni.getStorageSync('userInfo') || {};
-        this.userOrgInfo = uni.getStorageSync('userOrgInfo') || {};
+        this.userInfo = storage.get('userInfo') || {};
+        this.userOrgInfo = storage.get('userOrgInfo') || {};
     },
     methods: {
         goBack() {
@@ -127,8 +128,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-
-
 .container {
     min-height: 100vh;
     background-color: #fff;
@@ -137,37 +136,37 @@ export default {
 }
 
 .header-section {
-    height: 200px;
+    height: 400rpx;
     background: linear-gradient(135deg, $sull-color-primary 0%, lighten($sull-color-primary, 20%) 100%);
     /* Soft Blue Gradient matching reference */
-    padding: 20px 24px;
+    padding: 40rpx 48rpx;
     display: flex;
     flex-direction: column;
     position: relative;
     /* Ensure padding for status bar if needed, though usually handled by page structure */
-    padding-top: 40px;
+    padding-top: 80rpx;
 }
 
 .header-back-btn {
-    margin-bottom: 10px;
+    margin-bottom: 20rpx;
 }
 
 .header-content {
-    margin-top: 10px;
+    margin-top: 20rpx;
     text-align: center;
 }
 
 .page-title {
-    font-size: 28px;
+    font-size: 56rpx;
     font-weight: bold;
     color: #fff;
     display: block;
-    margin-bottom: 8px;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin-bottom: 16rpx;
+    text-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.1);
 }
 
 .page-subtitle {
-    font-size: 16px;
+    font-size: 32rpx;
     color: rgba(255, 255, 255, 0.9);
     display: block;
 }
@@ -175,23 +174,23 @@ export default {
 .form-section {
     flex: 1;
     background-color: #fff;
-    border-top-left-radius: 30px;
-    border-top-right-radius: 30px;
-    margin-top: -50px;
+    border-top-left-radius: 60rpx;
+    border-top-right-radius: 60rpx;
+    margin-top: -100rpx;
     /* Overlap header */
-    padding: 40px 30px;
+    padding: 80rpx 60rpx;
     z-index: 10;
 }
 
 .form-group {
-    margin-bottom: 24px;
+    margin-bottom: 48rpx;
 }
 
 .label {
-    font-size: 16px;
+    font-size: 32rpx;
     font-weight: bold;
     color: #555;
-    margin-bottom: 12px;
+    margin-bottom: 24rpx;
     display: block;
 }
 
@@ -201,22 +200,22 @@ export default {
 
 .custom-input {
     width: 100%;
-    height: 56px;
+    height: 112rpx;
     background-color: #F7F8FA;
-    border-radius: 28px;
-    padding: 0 24px;
-    font-size: 16px;
+    border-radius: 56rpx;
+    padding: 0 48rpx;
+    font-size: 32rpx;
     color: #333;
     box-sizing: border-box;
 }
 
 .custom-textarea {
     width: 100%;
-    height: 120px;
+    height: 240rpx;
     background-color: #F7F8FA;
-    border-radius: 28px;
-    padding: 16px 24px;
-    font-size: 16px;
+    border-radius: 56rpx;
+    padding: 32rpx 48rpx;
+    font-size: 32rpx;
     color: #333;
     box-sizing: border-box;
 }
@@ -226,22 +225,22 @@ export default {
 }
 
 .action-area {
-    margin-top: 60px;
+    margin-top: 120rpx;
 }
 
 .submit-btn {
     width: 100%;
-    height: 56px;
+    height: 112rpx;
     background: $sull-color-primary;
     /* Primary theme color */
-    border-radius: 28px;
+    border-radius: 56rpx;
     color: #fff;
-    font-size: 18px;
+    font-size: 36rpx;
     font-weight: bold;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 6px 20px rgba(149, 202, 255, 0.4);
+    box-shadow: 0 12rpx 40rpx rgba(149, 202, 255, 0.4);
     border: none;
 
     &:active {
@@ -259,21 +258,21 @@ export default {
     display: flex;
     justify-content: space-between;
     width: 100%;
-    margin-bottom: 12px;
+    margin-bottom: 24rpx;
 }
 
 .floor-tag {
     flex: 1;
     text-align: center;
-    padding: 8px 0;
-    margin: 0 4px;
+    padding: 16rpx 0;
+    margin: 0 8rpx;
     background: #F7F8FA;
-    border-radius: 20px;
-    font-size: 14px;
+    border-radius: 40rpx;
+    font-size: 28rpx;
     color: #555;
     cursor: pointer;
     transition: all 0.2s;
-    border: 1px solid transparent;
+    border: 2rpx solid transparent;
 
     &:first-child {
         margin-left: 0;
