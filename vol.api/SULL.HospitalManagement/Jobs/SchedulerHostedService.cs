@@ -35,7 +35,7 @@ namespace SULL.HospitalManagement.Jobs
 
                 _logger.LogInformation($"[Job Registered] {jobName} | Next Run: {nextRunTime:yyyy-MM-dd HH:mm:ss}");
 
-                Timer timer = null;
+                Timer? timer = null;
                 // 使用 Timer 实现非循环调度
                 // 初始化时不立即启动 (Timeout.Infinite)，确保 timer 变量赋值完成后再启动，避免由于回调执行过快导致的 timer 为 null 的空引用问题
                 timer = new Timer(async state =>

@@ -50,14 +50,14 @@ namespace SULL.HospitalManagement.Services
 
         public override WebResponseContent Add(SaveModel saveModel)
         {
-            if (saveModel.MainData.TryGetValue("HandoverId", out object handoverIdObj) && handoverIdObj != null
-                && saveModel.MainData.TryGetValue("CheckId", out object checkIdObj) && checkIdObj != null)
+            if (saveModel.MainData.TryGetValue("HandoverId", out object? handoverIdObj) && handoverIdObj != null
+                && saveModel.MainData.TryGetValue("CheckId", out object? checkIdObj) && checkIdObj != null)
             {
                 long handoverId = handoverIdObj.ToString().GetLong();
                 int checkId = checkIdObj.ToString().GetInt();
 
                 int counter = 0;
-                if (saveModel.MainData.TryGetValue("Counter", out object counterObj))
+                if (saveModel.MainData.TryGetValue("Counter", out object? counterObj))
                 {
                     counter = counterObj.ToString().GetInt();
                 }

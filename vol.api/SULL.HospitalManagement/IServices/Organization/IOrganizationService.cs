@@ -8,5 +8,17 @@ namespace SULL.HospitalManagement.IServices
 {
     public partial interface IOrganizationService : IService<Organization>
     {
+        /// <summary>
+        /// 更新机构用户计数器
+        /// </summary>
+        /// <param name="orgId">机构ID</param>
+        /// <param name="delta">增量</param>
+        System.Threading.Tasks.Task UpdateUserCounterAsync(long orgId, int delta);
+        /// <summary>
+        /// 更新机构部门计数器
+        /// </summary>
+        /// <param name="orgId">机构ID</param>
+        /// <param name="delta">增量</param>
+        System.Threading.Tasks.Task UpdateDepartmentCounterAsync(long orgId, int delta);
     }
 }

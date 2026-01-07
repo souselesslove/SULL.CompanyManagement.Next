@@ -152,6 +152,7 @@ namespace VOL.WebApi
             services.AddSingleton<IMQDeclarator, MQDeclarator>();
             services.AddSingleton<IMessageProducer, RabbitMessageProducer>();
             services.AddHostedService<TodoConsumer>(); // 注册消息消费者
+            services.AddHostedService<NotificationConsumer>();
 
             // 注册后台定时任务
             services.AddSingleton<IBackgroundJob, CheckWarningsJob>();

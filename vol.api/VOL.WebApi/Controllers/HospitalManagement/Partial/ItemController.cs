@@ -36,9 +36,9 @@ namespace SULL.HospitalManagement.Controllers
         [HttpGet, Route("CheckItemWarnings")]
         [AllowAnonymous]
         [LocalNetworkOnly]
-        public WebResponseContent CheckItemWarnings(long id = 0)
+        public async Task<WebResponseContent> CheckItemWarnings(long id = 0)
         {
-            return _service.CheckItemWarnings(id);
+            return await _service.CheckItemWarningsAsync(id);
         }
 
         [HttpGet, Route("Remark")]

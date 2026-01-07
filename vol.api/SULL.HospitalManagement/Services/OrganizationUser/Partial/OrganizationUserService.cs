@@ -35,34 +35,35 @@ namespace SULL.HospitalManagement.Services
     public partial class OrganizationUserService
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly IOrganizationUserRepository _repository; // 访问数据库
-        private readonly IOrganizationDepartmentRepository _organizationDepartmentRepository;
         private readonly IOrganizationRepository _organizationRepository;
+        private readonly IOrganizationDepartmentRepository _organizationDepartmentRepository;
         private readonly IUserAccountRepository _userAccountRepository;
         private readonly IDashboardService _dashboardService;
-        private readonly ICacheService _cache;
-        private readonly IUniPushService _uniPushService;
+
+        private readonly IOrganizationUserRepository _repository;
+        private readonly IHospitalCacheService _hospitalCache;
+        private readonly IMessageProducer _messageProducer;
 
         [ActivatorUtilitiesConstructor]
         public OrganizationUserService(
             IOrganizationUserRepository dbRepository,
             IHttpContextAccessor httpContextAccessor, 
-            IOrganizationDepartmentRepository organizationDepartmentRepository, 
-            IOrganizationRepository organizationRepository,
             IUserAccountRepository userAccountRepository,
             IDashboardService dashboardService,
-            ICacheService cache,
-            IUniPushService uniPushService)
+            IHospitalCacheService hospitalCache,
+            IMessageProducer messageProducer,
+            IOrganizationRepository organizationRepository,
+            IOrganizationDepartmentRepository organizationDepartmentRepository)
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
-            _organizationDepartmentRepository = organizationDepartmentRepository;
-            _organizationRepository = organizationRepository;
             _userAccountRepository = userAccountRepository;
             _repository = dbRepository;
             _dashboardService = dashboardService;
-            _cache = cache;
-            _uniPushService = uniPushService;
+            _hospitalCache = hospitalCache;
+            _messageProducer = messageProducer;
+            _organizationRepository = organizationRepository;
+            _organizationDepartmentRepository = organizationDepartmentRepository;
         }
 
         public virtual async Task<UserOrganizationDto> GetUserOrganizationAsync(CancellationToken cancellationToken = default)
@@ -112,8 +113,8 @@ namespace SULL.HospitalManagement.Services
         {
             AddOnExecuted = (user, response) =>
             {
-                // 清理职级缓存
-                _cache.Remove($"UserLevel_{user.UserId}");
+                // 清理职级缓存 (使用统一分发服务)
+                _hospitalCache.RemoveUserLevel(user.UserId ?? 0);
 
                 // 1. Update Org UserCounter
                 if (user.OrganizationId > 0)
@@ -121,7 +122,7 @@ namespace SULL.HospitalManagement.Services
                     var org = _organizationRepository.FindFirst(x => x.Id == user.OrganizationId);
                     if (org != null)
                     {
-                        org.UserCounter = (org.UserCounter ?? 0) + 1;
+                        org.UserCounter = Math.Max(0, (org.UserCounter ?? 0) + 1);
                         org.LastModifierId = UserContext.Current.UserId;
                         org.LastModifier = UserContext.Current.UserTrueName;
                         org.LastModificationTime = DateTime.Now;
@@ -134,17 +135,18 @@ namespace SULL.HospitalManagement.Services
                     var dept = _organizationDepartmentRepository.FindFirst(x => x.Id == user.DepartmentId);
                     if (dept != null)
                     {
-                        dept.UserCounter = (dept.UserCounter ?? 0) + 1;
+                        dept.UserCounter = Math.Max(0, (dept.UserCounter ?? 0) + 1);
                         dept.LastModifierId = UserContext.Current.UserId;
                         dept.LastModifier = UserContext.Current.UserTrueName;
                         dept.LastModificationTime = DateTime.Now;
                         _organizationDepartmentRepository.Update(dept, true);
-                        
-                        // 推送消息给部门责任人
-                        if (dept.DutyUserId > 0)
-                        {
-                            _ = NotifyDepartmentHeadAsync(dept, $"{user.UserName} 加入了部门[{dept.Name}]");
-                        }
+                    }
+                    
+                    // 推送消息给部门责任人
+                    dept = _organizationDepartmentRepository.FindFirst(x => x.Id == user.DepartmentId);
+                    if (dept != null && dept.DutyUserId > 0)
+                    {
+                        NotifyDepartmentHeadAsync(dept, $"{user.UserName} 加入了部门[{dept.Name}]").GetAwaiter().GetResult();
                     }
                 }
                 return new WebResponseContent(true);
@@ -166,7 +168,7 @@ namespace SULL.HospitalManagement.Services
                 foreach (var user in users)
                 {
                     // 清理职级缓存
-                    _cache.Remove($"UserLevel_{user.UserId}");
+                    _hospitalCache.RemoveUserLevel(user.UserId ?? 0);
 
                     // 1. Update Org UserCounter
                     if (user.OrganizationId > 0)
@@ -192,12 +194,13 @@ namespace SULL.HospitalManagement.Services
                             dept.LastModifier = UserContext.Current.UserTrueName;
                             dept.LastModificationTime = DateTime.Now;
                             _organizationDepartmentRepository.Update(dept, true);
+                        }
 
-                            // 推送消息给部门责任人
-                            if (dept.DutyUserId > 0)
-                            {
-                                _ = NotifyDepartmentHeadAsync(dept, $"{user.UserName} 退出了部门[{dept.Name}]");
-                            }
+                        // 推送消息给部门责任人
+                        dept = _organizationDepartmentRepository.FindFirst(x => x.Id == user.DepartmentId);
+                        if (dept != null && dept.DutyUserId > 0)
+                        {
+                            NotifyDepartmentHeadAsync(dept, $"{user.UserName} 退出了部门[{dept.Name}]").GetAwaiter().GetResult();
                         }
                     }
                 }
@@ -238,7 +241,7 @@ namespace SULL.HospitalManagement.Services
                 // Auto-set Title or Validate Level
                 if (user.Level != null)
                 {
-                    if (levelTitleMap.TryGetValue(user.Level.Value, out string title))
+                    if (levelTitleMap.TryGetValue(user.Level.Value, out string? title))
                     {
                         user.Title = title;
                     }
@@ -273,33 +276,33 @@ namespace SULL.HospitalManagement.Services
             UpdateOnExecuted = (user, obj, x, x1) =>
             {
                 // 清理职级缓存
-                _cache.Remove($"UserLevel_{user.UserId}");
+                _hospitalCache.RemoveUserLevel(user.UserId ?? 0);
 
                 // 1. Handle Organization Change
                 if (user.OrganizationId != oldOrgId)
                 {
                     if (oldOrgId > 0)
                     {
-                        var oldOrg = _organizationRepository.FindFirst(x => (long?)x.Id == oldOrgId);
-                        if (oldOrg != null)
+                        var org = _organizationRepository.FindFirst(x => x.Id == oldOrgId);
+                        if (org != null)
                         {
-                            oldOrg.UserCounter = Math.Max(0, (oldOrg.UserCounter ?? 0) - 1);
-                            oldOrg.LastModifierId = UserContext.Current.UserId;
-                            oldOrg.LastModifier = UserContext.Current.UserTrueName;
-                            oldOrg.LastModificationTime = DateTime.Now;
-                            _organizationRepository.Update(oldOrg, true);
+                            org.UserCounter = Math.Max(0, (org.UserCounter ?? 0) - 1);
+                            org.LastModifierId = UserContext.Current.UserId;
+                            org.LastModifier = UserContext.Current.UserTrueName;
+                            org.LastModificationTime = DateTime.Now;
+                            _organizationRepository.Update(org, true);
                         }
                     }
                     if (user.OrganizationId > 0)
                     {
-                        var newOrg = _organizationRepository.FindFirst(x => x.Id == user.OrganizationId);
-                        if (newOrg != null)
+                        var org = _organizationRepository.FindFirst(x => x.Id == user.OrganizationId);
+                        if (org != null)
                         {
-                            newOrg.UserCounter = (newOrg.UserCounter ?? 0) + 1;
-                            newOrg.LastModifierId = UserContext.Current.UserId;
-                            newOrg.LastModifier = UserContext.Current.UserTrueName;
-                            newOrg.LastModificationTime = DateTime.Now;
-                            _organizationRepository.Update(newOrg, true);
+                            org.UserCounter = Math.Max(0, (org.UserCounter ?? 0) + 1);
+                            org.LastModifierId = UserContext.Current.UserId;
+                            org.LastModifier = UserContext.Current.UserTrueName;
+                            org.LastModificationTime = DateTime.Now;
+                            _organizationRepository.Update(org, true);
                         }
                     }
                 }
@@ -329,7 +332,7 @@ namespace SULL.HospitalManagement.Services
                                 // 推送消息给部门责任人
                                 if (oldDept.DutyUserId > 0)
                                 {
-                                    _ = NotifyDepartmentHeadAsync(oldDept, $"{user.UserName} 已退出部门[{oldDept.Name}]");
+                                    NotifyDepartmentHeadAsync(oldDept, $"{user.UserName} 已退出部门[{oldDept.Name}]").GetAwaiter().GetResult();
                                 }
                             }
                         }
@@ -342,7 +345,7 @@ namespace SULL.HospitalManagement.Services
                         if (newDept != null)
                         {
                             // Update Counter
-                            newDept.UserCounter = (newDept.UserCounter ?? 0) + 1;
+                            newDept.UserCounter = Math.Max(0, (newDept.UserCounter ?? 0) + 1);
                             newDept.LastModifierId = UserContext.Current.UserId;
                             newDept.LastModifier = UserContext.Current.UserTrueName;
                             newDept.LastModificationTime = DateTime.Now;
@@ -357,7 +360,7 @@ namespace SULL.HospitalManagement.Services
                                 // 推送消息给部门责任人
                                 if (newDept.DutyUserId > 0)
                                 {
-                                    _ = NotifyDepartmentHeadAsync(newDept, $"{user.UserName} 已加入部门[{newDept.Name}]");
+                                    NotifyDepartmentHeadAsync(newDept, $"{user.UserName} 已加入部门[{newDept.Name}]").GetAwaiter().GetResult();
                                 }
                             }
                         }
@@ -372,16 +375,11 @@ namespace SULL.HospitalManagement.Services
         {
             if (dept.DutyUserId == null || dept.DutyUserId <= 0) return;
 
-            string accountCacheKey = $"UserAccount_{dept.DutyUserId}_10_Account";
-            string headAccount = null;
-
             // 1. 尝试从缓存获取
-            var cachedAccount = _cache.Get<UserAccount>(accountCacheKey);
-            if (cachedAccount != null)
-            {
-                headAccount = cachedAccount.Account;
-            }
-            else
+            var cachedAccount = _hospitalCache.GetUserAccount<UserAccount>(dept.DutyUserId.Value, 10);
+            string? headAccount = cachedAccount?.Account;
+
+            if (string.IsNullOrEmpty(headAccount))
             {
                 // 2. 查库
                 var account = await _userAccountRepository.DbContext.Set<UserAccount>()
@@ -389,13 +387,20 @@ namespace SULL.HospitalManagement.Services
                 if (account != null)
                 {
                     headAccount = account.Account;
-                    _cache.AddObject(accountCacheKey, account);
+                    _hospitalCache.SetUserAccount(dept.DutyUserId.Value, 10, account);
                 }
             }
 
             if (!string.IsNullOrEmpty(headAccount))
             {
-                await _uniPushService.SendAsync(new List<string> { headAccount }, "部门成员变动通知", content);
+                // 3. 发布到消息队列异步处理
+                var msg = new NotificationMessage
+                {
+                    ClientIds = new List<string> { headAccount },
+                    Title = "部门成员变动通知",
+                    Content = content
+                };
+                await _messageProducer.PublishAsync(msg, Define.ExchangeName, Define.NotificationQueue);
             }
         }
     }

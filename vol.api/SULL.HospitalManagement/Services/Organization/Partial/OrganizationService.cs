@@ -23,6 +23,8 @@ using SULL.HospitalManagement.IServices;
 using Yitter.IdGenerator;
 using VOL.Core.Enums;
 using VOL.Core.CacheManager;
+using SULL.HospitalManagement.IServices.Dtos;
+using VOL.Core.RabbitMQ;
 using System.Collections.Generic;
 using System;
 using System.Threading;
@@ -38,8 +40,8 @@ namespace SULL.HospitalManagement.Services
         private readonly IOrganizationDepartmentRepository _organizationDepartmentRepository;
         private readonly IUserAccountRepository _userAccountRepository;
         private readonly IDashboardService _dashboardService;
-        private readonly ICacheService _cache;
-        private readonly IUniPushService _uniPushService;
+        private readonly IHospitalCacheService _hospitalCache;
+        private readonly IMessageProducer _messageProducer;
 
         [ActivatorUtilitiesConstructor]
         public OrganizationService(
@@ -49,8 +51,8 @@ namespace SULL.HospitalManagement.Services
             IOrganizationDepartmentRepository organizationDepartmentRepository,
             IUserAccountRepository userAccountRepository,
             IDashboardService dashboardService,
-            ICacheService cache,
-            IUniPushService uniPushService)
+            IHospitalCacheService hospitalCache,
+            IMessageProducer messageProducer)
             : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
@@ -59,8 +61,8 @@ namespace SULL.HospitalManagement.Services
             _userAccountRepository = userAccountRepository;
             _dashboardService = dashboardService;
             _repository = dbRepository;
-            _cache = cache;
-            _uniPushService = uniPushService;
+            _hospitalCache = hospitalCache;
+            _messageProducer = messageProducer;
         }
 
         public virtual async Task<PageGridData<Organization>> GetUserOrganizationAsync(
@@ -80,13 +82,13 @@ namespace SULL.HospitalManagement.Services
 
         public override WebResponseContent Add(SaveModel saveModel)
         {
-            saveModel.MainData.TryGetValue("Name", out object nameObj);
-            saveModel.MainData.TryGetValue("Level", out object levelObj);
-            saveModel.MainData.TryGetValue("InvitationCode", out object codeObj);
+            saveModel.MainData.TryGetValue("Name", out object? nameObj);
+            saveModel.MainData.TryGetValue("Level", out object? levelObj);
+            saveModel.MainData.TryGetValue("InvitationCode", out object? codeObj);
 
-            string name = nameObj?.ToString();
-            string level = levelObj?.ToString();
-            string code = codeObj?.ToString();
+            string? name = nameObj?.ToString();
+            string? level = levelObj?.ToString();
+            string? code = codeObj?.ToString();
 
             // 1. 如果提供了邀请码，走加入机构流程
             if (!string.IsNullOrWhiteSpace(code))
@@ -259,33 +261,36 @@ namespace SULL.HospitalManagement.Services
                     _dashboardService.AddLog(org.Id, "系统消息", $"系统消息：{user.UserTrueName} 已退出该机构");
 
                     // 推送消息给机构创建人
-                    if (org.CreatorId > 0 && org.CreatorId != userId)
-                    {
-                        string creatorAccount = null;
-                        // 优先从缓存获取
-                        string accountCacheKey = $"UserAccount_{org.CreatorId}_10_Account";
-                        var accountEntity = _cache.Get<UserAccount>(accountCacheKey);
-                        if (accountEntity != null)
+                        if (org.CreatorId > 0 && org.CreatorId != userId)
                         {
-                            creatorAccount = accountEntity.Account;
-                        }
-                        else
-                        {
-                            // 缓存没有则查库
-                            var account = _userAccountRepository.FindFirst(x => x.UserId == org.CreatorId && x.Category == 10);
-                            if (account != null)
+                            // 优先从缓存获取
+                            var accountEntity = _hospitalCache.GetUserAccount<UserAccount>(org.CreatorId.Value, 10);
+                            string? creatorAccount = accountEntity?.Account;
+                            
+                            if (string.IsNullOrEmpty(creatorAccount))
                             {
-                                creatorAccount = account.Account;
-                                // 写入缓存
-                                _cache.AddObject(accountCacheKey, account);
+                                // 缓存没有则查库
+                                var account = _userAccountRepository.FindFirst(x => x.UserId == org.CreatorId && x.Category == 10);
+                                if (account != null)
+                                {
+                                    creatorAccount = account.Account;
+                                    // 写入缓存
+                                    _hospitalCache.SetUserAccount(org.CreatorId.Value, 10, account);
+                                }
+                            }
+
+                            if (!string.IsNullOrEmpty(creatorAccount))
+                            {
+                                // 发布到消息队列异步处理
+                                var msg = new NotificationMessage
+                                {
+                                    ClientIds = new List<string> { creatorAccount },
+                                    Title = "成员退出通知",
+                                    Content = $"{user.UserTrueName} 已退出了机构[{org.Name}]"
+                                };
+                                _messageProducer.PublishAsync(msg, Define.ExchangeName, Define.NotificationQueue).GetAwaiter().GetResult();
                             }
                         }
-
-                        if (!string.IsNullOrEmpty(creatorAccount))
-                        {
-                            _uniPushService.SendAsync(new List<string> { creatorAccount }, "成员退出通知", $"{user.UserTrueName} 已退出了机构[{org.Name}]");
-                        }
-                    }
                 }
 
                 // 3. 更新部门的人数统计 (如果用户在该机构有部门)
@@ -295,18 +300,49 @@ namespace SULL.HospitalManagement.Services
                     if (dept != null)
                     {
                         dept.UserCounter = Math.Max(0, (dept.UserCounter ?? 0) - 1);
+                        dept.LastModifierId = UserContext.Current.UserId;
+                        dept.LastModifier = UserContext.Current.UserTrueName;
+                        dept.LastModificationTime = DateTime.Now;
                         _organizationDepartmentRepository.Update(dept, true);
                     }
                 }
 
                 // 4. 清除职级权限缓存
-                _cache.Remove($"UserLevel_{userId}");
+                _hospitalCache.RemoveUserLevel(userId);
             }
 
             // 5. 强制登出以刷新用户的本地缓存及权限状态
             user.LogOut(userId);
 
             return new WebResponseContent(true).OK("已成功退出所选机构");
+        }
+
+        public virtual async Task UpdateUserCounterAsync(long orgId, int delta)
+        {
+            var org = _repository.FindFirst(x => x.Id == orgId);
+            if (org != null)
+            {
+                org.UserCounter = Math.Max(0, (org.UserCounter ?? 0) + delta);
+                org.LastModifierId = UserContext.Current.UserId;
+                org.LastModifier = UserContext.Current.UserTrueName;
+                org.LastModificationTime = DateTime.Now;
+                _repository.Update(org, true);
+            }
+            await Task.CompletedTask;
+        }
+
+        public virtual async Task UpdateDepartmentCounterAsync(long orgId, int delta)
+        {
+            var org = _repository.FindFirst(x => x.Id == orgId);
+            if (org != null)
+            {
+                org.DepartmentCounter = Math.Max(0, (org.DepartmentCounter ?? 0) + delta);
+                org.LastModifierId = UserContext.Current.UserId;
+                org.LastModifier = UserContext.Current.UserTrueName;
+                org.LastModificationTime = DateTime.Now;
+                _repository.Update(org, true);
+            }
+            await Task.CompletedTask;
         }
     }
 }

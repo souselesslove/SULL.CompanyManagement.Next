@@ -20,6 +20,7 @@ using SULL.HospitalManagement.IRepositories;
 using VOL.Core.ManageUser;
 using System;
 using System.Collections.Generic;
+using SULL.HospitalManagement.IServices;
 using VOL.Core.CacheManager;
 
 namespace SULL.HospitalManagement.Services
@@ -28,19 +29,19 @@ namespace SULL.HospitalManagement.Services
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IShiftLeaveRepository _repository;//访问数据库
-        private readonly ICacheService _cache;
+        private readonly IHospitalCacheService _hospitalCache;
 
         [ActivatorUtilitiesConstructor]
         public ShiftLeaveService(
             IShiftLeaveRepository dbRepository,
             IHttpContextAccessor httpContextAccessor,
-            ICacheService cache
+            IHospitalCacheService hospitalCache
             )
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _repository = dbRepository;
-            _cache = cache;
+            _hospitalCache = hospitalCache;
         }
 
         public override PageGridData<ShiftLeave> GetPageData(PageDataOptions options)
@@ -49,15 +50,14 @@ namespace SULL.HospitalManagement.Services
             var db = _repository.DbContext;
 
             // 获取当前用户的职级信息 (加入缓存逻辑)
-            string cacheKey = $"UserLevel_{user.UserId}";
-            int level = _cache.Get(cacheKey).GetInt();
+            int level = _hospitalCache.GetUserLevel(user.UserId);
 
             if (level == 0)
             {
                 var orgUserInfo = db.Set<OrganizationUser>()
                     .FirstOrDefault(x => x.UserId == user.UserId && x.IsDeleted != true);
                 level = orgUserInfo?.Level ?? -1;
-                _cache.Add(cacheKey, level.ToString(), 3600 * 24 * 30);
+                _hospitalCache.SetUserLevel(user.UserId, level);
             }
 
             // 检测前端是否传递了时间范围（StartDate/EndDate）或特定人员（CreatorId）

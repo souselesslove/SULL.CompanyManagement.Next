@@ -20,7 +20,13 @@ using SULL.HospitalManagement.IRepositories;
 
 using VOL.Core.ManageUser;
 using Yitter.IdGenerator;
+using SULL.HospitalManagement.IServices;
 using VOL.Core.CacheManager;
+using VOL.Core.RabbitMQ;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System;
+using SULL.HospitalManagement.IServices.Dtos;
 
 namespace SULL.HospitalManagement.Services
 {
@@ -28,18 +34,27 @@ namespace SULL.HospitalManagement.Services
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IRescueRepository _repository;//访问数据库
-        private readonly ICacheService _cache;
+        private readonly IHospitalCacheService _hospitalCache;
+        private readonly IMessageProducer _messageProducer;
+        private readonly IUserAccountRepository _userAccountRepository;
+        private readonly IOrganizationUserRepository _organizationUserRepository;
         [ActivatorUtilitiesConstructor]
         public RescueService(
             IRescueRepository dbRepository,
             IHttpContextAccessor httpContextAccessor,
-            ICacheService cache
+            IHospitalCacheService hospitalCache,
+            IMessageProducer messageProducer,
+            IUserAccountRepository userAccountRepository,
+            IOrganizationUserRepository organizationUserRepository
             )
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _repository = dbRepository;
-            _cache = cache;
+            _hospitalCache = hospitalCache;
+            _messageProducer = messageProducer;
+            _userAccountRepository = userAccountRepository;
+            _organizationUserRepository = organizationUserRepository;
             //多租户会用到这init代码，其他情况可以不用
             //base.Init(dbRepository);
         }
@@ -49,7 +64,7 @@ namespace SULL.HospitalManagement.Services
             // 检查缓存逻辑：当且仅当查询条件UserContextOrg/Dept + CartId时尝试走缓存
             // 此处简化判断：如果SearchParameters中只包含CartId（除了默认的权限过滤条件），则尝试读取缓存
             // 解析Wheres
-            List<SearchParameters> searchParams = null;
+            List<SearchParameters>? searchParams = null;
             if (!string.IsNullOrEmpty(options.Wheres))
             {
                 try
@@ -65,18 +80,15 @@ namespace SULL.HospitalManagement.Services
                 if (!string.IsNullOrEmpty(cartId))
                 {
                     string key = $"Rescue_Cart_{cartId}";
-                    if (_cache.Exists(key))
+                    var cachedRescue = _hospitalCache.Get<Rescue>(key);
+                    if (cachedRescue != null)
                     {
-                         var cachedRescue = _cache.Get<Rescue>(key);
-                         if (cachedRescue != null)
-                         {
-                             // 构造PageGridData返回
-                             return new PageGridData<Rescue>
-                             {
-                                 rows = new List<Rescue> { cachedRescue },
-                                 total = 1
-                             };
-                         }
+                        // 构造PageGridData返回
+                        return new PageGridData<Rescue>
+                        {
+                            rows = new List<Rescue> { cachedRescue },
+                            total = 1
+                        };
                     }
                 }
             }
@@ -106,9 +118,12 @@ namespace SULL.HospitalManagement.Services
                 });
                 db.SaveChanges();
 
+                // 发送通知
+                NotifyDepartmentManagersAsync(newEntity.OrganizationId ?? 0, newEntity.DepartmentId, "抢救开始通知", $"[{newEntity.CartName}]正在抢救病人[{newEntity.Name}]").GetAwaiter().GetResult();
+                
                 // 缓存处理：写入新缓存，替换旧的
                 string key = $"Rescue_Cart_{newEntity.CartId}";
-                _cache.AddObject(key, newEntity);
+                _hospitalCache.Set(key, newEntity);
 
                 return new WebResponseContent(true);
             };
@@ -128,7 +143,7 @@ namespace SULL.HospitalManagement.Services
                 saveModel.MainData.Remove("DepartmentId");
             }
             // 新增逻辑：Status=10 or 20 时，仅更新Status和自动计算的Duration
-            if (saveModel.MainData.TryGetValue("Status", out object statusObj) && statusObj != null)
+            if (saveModel.MainData.TryGetValue("Status", out object? statusObj) && statusObj != null)
             {
                 int status = statusObj.ToString().GetInt();
                 // 有效的状态只有0, 10, 20, 100
@@ -137,7 +152,7 @@ namespace SULL.HospitalManagement.Services
                     return new WebResponseContent().Error("非法操作");
                 }
 
-                if (saveModel.MainData.TryGetValue("Id", out object idObj))
+                if (saveModel.MainData.TryGetValue("Id", out object? idObj))
                 {
                     var id = idObj.ToString().GetLong();
                     var record = _repository.FindFirst(x => x.Id == id);
@@ -160,7 +175,7 @@ namespace SULL.HospitalManagement.Services
                                 var keepData = new Dictionary<string, object>();
                                 foreach (var field in fieldsToKeep)
                                 {
-                                    if (saveModel.MainData.TryGetValue(field, out object val))
+                                    if (saveModel.MainData.TryGetValue(field, out object? val))
                                     {
                                         keepData[field] = val;
                                     }
@@ -206,12 +221,32 @@ namespace SULL.HospitalManagement.Services
                     }
 
                     // 缓存处理：始终保留/更新缓存
-                    _cache.AddObject(key, entity);
+                    _hospitalCache.Set(key, entity);
+
+                    if (entity.Status == 10 || entity.Status == 20 || entity.Status == 100)
+                    {
+                        // 结束抢救时也记录一个日志
+                        db.Set<WarningLogs>().Add(new WarningLogs
+                        {
+                            Id = YitIdHelper.NextId(),
+                            Category = 110,
+                            Description = $"[{entity.CartName}]抢救病人[{entity.Name}]已结束",
+                            OrganizationId = entity.OrganizationId,
+                            DepartmentId = entity.DepartmentId,
+                            RelatedId = entity.Id,
+                            CreationTime = DateTime.Now,
+                            IsFinished = true
+                        });
+                        db.SaveChanges();
+
+                        // 发送通知
+                        NotifyDepartmentManagersAsync(entity.OrganizationId ?? 0, entity.DepartmentId, "抢救结束通知", $"[{entity.CartName}]抢救病人[{entity.Name}]已结束").GetAwaiter().GetResult();
+                    }
                 }
                 else
                 {
                      // 其他状态更新（如修改基本信息），也同步更新缓存
-                     _cache.AddObject(key, entity);
+                     _hospitalCache.Set(key, entity);
                 }
                 return new WebResponseContent(true);
             };
@@ -272,5 +307,57 @@ namespace SULL.HospitalManagement.Services
 
             return new WebResponseContent().OK(null, new { monthCount = count, lastTime = lastTime });
         }
-  }
+
+        private async Task NotifyDepartmentManagersAsync(long orgId, long deptId, string title, string content)
+        {
+            if (orgId <= 0 || deptId <= 0) return;
+
+            // 1. 查找本科室 Level >= 30 的用户
+            var managerUserIds = await _organizationUserRepository.DbContext.Set<OrganizationUser>()
+                .Where(x => x.OrganizationId == orgId && x.DepartmentId == deptId && x.Level >= 30 && x.IsDeleted != true)
+                .Select(x => x.UserId)
+                .ToListAsync();
+
+            if (!managerUserIds.Any()) return;
+
+            var clientIds = new List<string>();
+            foreach (var userId in managerUserIds)
+            {
+                if (userId == null || userId <= 0) continue;
+
+                // 2. 尝试从缓存获取账号
+                var cachedAccount = _hospitalCache.GetUserAccount<UserAccount>(userId.Value, 10);
+                string? userAccount = cachedAccount?.Account;
+
+                if (string.IsNullOrEmpty(userAccount))
+                {
+                    // 3. 查库
+                    var account = await _userAccountRepository.DbContext.Set<UserAccount>()
+                        .FirstOrDefaultAsync(x => x.UserId == userId && x.IsDeleted != true && x.Category == 10);
+                    if (account != null)
+                    {
+                        userAccount = account.Account;
+                        _hospitalCache.SetUserAccount(userId.Value, 10, account);
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(userAccount))
+                {
+                    clientIds.Add(userAccount);
+                }
+            }
+
+            if (clientIds.Any())
+            {
+                // 4. 发送通知
+                var msg = new NotificationMessage
+                {
+                    ClientIds = clientIds,
+                    Title = title,
+                    Content = content
+                };
+                await _messageProducer.PublishAsync(msg, Define.ExchangeName, Define.NotificationQueue);
+            }
+        }
+    }
 }

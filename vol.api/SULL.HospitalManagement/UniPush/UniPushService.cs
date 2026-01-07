@@ -7,7 +7,7 @@ using SULL.HospitalManagement.UniPush;
 
 public interface IUniPushService
 {
-    Task<UniPushResult> SendAsync(IEnumerable<string> clientIds, string title, string content, object payload = null);
+    Task<UniPushResult> SendAsync(IEnumerable<string> clientIds, string title, string content, object? payload = null);
 }
 
 public class UniPushService : IUniPushService
@@ -28,7 +28,7 @@ public class UniPushService : IUniPushService
         _pushUrl = pushUrl; // 你的云函数 URL，例如 https://xxxx.bspapp.com/http/pushMessage
     }
 
-    public async Task<UniPushResult> SendAsync(IEnumerable<string> clientIds, string title, string content, object payload = null)
+    public async Task<UniPushResult> SendAsync(IEnumerable<string> clientIds, string title, string content, object? payload = null)
     {
         if (clientIds == null || !clientIds.Any())
         {

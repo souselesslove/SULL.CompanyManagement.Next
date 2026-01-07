@@ -25,6 +25,7 @@ using VOL.Core.CacheManager;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System;
+using SULL.HospitalManagement.IServices.Dtos;
 
 namespace SULL.HospitalManagement.Services
 {
@@ -36,8 +37,7 @@ namespace SULL.HospitalManagement.Services
         private readonly IMessageProducer _messageProducer;
         private readonly IDashboardService _dashboardService;
         private readonly IUserAccountRepository _userAccountRepository;
-        private readonly ICacheService _cache;
-        private readonly IUniPushService _uniPushService;
+        private readonly IHospitalCacheService _hospitalCache;
 
         [ActivatorUtilitiesConstructor]
         public SealHistoryService(
@@ -46,8 +46,7 @@ namespace SULL.HospitalManagement.Services
             IMessageProducer messageProducer,
             IDashboardService dashboardService,
             IUserAccountRepository userAccountRepository,
-            ICacheService cache,
-            IUniPushService uniPushService
+            IHospitalCacheService hospitalCache
             )
         : base(dbRepository)
         {
@@ -56,8 +55,7 @@ namespace SULL.HospitalManagement.Services
             _messageProducer = messageProducer;
             _dashboardService = dashboardService;
             _userAccountRepository = userAccountRepository;
-            _cache = cache;
-            _uniPushService = uniPushService;
+            _hospitalCache = hospitalCache;
         }
 
         public override WebResponseContent Add(SaveModel saveModel)
@@ -90,11 +88,11 @@ namespace SULL.HospitalManagement.Services
                     _messageProducer.PublishAsync(todo, Define.ExchangeName, Define.TodoQueue).GetAwaiter().GetResult();
 
                     // 发送推送通知
-                    string actionType = sealHistory.Category == 10 ? "封存" : (sealHistory.Category == 20 ? "启封" : "申请");
+                    string actionType = sealHistory.Category == 0 ? "封存" : (sealHistory.Category == 1 ? "启封" : "");
                     string notifyTitle = $"{actionType}确认提醒";
                     string notifyContent = $"{sealHistory.Creator} 向您提交了电子{actionType}申请，请确认。";
                     var payload = new { Id = sealHistory.Id, Category = sealHistory.Category, RelatedId = sealHistory.RelatedId };
-                    _ = NotifyUserAsync(sealHistory.AssignUserId.Value, notifyTitle, notifyContent, payload);
+                    NotifyUserAsync(sealHistory.AssignUserId.Value, notifyTitle, notifyContent, payload).GetAwaiter().GetResult();
                 }
                 return new WebResponseContent(true);
             };
@@ -103,12 +101,12 @@ namespace SULL.HospitalManagement.Services
 
         public override WebResponseContent Update(SaveModel saveModel)
         {
-            if (saveModel.MainData.TryGetValue("Status", out object status) && status != null)
+            if (saveModel.MainData.TryGetValue("Status", out object? status) && status != null)
             {
-                string statusStr = status.ToString();
+                string? statusStr = status.ToString();
                 if (statusStr == "1")
                 {
-                    if (saveModel.MainData.TryGetValue("Id", out object id) && id != null && long.TryParse(id.ToString(), out long handoverId))
+                    if (saveModel.MainData.TryGetValue("Id", out object? id) && id != null && long.TryParse(id.ToString(), out long handoverId))
                     {
                         var entity = _repository.FindFirst(x => x.Id == handoverId);
                         if (entity == null)
@@ -141,15 +139,15 @@ namespace SULL.HospitalManagement.Services
                             // 向申请人推送通知
                             if (entity.CreatorId > 0 && entity.CreatorId != UserContext.Current.UserId)
                             {
-                                string actionType = entity.Category == 10 ? "封存" : (entity.Category == 20 ? "启封" : "申请");
+                                string actionType = entity.Category == 0 ? "封存" : (entity.Category == 1 ? "启封" : "");
                                 string notifyTitle = $"{actionType}完成通知";
                                 string notifyContent = $"您提交的电子{actionType}申请已由 {operatorName} 确认完成。";
                                 var notifyPayload = new { Id = entity.Id, Category = entity.Category, RelatedId = entity.RelatedId };
-                                _ = NotifyUserAsync(entity.CreatorId.Value, notifyTitle, notifyContent, notifyPayload);
+                                NotifyUserAsync(entity.CreatorId.Value, notifyTitle, notifyContent, notifyPayload).GetAwaiter().GetResult();
                             }
 
                             var endTime = DateTime.Now;
-                            var duration = (int)(endTime - entity.CreationTime.Value).TotalSeconds;
+                            var duration = (int)(endTime - (entity.CreationTime ?? endTime)).TotalSeconds;
                             var durationStat = new DurationStatistics
                             {
                                 Id = YitIdHelper.NextId(),
@@ -174,20 +172,15 @@ namespace SULL.HospitalManagement.Services
             return base.Update(saveModel);
         }
 
-        private async Task NotifyUserAsync(int userId, string title, string content, object payload = null)
+        private async Task NotifyUserAsync(int userId, string title, string content, object? payload = null)
         {
             if (userId <= 0) return;
 
-            string accountCacheKey = $"UserAccount_{userId}_10_Account";
-            string userAccount = null;
-
             // 1. 尝试从缓存获取
-            var cachedAccount = _cache.Get<UserAccount>(accountCacheKey);
-            if (cachedAccount != null)
-            {
-                userAccount = cachedAccount.Account;
-            }
-            else
+            var cachedAccount = _hospitalCache.GetUserAccount<UserAccount>(userId, 10);
+            string? userAccount = cachedAccount?.Account;
+
+            if (string.IsNullOrEmpty(userAccount))
             {
                 // 2. 查库
                 var account = await _userAccountRepository.DbContext.Set<UserAccount>()
@@ -195,13 +188,21 @@ namespace SULL.HospitalManagement.Services
                 if (account != null)
                 {
                     userAccount = account.Account;
-                    _cache.AddObject(accountCacheKey, account);
+                    _hospitalCache.SetUserAccount(userId, 10, account);
                 }
             }
 
             if (!string.IsNullOrEmpty(userAccount))
             {
-                await _uniPushService.SendAsync(new List<string> { userAccount }, title, content, payload);
+                // 3. 发布到消息队列异步处理 (Phase 3)
+                var msg = new NotificationMessage
+                {
+                    ClientIds = new List<string> { userAccount },
+                    Title = title,
+                    Content = content,
+                    Payload = payload ?? new object()
+                };
+                await _messageProducer.PublishAsync(msg, Define.ExchangeName, Define.NotificationQueue);
             }
         }
     }

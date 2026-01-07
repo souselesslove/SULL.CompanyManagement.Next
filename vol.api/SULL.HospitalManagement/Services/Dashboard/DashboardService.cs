@@ -25,17 +25,17 @@ namespace SULL.HospitalManagement.Services
     {
         private readonly IPositionRepository _positionRepository;
         private readonly IOrganizationDepartmentRepository _departmentRepository;
-        private readonly ICacheService _cacheService;
+        private readonly IHospitalCacheService _hospitalCache;
 
         [ActivatorUtilitiesConstructor]
         public DashboardService(
             IPositionRepository positionRepository,
             IOrganizationDepartmentRepository departmentRepository,
-            ICacheService cacheService)
+            IHospitalCacheService hospitalCache)
         {
             _positionRepository = positionRepository;
             _departmentRepository = departmentRepository;
-            _cacheService = cacheService;
+            _hospitalCache = hospitalCache;
         }
 
         public object GetDashboardData(PageDataOptions options)
@@ -65,13 +65,12 @@ namespace SULL.HospitalManagement.Services
                 return new object();
             }
 
-            // Use caching to improve performance
-            string cacheKey = $"Dashboard_Data_{orgId}";
-            var cachedData = _cacheService.Get<object>(cacheKey);
-            //if (cachedData != null)
-            //{
-            //    return cachedData;
-            //}
+            // 使用统一缓存服务获取面板数据
+            var cachedData = _hospitalCache.GetDashboardData(orgId);
+            if (cachedData != null)
+            {
+                return cachedData;
+            }
 
             var db = _positionRepository.DbContext;
 
@@ -103,8 +102,7 @@ namespace SULL.HospitalManagement.Services
             var cars = rawCars.Select(c =>
             {
                 byte? status = c.Status;
-                string key = $"Rescue_Cart_{c.Id}";
-                var rescue = _cacheService.Get<Rescue>(key);
+                var rescue = _hospitalCache.GetUserAccount<Rescue>(c.Id.ToString().GetInt(), 0); // Reuse if applicable or use dedicated
                 // Status=0 means Rescuing/In Use based on user request
                 if (rescue != null && rescue.Status == 0)
                 {
@@ -189,7 +187,7 @@ namespace SULL.HospitalManagement.Services
                               join i in db.Set<Item>() on p.ItemId equals i.Id
                               where p.OrganizationId == orgId
                                  && p.IsDeleted != true
-                                 && rescueCarIds.Contains(p.WarehouseId.Value)
+                                 && rescueCarIds.Contains(p.WarehouseId ?? 0)
                                  && i.LatestExpirationDate != null
                                  && i.LatestExpirationDate <= warningLimit
                                  && i.LatestExpirationDate > now
@@ -198,7 +196,7 @@ namespace SULL.HospitalManagement.Services
                               join i in db.Set<Item>() on p.ItemId equals i.Id
                               where p.OrganizationId == orgId
                                  && p.IsDeleted != true
-                                 && rescueCarIds.Contains(p.WarehouseId.Value)
+                                 && rescueCarIds.Contains(p.WarehouseId ?? 0)
                                  && i.LatestExpirationDate != null
                                  && i.LatestExpirationDate <= now
                               select p.Id).Count();
@@ -206,7 +204,7 @@ namespace SULL.HospitalManagement.Services
                               join i in db.Set<Item>() on p.ItemId equals i.Id
                               where p.OrganizationId == orgId
                                  && p.IsDeleted != true
-                                 && rescueCarIds.Contains(p.WarehouseId.Value)
+                                 && rescueCarIds.Contains(p.WarehouseId ?? 0)
                                  && (i.AvailableStock ?? 0) < i.Cardinality
                               select p.Id).Count();
             int handover = 0;
@@ -234,10 +232,8 @@ namespace SULL.HospitalManagement.Services
                 })
                 .ToList();
 
-            // 7. Logs from Cache
-            // 7. Logs from Cache
-            string logCacheKey = $"Dashboard_Logs_{orgId}";
-            var logs = _cacheService.Get<List<Dictionary<string, string>>>(logCacheKey) ?? new List<Dictionary<string, string>>();
+            // 7. 从统一缓存获取日志
+            var logs = _hospitalCache.GetDashboardLogs<List<Dictionary<string, string>>>(orgId) ?? new List<Dictionary<string, string>>();
 
             var result = new
             {
@@ -249,8 +245,8 @@ namespace SULL.HospitalManagement.Services
                 logs
             };
 
-            // Cache data for 60 seconds
-            _cacheService.Add(cacheKey, JsonConvert.SerializeObject(result), 60);
+            // 缓存面板数据
+            _hospitalCache.SetDashboardData(orgId, result);
 
             return result;
         }
@@ -263,9 +259,8 @@ namespace SULL.HospitalManagement.Services
             {
                 lock (_logLock)
                 {
-                    string logCacheKey = $"Dashboard_Logs_{orgId}";
-                    // Use List<Dictionary<string, string>> to avoid anonymous type serialization issues
-                    var logs = _cacheService.Get<List<Dictionary<string, string>>>(logCacheKey) ?? new List<Dictionary<string, string>>();
+                    // 使用统一缓存管理日志
+                    var logs = _hospitalCache.GetDashboardLogs<List<Dictionary<string, string>>>(orgId) ?? new List<Dictionary<string, string>>();
 
                     logs.Insert(0, new Dictionary<string, string> {
                         { "time", DateTime.Now.ToString("HH:mm:ss") },
@@ -278,7 +273,7 @@ namespace SULL.HospitalManagement.Services
                         logs = logs.Take(50).ToList();
                     }
 
-                    _cacheService.AddObject(logCacheKey, logs);
+                    _hospitalCache.SetDashboardLogs(orgId, logs);
                 }
             }
             catch (Exception)

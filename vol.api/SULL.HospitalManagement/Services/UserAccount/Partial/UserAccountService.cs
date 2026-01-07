@@ -17,6 +17,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
 using SULL.HospitalManagement.IRepositories;
+using SULL.HospitalManagement.IServices;
 
 using VOL.Core.ManageUser;
 using VOL.Core.CacheManager;
@@ -25,23 +26,21 @@ namespace SULL.HospitalManagement.Services
 {
     public partial class UserAccountService
     {
+        private readonly IHospitalCacheService _hospitalCache;
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly IUserAccountRepository _repository;//访问数据库
-        private readonly ICacheService _cache;
+        private readonly IUserAccountRepository _repository;
 
         [ActivatorUtilitiesConstructor]
         public UserAccountService(
             IUserAccountRepository dbRepository,
             IHttpContextAccessor httpContextAccessor,
-            ICacheService cache
+            IHospitalCacheService hospitalCache
             )
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _repository = dbRepository;
-            _cache = cache;
-            //多租户会用到这init代码，其他情况可以不用
-            //base.Init(dbRepository);
+            _hospitalCache = hospitalCache;
         }
 
         public override WebResponseContent Add(SaveModel saveModel)
@@ -54,7 +53,7 @@ namespace SULL.HospitalManagement.Services
             saveModel.MainData["UserId"] = userId;
 
             // 获取Category
-            if (saveModel.MainData.TryGetValue("Category", out object categoryObj) && categoryObj != null)
+            if (saveModel.MainData.TryGetValue("Category", out object? categoryObj) && categoryObj != null)
             {
                 int category = categoryObj.ToString().GetInt();
                 var db = _repository.DbContext;
@@ -80,8 +79,7 @@ namespace SULL.HospitalManagement.Services
             {
                 if (newEntity.UserId != null && newEntity.Category != null)
                 {
-                    string cacheKey = $"UserAccount_{newEntity.UserId}_{newEntity.Category}_Account";
-                    _cache.AddObject(cacheKey, newEntity);
+                    _hospitalCache.SetUserAccount(newEntity.UserId.Value, newEntity.Category.Value, newEntity);
                 }
                 return new WebResponseContent(true);
             };

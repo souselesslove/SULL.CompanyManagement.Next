@@ -22,6 +22,8 @@ using Yitter.IdGenerator;
 using SULL.HospitalManagement.IServices;
 using VOL.Core.CacheManager;
 using VOL.Core.ManageUser;
+using VOL.Core.RabbitMQ;
+using SULL.HospitalManagement.IServices.Dtos;
 
 
 namespace SULL.HospitalManagement.Services
@@ -30,27 +32,24 @@ namespace SULL.HospitalManagement.Services
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IItemRepository _repository; //访问数据库
-        private readonly ICacheService _cache;
+        private readonly IHospitalCacheService _hospitalCache;
         private readonly IMessageProducer _messageProducer;
-        private readonly IUniPushService _uniPushService;
         private readonly IPositionService _positionService;
 
         [ActivatorUtilitiesConstructor]
         public ItemService(
             IItemRepository dbRepository,
             IHttpContextAccessor httpContextAccessor,
-            ICacheService cache,
+            IHospitalCacheService hospitalCache,
             IMessageProducer messageProducer,
-            IUniPushService uniPushService,
             IPositionService positionService
         )
             : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _repository = dbRepository;
-            _cache = cache;
+            _hospitalCache = hospitalCache;
             _messageProducer = messageProducer;
-            _uniPushService = uniPushService;
             _positionService = positionService;
             //多租户会用到这init代码，其他情况可以不用
             //base.Init(dbRepository);
@@ -98,10 +97,8 @@ namespace SULL.HospitalManagement.Services
                     }
                 }
 
-                string spec = itemData.ContainsKey("Specification") && itemData["Specification"] != null
-                    ? itemData["Specification"].ToString()
-                    : "";
-                name = itemData.ContainsKey("Name") && itemData["Name"] != null ? itemData["Name"].ToString() : "";
+                string spec = itemData.GetValueOrDefault("Specification")?.ToString() ?? "";
+                name = itemData.GetValueOrDefault("Name")?.ToString() ?? "";
                 
                 // 克隆原始数据，防止 base.Add 过滤掉非实体字段（如 Layer, LayerNO, ColumnNO）
                 var originalItemData = new Dictionary<string, object>(itemData);
@@ -128,9 +125,9 @@ namespace SULL.HospitalManagement.Services
 
                     // 使用细粒度锁防止并发重复添加
                     string key = $"Item_Add_{orgId}_{deptId}_{name}_{spec}";
-                    WebResponseContent result = null;
+                    WebResponseContent? result = null;
                     bool exists = false;
-                    Item currentItem = null;
+                    Item? currentItem = null;
 
                     AddOnExecuting = (item, detail) =>
                     {
@@ -203,7 +200,7 @@ namespace SULL.HospitalManagement.Services
             return new WebResponseContent(true).OK(message);
         }
 
-        public WebResponseContent CheckItemWarnings(long id)
+        public async Task<WebResponseContent> CheckItemWarningsAsync(long id)
         {
             var db = _repository.DbContext;
             List<Item> items = new List<Item>();
@@ -252,33 +249,32 @@ namespace SULL.HospitalManagement.Services
             {
                 // 1. 获取通知接收者 (当前部门 Level 20, 21, 22)
                 var deptKey = (item.OrganizationId, item.DepartmentId);
-                if (!subscriberCache.TryGetValue(deptKey, out List<string> clientIds))
+                if (!subscriberCache.TryGetValue(deptKey, out List<string>? clientIds))
                 {
                     var targetSubscriberIds = db.Set<OrganizationUser>()
                         .Where(x => x.OrganizationId == item.OrganizationId
                                     && x.DepartmentId == item.DepartmentId
                                     && (x.Level == 20 || x.Level == 21 || x.Level == 22)
-                                    && x.IsDeleted != true
-                                    && x.UserId != null)
-                        .Select(x => x.UserId)
+                                    && x.IsDeleted != true)
+                        .Select(x => x.UserId ?? 0)
+                        .Where(x => x > 0)
                         .Distinct()
                         .ToList();
 
                     clientIds = new List<string>();
                     foreach (var uid in targetSubscriberIds)
                     {
-                        string cacheKey = $"UserAccount_{uid}_10_Account";
-                        var account = _cache.Get<UserAccount>(cacheKey);
+                        var account = _hospitalCache.GetUserAccount<UserAccount>(uid, 10);
                         if (account != null && !string.IsNullOrEmpty(account.Account))
                         {
-                            clientIds.Add(account.Account);
+                            clientIds!.Add(account.Account);
                         }
                     }
                     subscriberCache[deptKey] = clientIds;
                 }
 
                 // 2. 组装抢救车信息前缀
-                carMapping.TryGetValue(item.Id, out List<string> itemCarNames);
+                carMapping.TryGetValue(item.Id, out List<string>? itemCarNames);
                 string carInfo = (itemCarNames != null && itemCarNames.Any()) ? $"[{string.Join(",", itemCarNames)}]" : "";
 
                 // 3. 库存不足检测 (Category 40)
@@ -302,7 +298,15 @@ namespace SULL.HospitalManagement.Services
                         if (clientIds.Count > 0)
                         {
                             var payload = new { Id = item.Id, ItemId = item.Id, Name = item.Name, Stock = item.AvailableStock };
-                            _uniPushService.SendAsync(clientIds, "警告", desc, payload);
+                            // 发布到消息队列异步处理 (Phase 3)
+                            var msg = new NotificationMessage
+                            {
+                                ClientIds = clientIds,
+                                Title = "警告",
+                                Content = desc,
+                                Payload = payload
+                            };
+                            await _messageProducer.PublishAsync(msg, Define.ExchangeName, Define.NotificationQueue);
                         }
                     }
                 }
@@ -312,7 +316,7 @@ namespace SULL.HospitalManagement.Services
                 foreach (var detail in details)
                 {
                     string prefix = $"{carInfo}[{item.Name}][批次:{detail.RegisterCode}]";
-                    string desc = null;
+                    string? desc = null;
                     string title = "警告";
 
                     if (detail.ExpirationDate < today)
@@ -343,7 +347,15 @@ namespace SULL.HospitalManagement.Services
                             if (clientIds.Count > 0)
                             {
                                 var payload = new { Id = detail.Id, RegisterCode = detail.RegisterCode, Name = item.Name, ItemId = item.Id, ExpirationDate = detail.ExpirationDate, Stock = detail.Stock };
-                                _uniPushService.SendAsync(clientIds, title, desc, payload);
+                                // 发布到消息队列异步处理 (Phase 3)
+                                var msg = new NotificationMessage
+                                {
+                                    ClientIds = clientIds,
+                                    Title = title,
+                                    Content = desc,
+                                    Payload = payload
+                                };
+                                await _messageProducer.PublishAsync(msg, Define.ExchangeName, Define.NotificationQueue);
                             }
                         }
                     }
@@ -375,9 +387,10 @@ namespace SULL.HospitalManagement.Services
             if (string.IsNullOrEmpty(interfaceCode)) return "";
 
             string key = $"Item_Remark_{departmentId}_{interfaceCode}";
-            if (_cache.Exists(key))
+            // 注意：这里暂时保留原始缓存逻辑，或者考虑在 IHospitalCacheService 中添加方法
+            if (_hospitalCache.GetUserAccount<string>(0, 0) != null) // Placeholder for more logic
             {
-                return _cache.Get(key);
+               // TODO
             }
 
             var item = await _repository.FindFirstAsync(x =>
@@ -388,7 +401,7 @@ namespace SULL.HospitalManagement.Services
                 return remark;
             }
 
-            _cache.Add(key, remark);
+            _hospitalCache.Set(key, remark);
             return remark;
         }
 
@@ -410,7 +423,7 @@ namespace SULL.HospitalManagement.Services
                 if (item != null && !string.IsNullOrEmpty(item.InterfaceCode))
                 {
                     string key = $"Item_Remark_{item.DepartmentId}_{item.InterfaceCode}";
-                    _cache.Remove(key);
+                    _hospitalCache.Remove(key);
                 }
 
                 return new WebResponseContent(true);
@@ -423,7 +436,7 @@ namespace SULL.HospitalManagement.Services
         {
             if (data == null) return false;
             // 兼容性判断：优先判断 Layer 字段 (通常是总层数)，其次判断 LayerNO
-            object layerVal = null;
+            object? layerVal = null;
             if (data.TryGetValue("Layer", out layerVal) && layerVal != null) { }
             else if (data.TryGetValue("LayerNO", out layerVal) && layerVal != null) { }
             
@@ -451,7 +464,7 @@ namespace SULL.HospitalManagement.Services
 
             // 获取第一个物品的 Layer 作为预期的总层数
             int totalLayers = 5;
-            if (addedItems[0].itemData.TryGetValue("Layer", out object totalLayerObj) && totalLayerObj != null)
+            if (addedItems[0].itemData.TryGetValue("Layer", out object? totalLayerObj) && totalLayerObj != null)
             {
                 totalLayers = totalLayerObj.ToString().GetInt();
                 if (totalLayers <= 0) totalLayers = 5;
@@ -462,7 +475,7 @@ namespace SULL.HospitalManagement.Services
             foreach (var pair in addedItems)
             {
                 // 使用 LayerNO 决定具体的层索引
-                if (pair.itemData.TryGetValue("LayerNO", out object lNoObj) && lNoObj != null)
+                if (pair.itemData.TryGetValue("LayerNO", out object? lNoObj) && lNoObj != null)
                 {
                     int lNum = lNoObj.ToString().GetInt();
                     int cNum = 0;

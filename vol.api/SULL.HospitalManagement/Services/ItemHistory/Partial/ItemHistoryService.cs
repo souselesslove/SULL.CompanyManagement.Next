@@ -28,7 +28,7 @@ namespace SULL.HospitalManagement.Services
 {
     public partial class ItemHistoryService
     {
-        private readonly ICacheService _cache;
+        private readonly IHospitalCacheService _hospitalCache;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IItemHistoryRepository _repository;
         private readonly IMessageProducer _messageProducer;
@@ -40,7 +40,7 @@ namespace SULL.HospitalManagement.Services
             IHttpContextAccessor httpContextAccessor,
             IMessageProducer messageProducer,
             IDashboardService dashboardService,
-            ICacheService cache
+            IHospitalCacheService hospitalCache
             )
         : base(dbRepository)
         {
@@ -48,14 +48,12 @@ namespace SULL.HospitalManagement.Services
             _repository = dbRepository;
             _messageProducer = messageProducer;
             _dashboardService = dashboardService;
-            _cache = cache;
-            //多租户会用到这init代码，其他情况可以不用
-            //base.Init(dbRepository);
+            _hospitalCache = hospitalCache;
         }
         public override WebResponseContent Add(SaveModel saveModel)
         {
             long cartId = 0;
-            if (saveModel.MainData.TryGetValue("CartId", out object cartIdObj) && cartIdObj != null)
+            if (saveModel.MainData.TryGetValue("CartId", out object? cartIdObj) && cartIdObj != null)
             {
                 cartId = cartIdObj.ToString().GetLong();
                 if (cartId <= 0)
@@ -67,7 +65,7 @@ namespace SULL.HospitalManagement.Services
             AddOnExecuting = (itemHistory, context) =>
             {
                 var db = _repository.DbContext;
-                ItemDetail itemDetail = null;
+                ItemDetail? itemDetail = null;
 
                 // 1. 处理ItemDetail
                 if (itemHistory.ItemDetailId > 0)
@@ -98,7 +96,7 @@ namespace SULL.HospitalManagement.Services
                 if (item != null)
                 {
                     item.AvailableStock = (item.AvailableStock ?? 0) + itemHistory.ChangeCounter;
-                    if (itemDetail != null && itemDetail.ExpirationDate != null)
+                    if (itemDetail != null)
                     {
                         if (item.LatestExpirationDate == null || itemDetail.ExpirationDate < item.LatestExpirationDate)
                         {
@@ -117,11 +115,11 @@ namespace SULL.HospitalManagement.Services
                     {
                         // 优化：直接从缓存获取抢救状态
                         string key = $"Rescue_Cart_{cartId}";
-                        var rescue = _cache.Get<Rescue>(key);
+                        var rescue = _hospitalCache.Get<Rescue>(key);
                         
                         if (rescue != null && rescue.Status == 0)
                         {
-                            var rescueItem = db.Set<RescueItem>().FirstOrDefault(x => x.RescueId == rescue.Id && x.ItemId == item.Id && x.ItemDetailId == itemDetail.Id);
+                            var rescueItem = db.Set<RescueItem>().FirstOrDefault(x => x.RescueId == rescue.Id && x.ItemId == item!.Id && x.ItemDetailId == itemDetail!.Id);
                             int qty = Math.Abs(itemHistory.ChangeCounter);
                             if (rescueItem != null)
                             {
@@ -129,8 +127,8 @@ namespace SULL.HospitalManagement.Services
                                 rescueItem.CreationTime = DateTime.Now;
                                 rescueItem.Creator = UserContext.Current.UserTrueName;
                                 rescueItem.CreatorId = UserContext.Current.UserId;
-                                rescueItem.ItemDetailId = itemDetail.Id;
-                                rescueItem.ItemName = item.Name;
+                                rescueItem.ItemDetailId = itemDetail!.Id;
+                                rescueItem.ItemName = item!.Name;
                                 db.Entry(rescueItem).State = EntityState.Modified;
                             }
                             else
@@ -139,8 +137,8 @@ namespace SULL.HospitalManagement.Services
                                 {
                                     Id = YitIdHelper.NextId(),
                                     RescueId = rescue.Id,
-                                    ItemId = item.Id,
-                                    ItemDetailId = itemDetail.Id,
+                                    ItemId = item!.Id,
+                                    ItemDetailId = itemDetail!.Id,
                                     Qty = qty,
                                     CreationTime = DateTime.Now,
                                     Creator = UserContext.Current.UserTrueName,
@@ -195,7 +193,7 @@ namespace SULL.HospitalManagement.Services
                             {
                                 { "Category", 20 }, // 库存预警Category=20
                                 { "Description", $"{carInfo}物品[{item.Name}]规格[{item.Specification}]发生{(itemHistory.ChangeCounter > 0 ? "入库" : "出库")}{Math.Abs(itemHistory.ChangeCounter)}，当前库存[{item.AvailableStock}]，低于基数[{item.Cardinality}]，请及时补货" },
-                                { "RelatedId", itemDetail.Id },
+                                { "RelatedId", itemDetail!.Id },
                             }
                         };
                         _messageProducer.PublishAsync(todo, Define.ExchangeName, Define.TodoQueue);
@@ -209,7 +207,7 @@ namespace SULL.HospitalManagement.Services
                 return new WebResponseContent(true);
             };
             // 使用细粒度锁防止并发库存更新不一致
-            if (saveModel.MainData.TryGetValue("ItemDetailId", out object itemDetailIdObj) && itemDetailIdObj != null)
+            if (saveModel.MainData.TryGetValue("ItemDetailId", out object? itemDetailIdObj) && itemDetailIdObj != null)
             {
                 string key = $"ItemHistory_Add_{itemDetailIdObj}";
                 return KeyLock.Lock(key, () =>
@@ -282,13 +280,19 @@ namespace SULL.HospitalManagement.Services
                 }
             }
 
-            // 获取数据并返回
-            var list = query.OrderByDescending(x => x.CreationTime).Take(50).ToList();
+            // 获取总数
+            int total = query.Count();
+
+            // 分页并返回
+            var list = query.OrderByDescending(x => x.CreationTime)
+                            .Skip((options.Page - 1) * options.Rows)
+                            .Take(options.Rows)
+                            .ToList();
 
             return new WebResponseContent().OK(null, new
             {
                 rows = list,
-                total = list.Count
+                total = total
             });
         }
 
@@ -298,9 +302,9 @@ namespace SULL.HospitalManagement.Services
         public class ItemHistoryStatistics
         {
             public long ItemId { get; set; }
-            public string ItemName { get; set; }
-            public string Specification { get; set; }
-            public string RegisterCode { get; set; }
+            public string ItemName { get; set; } = string.Empty;
+            public string Specification { get; set; } = string.Empty;
+            public string RegisterCode { get; set; } = string.Empty;
             public DateTime? ExpirationDate { get; set; }
             public int ChangeCounter { get; set; }
             public int Stock { get; set; }
@@ -309,7 +313,7 @@ namespace SULL.HospitalManagement.Services
 
         public WebResponseContent SetAllStock(SaveModel saveModel)
         {
-            if (!saveModel.MainData.TryGetValue("WarehouseId", out object warehouseIdObj) || warehouseIdObj == null)
+            if (!saveModel.MainData.TryGetValue("WarehouseId", out object? warehouseIdObj) || warehouseIdObj == null)
             {
                  return new WebResponseContent().Error("无效的参数: WarehouseId");
             }
@@ -330,17 +334,13 @@ namespace SULL.HospitalManagement.Services
                 return new WebResponseContent().Error("当前仓库未配置任何物品，无需补货");
             }
 
+            var items = db.Set<Item>().AsNoTracking().Where(x => itemIds.Contains(x.Id)).ToList();
             int successCount = 0;
             int failCount = 0;
             System.Collections.Generic.List<string> errorDetails = new System.Collections.Generic.List<string>();
 
-            foreach (var itemId in itemIds)
+            foreach (var item in items)
             {
-                if (itemId == null) continue;
-
-                var item = db.Set<Item>().AsNoTracking().FirstOrDefault(x => x.Id == itemId);
-                if (item == null) continue;
-
                 int available = item.AvailableStock ?? 0;
                 int cardinality = item.Cardinality;
 
@@ -352,7 +352,7 @@ namespace SULL.HospitalManagement.Services
                         // 寻找最新且有效的ItemDetail
                         var detail = db.Set<ItemDetail>()
                             .AsNoTracking()
-                            .Where(x => x.ItemId == itemId)
+                            .Where(x => x.ItemId == item.Id)
                             .OrderByDescending(x => x.CreationTime)
                             .FirstOrDefault();
 

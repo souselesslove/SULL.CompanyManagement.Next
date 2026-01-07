@@ -11,9 +11,12 @@ using VOL.Core.Extensions.AutofacManager;
 using VOL.Entity.DomainModels;
 using System.Linq;
 using VOL.Core.Utilities;
+using SULL.HospitalManagement.IServices.Dtos;
+using VOL.Core.RabbitMQ;
 using System.Linq.Expressions;
 using VOL.Core.Extensions;
 using Microsoft.EntityFrameworkCore;
+using SULL.HospitalManagement.IServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
 using SULL.HospitalManagement.IRepositories;
@@ -29,25 +32,25 @@ namespace SULL.HospitalManagement.Services
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IShiftScheduleRepository _repository;//访问数据库
-        private readonly ICacheService _cache;
+        private readonly IHospitalCacheService _hospitalCache;
         private readonly IUserAccountRepository _userAccountRepository;
-        private readonly IUniPushService _uniPushService;
+        private readonly IMessageProducer _messageProducer;
 
         [ActivatorUtilitiesConstructor]
         public ShiftScheduleService(
             IShiftScheduleRepository dbRepository,
             IHttpContextAccessor httpContextAccessor,
-            ICacheService cache,
+            IHospitalCacheService hospitalCache,
             IUserAccountRepository userAccountRepository,
-            IUniPushService uniPushService
+            IMessageProducer messageProducer
             )
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _repository = dbRepository;
-            _cache = cache;
+            _hospitalCache = hospitalCache;
             _userAccountRepository = userAccountRepository;
-            _uniPushService = uniPushService;
+            _messageProducer = messageProducer;
         }
 
         public override PageGridData<ShiftSchedule> GetPageData(PageDataOptions options)
@@ -55,17 +58,15 @@ namespace SULL.HospitalManagement.Services
             var user = UserContext.Current;
             var db = _repository.DbContext;
 
-            // 获取当前用户的职级信息 (加入缓存逻辑)
-            string cacheKey = $"UserLevel_{user.UserId}";
-            int level = _cache.Get(cacheKey).GetInt();
+            // 获取当前用户的职级信息 (使用统一缓存服务)
+            int level = _hospitalCache.GetUserLevel(user.UserId);
             
-            if (level == 0) // 由于 GetInt() 在找不到时返回 0，且 Level 通常 > 0 (如果是 -1 代表缓存过不存在)
+            if (level == 0) // 如果缓存不存在
             {
                 var orgUserInfo = db.Set<OrganizationUser>()
                     .FirstOrDefault(x => x.UserId == user.UserId && x.IsDeleted != true);
                 level = orgUserInfo?.Level ?? -1; 
-                // 缓存一个月 (3600 * 24 * 30 秒)
-                _cache.Add(cacheKey, level.ToString(), 3600 * 24 * 30); 
+                _hospitalCache.SetUserLevel(user.UserId, level);
             }
 
             // 检测前端是否传递了时间范围（ScheduleDate）或特定人员（UserId）
@@ -125,7 +126,7 @@ namespace SULL.HospitalManagement.Services
                 if (schedule.UserId > 0)
                 {
                     string monthStr = schedule.ScheduleDate.ToString("M月");
-                    _ = NotifyUserAsync(schedule.UserId.Value, "排班更新通知", $"您的{monthStr}排班信息有更新，请及时确认，以免耽误正常工作。");
+                    NotifyUserAsync(schedule.UserId.Value, "排班更新通知", $"您的{monthStr}排班信息有更新，请及时确认，以免耽误正常工作。").GetAwaiter().GetResult();
                 }
                 return new WebResponseContent(true);
             };
@@ -139,7 +140,7 @@ namespace SULL.HospitalManagement.Services
                 if (schedule.UserId > 0)
                 {
                     string monthStr = schedule.ScheduleDate.ToString("M月");
-                    _ = NotifyUserAsync(schedule.UserId.Value, "排班更新通知", $"您的{monthStr}排班信息有更新，请及时确认，以免耽误正常工作。");
+                    NotifyUserAsync(schedule.UserId.Value, "排班更新通知", $"您的{monthStr}排班信息有更新，请及时确认，以免耽误正常工作。").GetAwaiter().GetResult();
                 }
                 return new WebResponseContent(true);
             };
@@ -162,7 +163,7 @@ namespace SULL.HospitalManagement.Services
                     if (schedule.UserId > 0)
                     {
                         string monthStr = schedule.ScheduleDate.ToString("M月");
-                        _ = NotifyUserAsync(schedule.UserId.Value, "排班取消通知", $"您的{monthStr}排班信息有更新（已取消），请及时确认，以免耽误正常工作。");
+                        NotifyUserAsync(schedule.UserId.Value, "排班取消通知", $"您的{monthStr}排班信息有更新（已取消），请及时确认，以免耽误正常工作。").GetAwaiter().GetResult();
                     }
                 }
                 return new WebResponseContent(true);
@@ -174,16 +175,18 @@ namespace SULL.HospitalManagement.Services
         {
             if (userId <= 0) return;
 
-            string accountCacheKey = $"UserAccount_{userId}_10_Account";
-            string userAccount = null;
+            // 限流：同类型的提醒，5分钟内只提醒一次
+            string rateLimitKey = $"ShiftSchedule_Notify_{userId}_{title}";
+            if (_hospitalCache.Get<string>(rateLimitKey) != null)
+            {
+                return;
+            }
 
             // 1. 尝试从缓存获取
-            var cachedAccount = _cache.Get<UserAccount>(accountCacheKey);
-            if (cachedAccount != null)
-            {
-                userAccount = cachedAccount.Account;
-            }
-            else
+            var cachedAccount = _hospitalCache.GetUserAccount<UserAccount>(userId, 10);
+            string? userAccount = cachedAccount?.Account;
+
+            if (string.IsNullOrEmpty(userAccount))
             {
                 // 2. 查库
                 var account = await _userAccountRepository.DbContext.Set<UserAccount>()
@@ -191,13 +194,23 @@ namespace SULL.HospitalManagement.Services
                 if (account != null)
                 {
                     userAccount = account.Account;
-                    _cache.AddObject(accountCacheKey, account);
+                    _hospitalCache.SetUserAccount(userId, 10, account);
                 }
             }
 
             if (!string.IsNullOrEmpty(userAccount))
             {
-                await _uniPushService.SendAsync(new List<string> { userAccount }, title, content);
+                // 3. 发布到消息队列异步处理
+                var msg = new NotificationMessage
+                {
+                    ClientIds = new List<string> { userAccount },
+                    Title = title,
+                    Content = content
+                };
+                await _messageProducer.PublishAsync(msg, Define.ExchangeName, Define.NotificationQueue);
+
+                // 设置限流标志，过期时间为300秒（5分钟）
+                _hospitalCache.Set(rateLimitKey, "1", 300);
             }
         }
     }

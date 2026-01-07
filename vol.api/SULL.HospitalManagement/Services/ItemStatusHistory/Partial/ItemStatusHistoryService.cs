@@ -44,7 +44,7 @@ namespace SULL.HospitalManagement.Services
             {
                 var db = _repository.DbContext;
                 string operatorName = UserContext.Current.UserTrueName;
-                string statusName = GetStatusName(statusHistory.Status, statusHistory.Category.Value);
+                string statusName = GetStatusName(statusHistory.Status, statusHistory.Category ?? 10);
 
                 if (statusHistory.Category == 10) // 设备 (Item)
                 {

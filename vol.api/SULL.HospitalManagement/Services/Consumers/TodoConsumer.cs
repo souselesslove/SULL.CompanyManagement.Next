@@ -23,9 +23,11 @@ public class TodoConsumer : RabbitConsumerBase
         try
         {
             var saveModel = JsonSerializer.Deserialize<SaveModel>(messageJson);
-            if (saveModel.MainData.TryGetValue("operate", out object operate) && operate?.ToString() == "complete")
+            if (saveModel == null || saveModel.MainData == null) return;
+
+            if (saveModel.MainData.TryGetValue("operate", out object? operate) && operate?.ToString() == "complete")
             {
-                if (saveModel.MainData.TryGetValue("todoListId", out object todoListIdObj) && long.TryParse(todoListIdObj.ToString(), out long todoListId))
+                if (saveModel.MainData.TryGetValue("todoListId", out object? todoListIdObj) && todoListIdObj != null && long.TryParse(todoListIdObj.ToString(), out long todoListId))
                 {
                     using (var scope = _serviceProvider.CreateScope())
                     {
@@ -46,7 +48,7 @@ public class TodoConsumer : RabbitConsumerBase
             {
                 _logger.LogInformation("处理消息：{0}", messageJson);
                 // 如果接收人未指定，则需要加入消息发送对象的处理逻辑，目前先全部发给管理员
-                if(saveModel.MainData.TryGetValue("LatestAssignUserId", out object receiverObj) && int.TryParse(receiverObj.ToString(), out int receiver) && receiver > 0){
+                if(saveModel.MainData.TryGetValue("LatestAssignUserId", out object? receiverObj) && receiverObj != null && int.TryParse(receiverObj.ToString(), out int receiver) && receiver > 0){
                 } else {
                     saveModel.MainData.Add("LatestAssignUserId", 1);
                     saveModel.MainData.Add("LatestAssignUser", "管理员");

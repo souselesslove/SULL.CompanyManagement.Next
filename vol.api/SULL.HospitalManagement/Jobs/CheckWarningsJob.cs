@@ -45,7 +45,7 @@ namespace SULL.HospitalManagement.Jobs
 
                 try
                 {
-                    itemService.CheckItemWarnings(id);
+                    await itemService.CheckItemWarningsAsync(id);
                 }
                 catch (Exception ex)
                 {

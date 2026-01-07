@@ -9,7 +9,7 @@ namespace SULL.HospitalManagement.IServices.Handover.Dtos
         /// <summary>
         /// 多个班次用逗号分隔
         /// </summary>
-        public string ShiftNames { get; set; }
+        public string ShiftNames { get; set; } = string.Empty;
         public DateTime ShiftTime { get; set; }
     }
 }

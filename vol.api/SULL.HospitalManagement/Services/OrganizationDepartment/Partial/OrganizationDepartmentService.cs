@@ -33,14 +33,17 @@ namespace SULL.HospitalManagement.Services
         private readonly IOrganizationUserRepository _organizationUserRepository;
         private readonly IOrganizationRepository _organizationRepository;
 
-        private readonly IOrganizationUserService _organizationUserService;
+
         private readonly IRegisterCodeRepository _registerCodeRepository;
         private readonly IDashboardService _dashboardService;
 
         [ActivatorUtilitiesConstructor]
         public OrganizationDepartmentService(
             IOrganizationDepartmentRepository dbRepository,
-            IHttpContextAccessor httpContextAccessor, IOrganizationUserRepository organizationUserRepository, IOrganizationRepository organizationRepository, IOrganizationUserService organizationUserService, IRegisterCodeRepository registerCodeRepository,
+            IHttpContextAccessor httpContextAccessor, 
+            IOrganizationUserRepository organizationUserRepository, 
+            IOrganizationRepository organizationRepository, 
+            IRegisterCodeRepository registerCodeRepository,
             IDashboardService dashboardService)
         : base(dbRepository)
         {
@@ -48,11 +51,9 @@ namespace SULL.HospitalManagement.Services
             _organizationUserRepository = organizationUserRepository;
             _organizationRepository = organizationRepository;
             _repository = dbRepository;
-            _organizationUserService = organizationUserService;
+
             _registerCodeRepository = registerCodeRepository;
             _dashboardService = dashboardService;
-            //多租户会用到这init代码，其他情况可以不用
-            //base.Init(dbRepository);
         }
 
         public override WebResponseContent Add(SaveModel saveModel)
@@ -62,7 +63,7 @@ namespace SULL.HospitalManagement.Services
             {
                 return new WebResponseContent().Error("请先选择或加入一个机构");
             }
-            string name = saveModel.MainData["Name"]?.ToString();
+            string? name = saveModel.MainData["Name"]?.ToString();
             
             base.AddOnExecute = model =>
             {
@@ -97,26 +98,21 @@ namespace SULL.HospitalManagement.Services
                     // 2. 如果人员之前属于其他部门，更新旧部门的人数
                     if (oldDeptId.HasValue && oldDeptId.Value > 0 && oldDeptId.Value != dept.Id)
                     {
-                        var oldDept = _repository.FindFirst(x => x.Id == oldDeptId.Value);
-                        if (oldDept != null)
-                        {
-                            oldDept.UserCounter = Math.Max(0, (oldDept.UserCounter ?? 0) - 1);
-                            _repository.Update(oldDept, true);
-                        }
+                        _ = this.UpdateUserCounterAsync(oldDeptId.Value, -1);
                     }
                 }
 
                 // 3. 更新机构的部门数量
                 if (dept.OrganizationId > 0)
                 {
-                    var o = _organizationRepository.FindFirst(x => x.Id == dept.OrganizationId);
-                    if (o != null)
+                    var org = _organizationRepository.FindFirst(x => x.Id == dept.OrganizationId);
+                    if (org != null)
                     {
-                        o.DepartmentCounter = (o.DepartmentCounter ?? 0) + 1;
-                        o.LastModifierId = UserContext.Current.UserId;
-                        o.LastModifier = UserContext.Current.UserName;
-                        o.LastModificationTime = DateTime.Now;
-                        _organizationRepository.Update(o, true);
+                        org.DepartmentCounter = Math.Max(0, (org.DepartmentCounter ?? 0) + 1);
+                        org.LastModifierId = UserContext.Current.UserId;
+                        org.LastModifier = UserContext.Current.UserTrueName;
+                        org.LastModificationTime = DateTime.Now;
+                        _organizationRepository.Update(org, true);
                     }
                 }
 
@@ -176,8 +172,7 @@ namespace SULL.HospitalManagement.Services
             // check validates
             if (saveModel.MainData.ContainsKey("DutyUserId") || saveModel.MainData.ContainsKey("DutyUser"))
             {
-                object idObj = null;
-                if (saveModel.MainData.TryGetValue("Id", out idObj))
+                if (saveModel.MainData.TryGetValue("Id", out object? idObj))
                 {
                     long id = idObj.ToString().GetLong();
                     var entity = _repository.FindFirst(x => x.Id == id);
@@ -185,7 +180,7 @@ namespace SULL.HospitalManagement.Services
                     {
                         // 检查值是否真正发生改变
                         bool isChanged = false;
-                        if (saveModel.MainData.TryGetValue("DutyUserId", out object newIdObj))
+                        if (saveModel.MainData.TryGetValue("DutyUserId", out object? newIdObj))
                         {
                             int? newId = newIdObj == null || string.IsNullOrEmpty(newIdObj.ToString()) ? (int?)null : newIdObj.ToString().GetInt();
                             if (entity.DutyUserId != newId) isChanged = true;
@@ -246,6 +241,20 @@ namespace SULL.HospitalManagement.Services
             pageGridData.total = await qry.CountAsync(cancellationToken);
             pageGridData.rows = await qry.ToListAsync(cancellationToken);
             return pageGridData;
+        }
+
+        public virtual async Task UpdateUserCounterAsync(long deptId, int delta)
+        {
+            var dept = _repository.FindFirst(x => x.Id == deptId);
+            if (dept != null)
+            {
+                dept.UserCounter = Math.Max(0, (dept.UserCounter ?? 0) + delta);
+                dept.LastModifierId = UserContext.Current.UserId;
+                dept.LastModifier = UserContext.Current.UserTrueName;
+                dept.LastModificationTime = DateTime.Now;
+                _repository.Update(dept, true);
+            }
+            await Task.CompletedTask;
         }
     }
 }

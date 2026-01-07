@@ -30,21 +30,18 @@ namespace SULL.HospitalManagement.Services
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IPositionRepository _repository;//访问数据库
-        private readonly ICacheService _cache;
         private readonly IMessageProducer _messageProducer;
 
         [ActivatorUtilitiesConstructor]
         public PositionService(
             IPositionRepository dbRepository,
             IHttpContextAccessor httpContextAccessor,
-            ICacheService cache,
             IMessageProducer messageProducer
             )
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _repository = dbRepository;
-            _cache = cache;
             _messageProducer = messageProducer;
             //多租户会用到这init代码，其他情况可以不用
             //base.Init(dbRepository);
@@ -73,7 +70,7 @@ namespace SULL.HospitalManagement.Services
             };
 
             // 当入参包含Category=10时，表示是添加抢救车，添加完抢救车后，还需要根据入参的Floor层数，添加对应的每一层信息
-            if (saveModel.MainData.TryGetValue("Category", out object category) && category?.ToString() == "10")
+            if (saveModel.MainData.TryGetValue("Category", out object? category) && category?.ToString() == "10")
             {
                 var floor = saveModel.MainData["FloorId"].GetInt();
                 AddOnExecuted = (position, response) =>
@@ -111,7 +108,7 @@ namespace SULL.HospitalManagement.Services
                     return new WebResponseContent(true);
                 };
             }
-            if (saveModel.MainData.TryGetValue("Category", out object catObj) && catObj?.ToString() == "10")
+            if (saveModel.MainData.TryGetValue("Category", out object? catObj) && catObj?.ToString() == "10")
             {
                 // 使用细粒度锁防止重复添加抢救车
                 string key = $"Position_Add_10_{saveModel.MainData["OrganizationId"]}_{saveModel.MainData["DepartmentId"]}_{saveModel.MainData["DisplayName"]}";
@@ -126,7 +123,7 @@ namespace SULL.HospitalManagement.Services
         public override WebResponseContent Update(SaveModel saveModel)
         {
             // 当更新的内容是分层时Category=100，需要检测SerialId(分隔数量)的变化
-            if (saveModel.MainData.TryGetValue("Id", out object idObj) && saveModel.MainData.TryGetValue("SerialId", out object serialIdObj))
+            if (saveModel.MainData.TryGetValue("Id", out object? idObj) && saveModel.MainData.TryGetValue("SerialId", out object? serialIdObj))
             {
                 if (long.TryParse(idObj.ToString(), out long id))
                 {
@@ -294,7 +291,7 @@ namespace SULL.HospitalManagement.Services
 
             var itemCounter = items.Count;
             // 总价格 = SUM(单价 * 库存) (注意：这里假设Price是单价，AvailableStock是总库存)
-            var priceCounter = items.Sum(x => (long)x.Price * x.Stock); 
+            var priceCounter = items.Sum(x => x.Price * x.Stock); 
             var abnormalStock = items.Count(x => x.Stock < x.Cardinality);
             var abnormalExpiry = items.Count(x => x.ExpirationDate != null && x.ExpirationDate <= expiryThreshold);
 
@@ -321,8 +318,10 @@ namespace SULL.HospitalManagement.Services
             var carIds = cars.Select(x => x.Id).ToList();
 
             // 2. 获取抢救车上绑定的所有物品位置信息
-            var slots = _repository.Find(x => x.WarehouseId != null && carIds.Contains(x.WarehouseId.Value) && x.ItemId != null && x.IsDeleted != true)
-                                   .Select(x => new { WarehouseId = x.WarehouseId.Value, ItemId = x.ItemId.Value })
+            var slots = _repository.Find(x => x.WarehouseId != null && x.ItemId != null && x.IsDeleted != true)
+                                   .ToList()
+                                   .Where(x => carIds.Contains(x.WarehouseId!.Value))
+                                   .Select(x => new { WarehouseId = x.WarehouseId!.Value, ItemId = x.ItemId!.Value })
                                    .ToList();
 
             if (slots.Count == 0) return new WebResponseContent().OK(null, new List<object>());
@@ -377,7 +376,7 @@ namespace SULL.HospitalManagement.Services
                             }
                             if (isExpiryAbnormal)
                             {
-                                var days = (item.LatestExpirationDate.Value - now).TotalDays;
+                                var days = (item.LatestExpirationDate!.Value - now).TotalDays;
                                 int remainingDays = (int)Math.Ceiling(days);
                                 remainingDays = remainingDays < 0 ? 0 : remainingDays;
                                 remarks.Add($"剩余有效期不足{remainingDays}天");

@@ -20,6 +20,7 @@ using VOL.Core.ManageUser;
 using VOL.Core.CacheManager;
 using Microsoft.AspNetCore.Http;
 using SULL.HospitalManagement.IRepositories;
+using SULL.HospitalManagement.IServices;
 
 namespace SULL.HospitalManagement.Services
 {
@@ -27,29 +28,29 @@ namespace SULL.HospitalManagement.Services
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IDbConfigRepository _repository; //访问数据库
-        private readonly ICacheService _cacheService;
-        private const string CacheKey = "DB_CONFIG_CACHE";
+        private readonly IHospitalCacheService _hospitalCache;
 
         [ActivatorUtilitiesConstructor]
         public DbConfigService(
             IDbConfigRepository dbRepository,
             IHttpContextAccessor httpContextAccessor,
-            ICacheService cacheService
+            IHospitalCacheService hospitalCache
             )
         : base(dbRepository)
         {
             _httpContextAccessor = httpContextAccessor;
             _repository = dbRepository;
-            _cacheService = cacheService;
+            _hospitalCache = hospitalCache;
         }
 
         private List<DbConfig> GetCacheConfigs()
         {
-            var data = _cacheService.Get<List<DbConfig>>(CacheKey);
+            // 使用统一缓存获取数据库配置
+            var data = _hospitalCache.GetDbConfigs<List<DbConfig>>();
             if (data == null)
             {
                 data = _repository.Find(x => x.IsDeleted != true);
-                _cacheService.AddObject(CacheKey, data);
+                _hospitalCache.SetDbConfigs(data);
             }
             return data;
         }
@@ -105,7 +106,7 @@ namespace SULL.HospitalManagement.Services
         {
             AddOnExecuted = (config, response) =>
             {
-                _cacheService.Remove(CacheKey);
+                _hospitalCache.RemoveDbConfigs();
                 return new WebResponseContent(true);
             };
             return base.Add(saveModel);
@@ -115,7 +116,7 @@ namespace SULL.HospitalManagement.Services
         {
             UpdateOnExecuted = (config, obj, x, x1) =>
             {
-                _cacheService.Remove(CacheKey);
+                _hospitalCache.RemoveDbConfigs();
                 return new WebResponseContent(true);
             };
             return base.Update(saveModel);
@@ -125,7 +126,7 @@ namespace SULL.HospitalManagement.Services
         {
             DelOnExecuted = (k) =>
             {
-                _cacheService.Remove(CacheKey);
+                _hospitalCache.RemoveDbConfigs();
                 return new WebResponseContent(true);
             };
             return base.Del(keys, delList);
