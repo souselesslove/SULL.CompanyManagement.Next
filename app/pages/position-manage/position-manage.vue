@@ -3,10 +3,10 @@
         <!-- Navigation Bar Removed - Using Header Section -->
 
 
-        <scroll-view scroll-y class="main-scroll" refresher-enabled="true" :refresher-triggered="isRefreshing"
-            :refresher-threshold="60" @refresherrefresh="onRefresh" @refresherpulling="onPulling"
-            @refresherrestore="onRestore" @refresherabort="onRestore" refresher-default-style="none"
-            refresher-background="#f0f5ff">
+        <scroll-view scroll-y class="main-content" :scroll-top="scrollTopVal" refresher-enabled="true"
+            :refresher-triggered="isRefreshing" :refresher-threshold="60" @refresherrefresh="onRefresh"
+            @refresherpulling="onPulling" @refresherrestore="onRestore" @refresherabort="onRestore"
+            refresher-default-style="none" refresher-background="#f0f5ff" @scroll="onScroll">
             <view slot="refresher" class="custom-refresher"
                 :style="{ transform: (isPulling || isRefreshing) ? 'translateY(120rpx)' : 'translateY(0)' }">
                 <view class="refresher-content">
@@ -166,7 +166,7 @@
         <view class="modal-overlay" v-if="showManualDialog" @click="closeManualDialog">
             <view class="modal-content manual-modal" @click.stop>
                 <view class="modal-header">
-                    <text class="modal-title">物品说明书</text>
+                    <text class="modal-title">{{ itemManualName }} 说明书</text>
                     <text class="close-btn" @click="closeManualDialog">×</text>
                 </view>
                 <scroll-view scroll-y class="modal-body manual-body">
@@ -224,9 +224,9 @@ export default {
         return {
             statusBarHeight: 20,
             scrollTop: 0,
-            oldScrollTop: 0,
-            isRefreshing: false,
             isPulling: false,
+            isRefreshing: false,
+            scrollTopVal: 0,
 
             // Data Lists
             rescueCarList: [],
@@ -257,10 +257,7 @@ export default {
 
             // Item Manual
             showManualDialog: false,
-            itemRemarkContent: '',
-
-            // Item Manual
-            showManualDialog: false,
+            itemManualName: '',
             itemRemarkContent: '',
 
             // Filter
@@ -332,13 +329,13 @@ export default {
             uni.navigateBack();
         },
         goTop() {
-            uni.pageScrollTo({
-                scrollTop: 0,
-                duration: 300
+            this.scrollTopVal = this.scrollTop;
+            this.$nextTick(() => {
+                this.scrollTopVal = 0;
             });
         },
-        onPageScroll(e) {
-            this.scrollTop = e.scrollTop;
+        onScroll(e) {
+            this.scrollTop = e.detail.scrollTop;
         },
         onPulling() {
             this.isPulling = true;
@@ -447,8 +444,8 @@ export default {
 
         // Display helpers moved to StorageLayers component
 
-        async fetchItemDetails(ids) {
-            const distinctIds = ids.filter(id => !this.itemsMap[id]);
+        async fetchItemDetails(ids, force = false) {
+            const distinctIds = force ? ids : ids.filter(id => !this.itemsMap[id]);
             if (distinctIds.length === 0) return;
 
             try {
@@ -526,7 +523,7 @@ export default {
         toggleFloor(floor) {
             this.$set(floor, 'expanded', !floor.expanded);
         },
-        async refreshFloorSerials(floor) {
+        async refreshFloorSerials(floor, force = false) {
             uni.showLoading({ title: '加载中', mask: true });
             try {
                 const res = await request.post('api/ssbh/Position/GetPageData', {
@@ -550,7 +547,7 @@ export default {
                 // Fetch item details
                 const itemIds = newSerials.filter(s => s.ItemId > 0).map(s => s.ItemId);
                 if (itemIds.length > 0) {
-                    await this.fetchItemDetails([...new Set(itemIds)]);
+                    await this.fetchItemDetails([...new Set(itemIds)], force);
                 }
 
                 this.$set(floor, 'expanded', true);
@@ -663,7 +660,7 @@ export default {
                 uni.showToast({ title: '补库成功', icon: 'success' });
 
                 // Refresh to show updated stock
-                await this.refreshFloorSerials(floor);
+                await this.refreshFloorSerials(floor, true);
 
             } catch (e) {
                 console.error(e);
@@ -706,43 +703,69 @@ export default {
             this.searchText = '';
         },
         async onSearch() {
-            if (!this.searchText) return;
+            if (!this.searchText) {
+                this.highlightedSerialIds = [];
+                return;
+            }
             if (!this.selectedRescueCarId) return uni.showToast({ title: '请先选择抢救车', icon: 'none' });
 
             uni.showLoading({ title: '搜索中...' });
-            try {
-                // Search Serials in current Rescue Car (which is a Warehouse)
-                // We need to find Serials where Floor.WarehouseId == selectedRescueCarId AND (ItemName like text OR Name like text)
-                // This requires a complex query or filtering locally if we had all data.
-                // We don't have all data.
-                // Let's try to fetch all serials for this rescue car that match.
+            this.highlightedSerialIds = []; // Reset
 
+            try {
                 const res = await request.post('api/ssbh/Position/GetPageData', {
                     page: 1, rows: 100,
                     wheres: JSON.stringify([
                         { name: 'Category', value: 110 },
-                        // Can't easily filter by Grandparent (WarehouseId) directly on Position usually unless there's a field.
-                        // Fortunately we modified GetPageData earlier to accept WarehouseId for serials?
-                        // Actually, in `toggleFloor` we used WarehouseId in wheres!
-                        // So we can search by WarehouseId + ItemName/Name
                         { name: 'WarehouseId', value: this.selectedRescueCarId },
+                        { name: 'OrganizationId', value: this.userOrgInfo.Organization?.Id },
+                        { name: 'DepartmentId', value: this.userOrgInfo.Department?.Id },
                         { name: 'ItemName', value: this.searchText, displayType: 'like' }
                     ])
                 });
 
                 if (res.rows && res.rows.length > 0) {
-                    // Found items.
-                    // Expand the floors they belong to.
-                    const floorIds = [...new Set(res.rows.map(s => s.FloorId))];
+                    const foundSerials = res.rows;
+                    const floorIds = [...new Set(foundSerials.map(s => s.FloorId))];
 
-                    // Find these floors in our list
+                    // Ensure floors are expanded
                     for (let fid of floorIds) {
                         const floor = this.floorList.find(f => f.Id === fid);
                         if (floor) {
                             this.$set(floor, 'expanded', true);
                         }
                     }
-                    uni.showToast({ title: `找到 ${res.rows.length} 个物品`, icon: 'none' });
+
+                    // Highlight matches
+                    this.highlightedSerialIds = foundSerials.map(s => s.Id);
+
+                    // Scroll to first match (Centered)
+                    if (this.highlightedSerialIds.length > 0) {
+                        const firstId = this.highlightedSerialIds[0];
+                        this.$nextTick(() => {
+                            const query = uni.createSelectorQuery().in(this);
+                            // Need to select from inside the StorageLayers component or global
+                            // Using .in(this) should work if there's only one instance or if IDs are unique.
+                            query.select('#serial-' + firstId).boundingClientRect(data => {
+                                if (data) {
+                                    const sysInfo = uni.getSystemInfoSync();
+                                    const windowHeight = sysInfo.windowHeight;
+
+                                    // Calculate delta to move element to center
+                                    let scrollDiff = data.top - (windowHeight / 2) + (data.height / 2);
+                                    let targetTop = this.scrollTop + scrollDiff;
+
+                                    // Ensure we trigger a change
+                                    this.scrollTopVal = this.scrollTop;
+                                    this.$nextTick(() => {
+                                        this.scrollTopVal = targetTop;
+                                    });
+                                }
+                            }).exec();
+                        });
+                    }
+
+                    uni.showToast({ title: `找到 ${foundSerials.length} 个物品`, icon: 'none' });
                 } else {
                     uni.showToast({ title: '未找到相关物品', icon: 'none' });
                 }
@@ -828,7 +851,7 @@ export default {
             if (!item) {
                 return uni.showToast({ title: '未找到物品信息', icon: 'none' });
             }
-
+            this.itemManualName = item.Name || '物品';
             this.itemRemarkContent = item.Remark || '暂无说明书内容';
             this.showManualDialog = true;
         },
@@ -943,19 +966,17 @@ export default {
 <style lang="scss" scoped>
 /* Page Scroll Fix */
 page {
-    min-height: 100%;
-    height: auto;
-    overflow-y: auto;
+    height: 100vh;
+    overflow: hidden;
     background-color: $sull-color-background;
 }
 
 .container {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
-    height: auto;
+    height: 100vh;
     width: 100%;
-    overflow: visible;
+    overflow: hidden;
     background-color: $sull-color-background;
 }
 
@@ -970,6 +991,7 @@ page {
 
 .main-content {
     flex: 1;
+    height: 0;
     width: 100%;
 }
 

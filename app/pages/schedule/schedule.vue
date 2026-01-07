@@ -34,7 +34,7 @@
                     <!-- Row 1: Actions & Date Nav -->
                     <view class="schedule-header">
                         <view class="left-actions">
-                            <button class="btn-primary-icon" @click="showAddSchedule = true" v-if="canManage">
+                            <button class="btn-primary-icon" @click="prepareAddSchedule" v-if="canManage">
                                 <text class="plus-icon">+</text> {{ $t('schedule.add_button') }}
                             </button>
                         </view>
@@ -64,7 +64,8 @@
 
                         <!-- Matrix Body -->
                         <view class="matrix-body">
-                            <view class="matrix-row" v-for="(user, uIdx) in matrixData" :key="uIdx">
+                            <view class="matrix-row" v-for="(user, uIdx) in matrixData" :key="uIdx"
+                                :class="{ 'highlight-row': String(user.UserId) === String(userInfo.Id || userInfo.id) }">
                                 <view class="matrix-cell name-col" @click="toggleUser(user.UserId)"
                                     @longpress="showUserMatrixPreview(user)" v-if="canManage">
                                     <checkbox :checked="selectedUsers.some(uid => String(uid) == String(user.UserId))"
@@ -279,34 +280,49 @@
                     <text class="close-btn" @click="showAddSchedule = false">✖️</text>
                 </view>
                 <view class="modal-body form">
-                    <picker mode="selector" :range="members" range-key="UserName" @change="onMemberChange"
+                    <view class="input-label">工作人员</view>
+                    <view class="input-item search-opener" @click="showMemberSelector = true"
                         v-if="!selectedUsers.length">
-                        <view class="input-item">
-                            <text>{{ $t('schedule.name') }}: {{ newSchedule.UserName || $t('schedule.please_select')
-                            }}</text>
-                        </view>
-                    </picker>
-                    <view class="input-item" v-else>
+                        <text :class="{ 'placeholder': !newSchedule.UserName }">{{ newSchedule.UserName ||
+                            $t('schedule.please_select') }}</text>
+                        <text class="arrow">▼</text>
+                    </view>
+                    <view class="input-item disabled" v-else>
                         <text>{{ $t('schedule.selected_users_count', { count: selectedUsers.length }) }}</text>
                     </view>
-                    <picker mode="date" @change="e => newSchedule.StartDate = e.detail.value"
-                        :value="newSchedule.StartDate || currentWeekStart">
-                        <view class="input-item">{{ $t('schedule.start_date') }}: {{ newSchedule.StartDate ||
-                            $t('schedule.please_select') }}</view>
-                    </picker>
-                    <picker mode="date" @change="e => newSchedule.EndDate = e.detail.value"
-                        :value="newSchedule.EndDate || currentWeekStart">
-                        <view class="input-item">{{ $t('schedule.end_date') }}: {{ newSchedule.EndDate ||
-                            $t('schedule.please_select') }}</view>
-                    </picker>
-                    <picker mode="selector" :range="typeList" range-key="Title" @change="onShiftTypeSelect">
-                        <view class="input-item">
-                            <text>{{ $t('schedule.shift') }}: {{ newSchedule.ShiftTypeName ||
-                                $t('schedule.please_select')
-                            }}</text>
+
+                    <view class="input-label">起止时间</view>
+                    <view class="date-row">
+                        <picker mode="date" @change="e => newSchedule.StartDate = e.detail.value"
+                            :value="newSchedule.StartDate || currentWeekStart">
+                            <view class="input-item small">
+                                <text :class="{ 'placeholder': !newSchedule.StartDate }">{{ newSchedule.StartDate ||
+                                    '开始' }}</text>
+                                <text class="arrow">▼</text>
+                            </view>
+                        </picker>
+                        <text class="separator">-</text>
+                        <picker mode="date" @change="e => newSchedule.EndDate = e.detail.value"
+                            :value="newSchedule.EndDate || currentWeekStart">
+                            <view class="input-item small">
+                                <text :class="{ 'placeholder': !newSchedule.EndDate }">{{ newSchedule.EndDate || '结束'
+                                    }}</text>
+                                <text class="arrow">▼</text>
+                            </view>
+                        </picker>
+                    </view>
+
+                    <view class="input-label">班次</view>
+                    <view class="shift-radio-group">
+                        <view class="shift-radio-item" v-for="type in typeList" :key="type.Id"
+                            :class="{ active: newSchedule.ShiftTypeId === type.Id }" @click="selectShiftType(type)">
+                            {{ type.Title }}
                         </view>
-                    </picker>
-                    <input class="input-item" :placeholder="$t('schedule.remark')" v-model="newSchedule.Remark" />
+                    </view>
+
+                    <view class="input-label">{{ $t('schedule.remark') }}</view>
+                    <textarea class="textarea small-height" :placeholder="$t('schedule.remark')"
+                        v-model="newSchedule.Remark"></textarea>
                 </view>
                 <view class="modal-footer">
                     <button class="modal-btn cancel" @click="showAddSchedule = false">{{ $t('common.cancel') }}</button>
@@ -389,6 +405,9 @@
             </view>
         </view>
 
+        <!-- Components for Selectors -->
+        <MemberSelector v-model:visible="showMemberSelector" @select="onStaffSelect" />
+
     </view>
 </template>
 
@@ -403,12 +422,14 @@ dayjs.extend(isBetween);
 
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import BackButton from '@/components/BackButton/BackButton.vue';
+import MemberSelector from '@/components/MemberSelector/MemberSelector.vue';
 
 export default {
     components: {
         CapsuleTabs,
         FooterInfo,
-        BackButton
+        BackButton,
+        MemberSelector
     },
     data() {
         return {
@@ -440,6 +461,9 @@ export default {
             activeActionItemType: '', // 'leave' or 'type'
             currentMonth: '', // YYYY-MM
             personalSchedules: [],
+
+            // Selectors
+            showMemberSelector: false,
 
             // User Preview
             showUserPreview: false,
@@ -520,79 +544,22 @@ export default {
                 };
 
                 const sid = String(member.UserId);
-                this.weekDates.forEach((dateStr, i) => {
-                    const target = dayjs(dateStr).startOf('day');
-
-                    // 1. Prioritize Leave
-                    const leave = leaves.find(l => {
-                        const leaveUid = l.UserId || l.CreatorId;
-                        if (String(leaveUid) !== sid) return false;
-                        // Include pending (0) or approved (1)
-                        if (l.AuditStatus !== 1 && l.AuditStatus !== 0) return false;
-
-                        const start = dayjs(l.StartDate).startOf('day');
-                        const end = dayjs(l.EndDate).startOf('day');
-                        return target.isBetween(start, end, 'day', '[]');
-                    });
-
-                    if (leave) {
-                        row.weekShifts[i] = {
-                            ShiftTypeName: this.$t('schedule.leave_label') || '休假',
-                            isLeave: true
-                        };
-                    } else {
-                        // 2. Schedule
-                        const shift = this.scheduleList.find(s => {
-                            const shiftUid = s.UserId || s.CreatorId;
-                            if (String(shiftUid) !== sid) return false;
-                            return dayjs(s.ScheduleDate).startOf('day').isSame(target, 'day');
-                        });
-
-                        if (shift) {
-                            const type = this.typeList.find(t => String(t.Id) == String(shift.ShiftTypeId));
-                            row.weekShifts[i] = {
-                                ...shift,
-                                ShiftTypeName: type ? type.Title : (shift.ShiftTypeName || '未知'),
-                                StartTime: type ? type.StartTime : '',
-                                EndTime: type ? type.EndTime : ''
-                            };
-                        }
-                    }
+                // Use the centralized findShiftInList for consistency
+                weekDates.forEach((date, i) => {
+                    row.weekShifts[i] = this.findShiftInList(date, this.scheduleList, member.UserId);
                 });
 
                 return row;
             });
         },
         calendarDays() {
-            const leaves = this.leaveList; // Reactivity dependency
+            // Explicitly depend on leaveList for reactivity
+            const leaves = this.leaveList;
             if (!this.currentMonth) return [];
-            // Use findPersonalShift which calls findShiftInList
-            const parts = this.currentMonth.split('-');
-            const year = parseInt(parts[0]);
-            const month = parseInt(parts[1]) - 1;
-
-            const firstDay = new Date(year, month, 1).getDay();
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-            const days = [];
-
-            const prevMonthLastDay = new Date(year, month, 0).getDate();
-            for (let i = firstDay - 1; i >= 0; i--) {
-                const d = new Date(year, month - 1, prevMonthLastDay - i);
-                const fullDate = this.formatDateYMD(d);
-                days.push({ day: d.getDate(), fullDate, isCurrentMonth: false, shift: this.findPersonalShift(fullDate) });
-            }
-            for (let i = 1; i <= daysInMonth; i++) {
-                const d = new Date(year, month, i);
-                const fullDate = this.formatDateYMD(d);
-                days.push({ day: i, fullDate, isCurrentMonth: true, shift: this.findPersonalShift(fullDate) });
-            }
-            const remaining = 42 - days.length;
-            for (let i = 1; i <= remaining; i++) {
-                const d = new Date(year, month + 1, i);
-                const fullDate = this.formatDateYMD(d);
-                days.push({ day: d.getDate(), fullDate, isCurrentMonth: false, shift: this.findPersonalShift(fullDate) });
-            }
-            return days;
+            // Prioritize userOrgInfo.User.UserId as set in fetchPersonalMonthly
+            const uid = this.userOrgInfo?.User?.UserId || this.userInfo?.Id || this.userInfo?.id;
+            if (!uid) return [];
+            return this.generateMonthDays(this.currentMonth, this.personalSchedules, uid);
         },
         previewCalendarDays() {
             const leaves = this.leaveList; // Reactivity dependency
@@ -604,7 +571,11 @@ export default {
             if (this.canManage) {
                 tabs.push({ label: 'schedule.tab_schedule_matrix', value: 0 });
             }
-            tabs.push({ label: 'schedule.tab_my_schedule', value: 1 });
+            // Personal Tab: Label could be "My Schedule" or "Name's Schedule"
+            const myName = this.userInfo?.RealName || this.userInfo?.UserName || '';
+            const personalLabel = myName ? myName + ' ' + (this.$t('schedule.personal_suffix') || '的排班') : 'schedule.tab_my_schedule';
+
+            tabs.push({ label: personalLabel, value: 1 });
             tabs.push({ label: 'schedule.tab_leave', value: 2 });
             if (this.canManage) {
                 tabs.push({ label: 'schedule.tab_type', value: 3 });
@@ -645,7 +616,8 @@ export default {
             this.loadTabData(this.currentTab);
         },
         loadTabData(tabIndex) {
-            if (this.tabLoadedStatus[tabIndex]) return;
+            // Tab 1 (Personal) always refreshes to show current status, others use cache
+            if (this.tabLoadedStatus[tabIndex] && tabIndex !== 1) return;
 
             if (tabIndex === 0 && this.canManage) {
                 if (!this.currentWeekStart) this.initWeekBase();
@@ -728,6 +700,9 @@ export default {
         },
         fetchPersonalMonthly() {
             if (!this.currentMonth) return;
+            const uid = this.userOrgInfo?.User?.UserId;
+            if (!uid) return;
+
             const parts = this.currentMonth.split('-');
             const year = parseInt(parts[0]);
             const month = parseInt(parts[1]) - 1;
@@ -737,7 +712,7 @@ export default {
 
             const wheres = [
                 { name: 'OrganizationId', value: this.userOrgInfo.Organization?.Id },
-                { name: 'UserId', value: userId },
+                { name: 'UserId', value: uid },
                 { name: 'ScheduleDate', value: startStr, displayType: 'thanorequal' },
                 { name: 'ScheduleDate', value: endStr, displayType: 'lt' }
             ];
@@ -807,24 +782,26 @@ export default {
             return this.findShiftInList(date, this.personalSchedules, this.userInfo.Id);
         },
         findShiftInList(date, list, userId) {
-            if (!date || !this.leaveList) return null;
+            if (!date) return null;
             const target = dayjs(date).startOf('day');
             const sid = String(userId);
 
-            // 1. Prioritize Leave
-            const leave = this.leaveList.find(l => {
-                const leaveUid = l.UserId || l.CreatorId;
-                if (String(leaveUid) !== sid) return false;
-                // Allow approved (1) or pending (0) for display
-                if (l.AuditStatus !== 1 && l.AuditStatus !== 0) return false;
+            // 1. Prioritize Leave (only if leaveList exists)
+            if (this.leaveList && this.leaveList.length > 0) {
+                const leave = this.leaveList.find(l => {
+                    const leaveUid = l.UserId || l.CreatorId;
+                    if (String(leaveUid) !== sid) return false;
+                    // Allow approved (1) or pending (0) for display
+                    if (l.AuditStatus !== 1 && l.AuditStatus !== 0) return false;
 
-                const start = dayjs(l.StartDate).startOf('day');
-                const end = dayjs(l.EndDate).startOf('day');
-                return target.isBetween(start, end, 'day', '[]');
-            });
+                    const start = dayjs(l.StartDate).startOf('day');
+                    const end = dayjs(l.EndDate).startOf('day');
+                    return target.isBetween(start, end, 'day', '[]');
+                });
 
-            if (leave) {
-                return { ShiftTypeName: this.$t('schedule.leave_label') || '休假', isLeave: true };
+                if (leave) {
+                    return { ShiftTypeName: this.$t('schedule.leave_label') || '休假', isLeave: true };
+                }
             }
 
             // 2. Fallback to Shift
@@ -842,6 +819,7 @@ export default {
             return null;
         },
         showUserMatrixPreview(user) {
+            console.log(user);
             this.previewUser = user;
             this.previewSchedules = []; // Clear old
             this.fetchUserMonthly(user.UserId);
@@ -852,7 +830,7 @@ export default {
             const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1 + offset, 1);
             this.currentMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
             this.fetchPersonalMonthly();
-            // fetchLeaves is called inside fetchPersonalMonthly
+            this.fetchLeaves(); // Also refresh leaves for the new month
             if (this.showUserPreview && this.previewUser) {
                 this.fetchUserMonthly(this.previewUser.UserId);
             }
@@ -971,6 +949,10 @@ export default {
             this.newSchedule.ShiftTypeId = t.Id;
             this.newSchedule.ShiftTypeName = t.Title;
         },
+        selectShiftType(type) {
+            this.newSchedule.ShiftTypeId = type.Id;
+            this.newSchedule.ShiftTypeName = type.Title;
+        },
         toggleActionMenu(item, type) {
             if (this.activeActionItemId === item.Id && this.activeActionItemType === type) {
                 this.activeActionItemId = null;
@@ -983,8 +965,28 @@ export default {
         onCatChange(e) {
             this.editingType.Category = e.detail.value;
         },
+        onStaffSelect(m) {
+            this.newSchedule.UserId = m.value;
+            this.newSchedule.UserName = m.label.split(' (')[0]; // Extract name if format is "Name (Dept)"
+        },
 
         // --- Actions ---
+        prepareAddSchedule() {
+            if (!this.typeList || this.typeList.length === 0) {
+                uni.showModal({
+                    title: this.$t('common.tip'),
+                    content: '暂无班次定义，请先添加班次类型',
+                    confirmText: '去添加',
+                    success: (res) => {
+                        if (res.confirm) {
+                            this.currentTab = 3; // Switch to Type Settings tab
+                        }
+                    }
+                });
+                return;
+            }
+            this.showAddSchedule = true;
+        },
         submitSchedule() {
             if (!this.newSchedule.StartDate || !this.newSchedule.EndDate || (!this.newSchedule.UserId && !this.selectedUsers.length) || !this.newSchedule.ShiftTypeId) {
                 uni.showToast({ title: this.$t('schedule.complete_info'), icon: 'none' });
@@ -1568,7 +1570,17 @@ export default {
 
 .matrix-row {
     display: flex;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 2rpx solid #eee;
+    min-height: 90rpx;
+
+    &.highlight-row {
+        background-color: rgba(0, 154, 151, 0.05);
+
+        .user-name {
+            color: #009A97;
+            font-weight: bold;
+        }
+    }
 }
 
 .matrix-row.header {
@@ -1688,7 +1700,7 @@ export default {
     width: 100%;
     height: 100%;
     background: rgba(0, 0, 0, 0.5);
-    z-index: 100;
+    z-index: 900;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1739,6 +1751,115 @@ export default {
     color: #333;
     display: flex;
     align-items: center;
+    justify-content: space-between;
+
+    &.disabled {
+        color: #999;
+    }
+
+    &.small {
+        padding: 16rpx 20rpx;
+        font-size: 26rpx;
+    }
+
+    .arrow {
+        font-size: 20rpx;
+        color: #999;
+    }
+}
+
+.date-row {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+
+    picker {
+        flex: 1;
+    }
+
+    .separator {
+        color: #ccc;
+        font-size: 24rpx;
+    }
+}
+
+.input-label {
+    font-size: 26rpx;
+    color: #666;
+    margin-bottom: -16rpx;
+    font-weight: 500;
+}
+
+.date-range-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f5f7fa;
+    padding: 24rpx;
+    border-radius: 12rpx;
+    font-size: 28rpx;
+    color: #333;
+
+    &.range-picker-btn:active {
+        background: #ebedf0;
+    }
+
+    .calendar-icon {
+        font-size: 32rpx;
+        color: #999;
+    }
+}
+
+.placeholder {
+    color: #999 !important;
+}
+
+.search-opener {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+
+    .arrow {
+        font-size: 20rpx;
+        color: #999;
+    }
+}
+
+.range-input {
+    padding: 24rpx 0;
+    font-size: 28rpx;
+    color: #333;
+    text-align: center;
+}
+
+.range-separator {
+    padding: 0 20rpx;
+    color: #999;
+    font-size: 24rpx;
+}
+
+.shift-radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16rpx;
+}
+
+.shift-radio-item {
+    padding: 12rpx 32rpx;
+    background: #F5F7FA;
+    border-radius: 32rpx;
+    font-size: 26rpx;
+    color: #666;
+    border: 2rpx solid transparent;
+    transition: all 0.2s;
+}
+
+.shift-radio-item.active {
+    background: #E6F7FF;
+    color: #009A97;
+    border-color: #009A97;
+    font-weight: 500;
 }
 
 .textarea {
@@ -1750,6 +1871,10 @@ export default {
     box-sizing: border-box;
     font-size: 28rpx;
     color: #333;
+
+    &.small-height {
+        height: 120rpx;
+    }
 }
 
 .picker-box {
@@ -1926,5 +2051,12 @@ export default {
 .calendar-modal {
     width: 95% !important;
     max-height: 90vh;
+}
+</style>
+
+<style>
+/* 修复系统选择器层级问题 */
+.uni-picker-container {
+    z-index: 1001 !important;
 }
 </style>

@@ -149,7 +149,6 @@ export default {
         getOccupiedCount(floor) {
             //TODO 默认显示数量错误，点击后显示正常
             const serials = this.getSerialsByFloor(floor.Id);
-            console.log('getOccupiedCount', floor.Id, serials);
             return serials.filter(s => s.ItemId && s.ItemId > 0).length;
         },
         toggleFloor(floor) {

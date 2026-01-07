@@ -47,7 +47,6 @@ export default {
 	},
 	methods: {
 		checkUpdate(options = {}) {
-			return;
 			const isManual = options === true || options.manual === true;
 			const isForce = options === true || options.force === true;
 

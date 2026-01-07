@@ -13,7 +13,7 @@ App.mpType = 'app'
 const app = new Vue({
     ...App
 })
-const i18n = createI18n({
+const i18nVue2 = createI18n({
     locale: 'zh-Hans',
     messages: {
         en,
@@ -21,14 +21,14 @@ const i18n = createI18n({
     }
 })
 
-app.use(i18n);
+app.use(i18nVue2);
 app.$mount()
 // #endif
 
 // #ifdef VUE3
 import { createSSRApp } from 'vue'
 
-const i18n = createI18n({
+const i18nVue3 = createI18n({
     locale: 'zh-Hans',
     messages: {
         en,
@@ -38,7 +38,7 @@ const i18n = createI18n({
 
 export function createApp() {
     const app = createSSRApp(App)
-    app.use(i18n)
+    app.use(i18nVue3)
     app.config.globalProperties.$getStringLen = getStringLen
     return {
         app
