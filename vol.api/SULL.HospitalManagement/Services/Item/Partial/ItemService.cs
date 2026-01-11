@@ -17,6 +17,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
 using Newtonsoft.Json;
+using OfficeOpenXml.FormulaParsing.Excel.Functions.Information;
 using SULL.HospitalManagement.IRepositories;
 using Yitter.IdGenerator;
 using SULL.HospitalManagement.IServices;
@@ -146,12 +147,15 @@ namespace SULL.HospitalManagement.Services
                         {
                             // 调用基类Add方法，复用现有逻辑和验证
                             singleModel.MainData["AvailableStock"] = 0;
-                            var cardinality = itemData.ContainsKey("Cardinality").GetInt();
+                            var cardinality = 0;
+                            if (itemData.TryGetValue("Cardinality", out var value))
+                            {
+                                cardinality = value.GetInt();
+                            }
                             if (cardinality <= 0)
                             {
                                 singleModel.MainData["Cardinality"] = 1;
                             }
-
                             result = base.Add(singleModel);
                         }
                     });
@@ -366,27 +370,27 @@ namespace SULL.HospitalManagement.Services
             return new WebResponseContent(true);
         }
 
-        public async Task<string> GetItemRemarkAsync(string combinedId)
+        public async Task<WebResponseContent> GetItemRemarkAsync(string combinedId)
         {
-            if (string.IsNullOrEmpty(combinedId)) return "";
+            if (string.IsNullOrEmpty(combinedId)) return new WebResponseContent(true);
 
-            // 解析 DepartmentId+InterfaceCode
+            // 解析 DepartmentId+Barcode
             // 格式示例: "123+A001"
             var parts = combinedId.Split('+');
-            if (parts.Length < 2) return "";
+            if (parts.Length < 2) return new WebResponseContent(true);
 
             if (!long.TryParse(parts[0], out long departmentId))
             {
-                return "";
+                return new WebResponseContent(true);
             }
 
-            // InterfaceCode 可能是剩余部分的所有内容（如果InterfaceCode本身包含+虽然不常见但以防万一）
+            // Barcode 可能是剩余部分的所有内容（如果Barcode本身包含+虽然不常见但以防万一）
             // 这里假设只是两部分，或者取剩下所有的
-            string interfaceCode = combinedId.Substring(parts[0].Length + 1);
+            string barcode = combinedId.Substring(parts[0].Length + 1);
 
-            if (string.IsNullOrEmpty(interfaceCode)) return "";
+            if (string.IsNullOrEmpty(barcode)) return new WebResponseContent(true);
 
-            string key = $"Item_Remark_{departmentId}_{interfaceCode}";
+            string key = $"Item_Remark_{departmentId}_{barcode}";
             // 注意：这里暂时保留原始缓存逻辑，或者考虑在 IHospitalCacheService 中添加方法
             if (_hospitalCache.GetUserAccount<string>(0, 0) != null) // Placeholder for more logic
             {
@@ -394,15 +398,18 @@ namespace SULL.HospitalManagement.Services
             }
 
             var item = await _repository.FindFirstAsync(x =>
-                x.DepartmentId == departmentId && x.InterfaceCode == interfaceCode && x.IsDeleted != true);
-            string remark = item == null ? "" : (item.Remark ?? "");
-            if (string.IsNullOrWhiteSpace(remark))
-            {
-                return remark;
-            }
+                x.DepartmentId == departmentId && x.Barcode == barcode && x.IsDeleted != true);
 
-            _hospitalCache.Set(key, remark);
-            return remark;
+            _hospitalCache.Set(key, item);
+            return new WebResponseContent(true).OK(data:new
+            {
+                Remark = item?.Remark,
+                Name = item?.Name,
+                AvailableStock = item?.AvailableStock,
+                LatestExpirationDate = item?.LatestExpirationDate,
+                Unit = item?.Unit,
+                Form = item?.Form,
+            });
         }
 
         public override WebResponseContent Update(SaveModel saveModel)
@@ -420,9 +427,9 @@ namespace SULL.HospitalManagement.Services
 
             UpdateOnExecuted = (item, obj, x, x1) =>
             {
-                if (item != null && !string.IsNullOrEmpty(item.InterfaceCode))
+                if (item != null && !string.IsNullOrEmpty(item.Barcode))
                 {
-                    string key = $"Item_Remark_{item.DepartmentId}_{item.InterfaceCode}";
+                    string key = $"Item_Remark_{item.DepartmentId}_{item.Barcode}";
                     _hospitalCache.Remove(key);
                 }
 
@@ -430,7 +437,6 @@ namespace SULL.HospitalManagement.Services
             };
             return base.Update(saveModel);
         }
-
 
         private bool IsSyncEnabled(Dictionary<string, object> data)
         {

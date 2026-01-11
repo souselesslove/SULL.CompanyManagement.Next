@@ -1,8 +1,6 @@
-﻿/*
- *Author：jxx
- *Contact：283591387@qq.com
- *Date：2018-07-01
- * 此代码由框架生成，请勿随意更改
+/*
+ *代码由框架生成,任何更改都可能导致被代码生成器覆盖
+ *如果数据库字段发生变化，请在代码生器重新生成此Model
  */
 using System;
 using System.Collections.Generic;
@@ -11,14 +9,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using VOL.Entity;
 using VOL.Entity.SystemModels;
 
 namespace VOL.Entity.DomainModels
 {
-    [Table("Sys_Log")]
-    [EntityAttribute(TableCnName = "系统日志")]
-    public class Sys_Log:BaseEntity
+    [Entity(TableCnName = "系统日志",TableName = "Sys_Log",DBServer = "SysDbContext")]
+    public partial class Sys_Log:BaseEntity
     {
         /// <summary>
        ///
@@ -37,19 +33,25 @@ namespace VOL.Entity.DomainModels
        public DateTime? BeginDate { get; set; }
 
        /// <summary>
+       ///用户名称
+       /// </summary>
+       [Display(Name ="用户名称")]
+       [Column(TypeName="nvarchar(max)")]
+       public string UserName { get; set; }
+
+       /// <summary>
        ///请求地址
        /// </summary>
        [Display(Name ="请求地址")]
-       [MaxLength(30000)]
-       [Column(TypeName="varchar(30000)")]
+       [Column(TypeName="nvarchar(max)")]
        public string Url { get; set; }
 
        /// <summary>
        ///日志类型
        /// </summary>
        [Display(Name ="日志类型")]
-       [MaxLength(50)]
-       [Column(TypeName="varchar(50)")]
+       [MaxLength(100)]
+       [Column(TypeName="nvarchar(100)")]
        public string LogType { get; set; }
 
        /// <summary>
@@ -60,9 +62,9 @@ namespace VOL.Entity.DomainModels
        public int? Success { get; set; }
 
        /// <summary>
-       ///时长(毫秒)
+       ///时长
        /// </summary>
-       [Display(Name ="时长(毫秒)")]
+       [Display(Name ="时长")]
        [Column(TypeName="int")]
        public int? ElapsedTime { get; set; }
 
@@ -70,48 +72,45 @@ namespace VOL.Entity.DomainModels
        ///请求参数
        /// </summary>
        [Display(Name ="请求参数")]
-       [MaxLength(10000)]
-       [Column(TypeName="nvarchar(10000)")]
+       [Column(TypeName="nvarchar(max)")]
        public string RequestParameter { get; set; }
 
        /// <summary>
        ///响应参数
        /// </summary>
        [Display(Name ="响应参数")]
-       [MaxLength(10000)]
-       [Column(TypeName="nvarchar(10000)")]
+       [Column(TypeName="nvarchar(max)")]
        public string ResponseParameter { get; set; }
 
        /// <summary>
        ///异常信息
        /// </summary>
        [Display(Name ="异常信息")]
-       [MaxLength(10000)]
-       [Column(TypeName="nvarchar(10000)")]
+       [Column(TypeName="nvarchar(max)")]
        public string ExceptionInfo { get; set; }
 
        /// <summary>
        ///用户IP
        /// </summary>
        [Display(Name ="用户IP")]
-       [MaxLength(100)]
-       [Column(TypeName="varchar(100)")]
+       [MaxLength(200)]
+       [Column(TypeName="nvarchar(200)")]
        public string UserIP { get; set; }
 
        /// <summary>
        ///服务器IP
        /// </summary>
        [Display(Name ="服务器IP")]
-       [MaxLength(100)]
-       [Column(TypeName="varchar(100)")]
+       [MaxLength(200)]
+       [Column(TypeName="nvarchar(200)")]
        public string ServiceIP { get; set; }
 
        /// <summary>
        ///浏览器类型
        /// </summary>
        [Display(Name ="浏览器类型")]
-       [MaxLength(200)]
-       [Column(TypeName="nvarchar(200)")]
+       [MaxLength(400)]
+       [Column(TypeName="nvarchar(400)")]
        public string BrowserType { get; set; }
 
        /// <summary>
@@ -120,14 +119,6 @@ namespace VOL.Entity.DomainModels
        [Display(Name ="用户ID")]
        [Column(TypeName="int")]
        public int? User_Id { get; set; }
-
-       /// <summary>
-       ///用户名称
-       /// </summary>
-       [Display(Name ="用户名称")]
-       [MaxLength(30000)]
-       [Column(TypeName="varchar(30000)")]
-       public string UserName { get; set; }
 
        /// <summary>
        ///角色ID

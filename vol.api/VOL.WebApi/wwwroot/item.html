@@ -1,108 +1,234 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>药品使用说明</title>
     <style>
+        :root {
+            --primary-color: #009A97;
+            --warning-orange: #E89310;
+            --error-red: #E74C3C;
+            --bg-color: #F5F7FA;
+            --card-bg: #FFFFFF;
+            --text-main: #333333;
+            --text-secondary: #666666;
+        }
+
         body {
-            font-family: 'Arial', sans-serif;
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             line-height: 1.6;
-            margin: 20px;
-            padding: 0;
-            background-color: #f9f9f9;
-            color: #333;
-            max-width: 800px;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            max-width: 900px;
             margin: 0 auto;
         }
-        h1 {
+
+        .page-title {
             text-align: center;
-            color: #009A97;
-            margin-bottom: 30px;
+            color: var(--primary-color);
+            margin: 20px 0 30px 0;
+            font-size: 2.2em;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.05);
         }
+
+        .item-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            padding: 24px;
+            margin-bottom: 24px;
+            transition: transform 0.2s;
+        }
+
+        .item-name {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin: 0 0 15px 0;
+            line-height: 1.2;
+        }
+
+        .item-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            font-size: 1.1em;
+            color: var(--text-secondary);
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+        }
+
+        .warning-orange {
+            color: var(--warning-orange);
+            font-weight: 600;
+        }
+
+        .warning-red {
+            color: var(--error-red);
+            font-weight: 600;
+        }
+
         h2 {
-            color: #009A97;
-            border-bottom: 2px solid #009A97;
-            padding-bottom: 10px;
-            margin-top: 40px;
-            font-size: 1.5em;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 8px;
+            margin-top: 30px;
+            font-size: 1.4em;
+            display: flex;
+            align-items: center;
         }
+
+        h2::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 24px;
+            background: var(--primary-color);
+            margin-right: 10px;
+            border-radius: 2px;
+        }
+
         p {
-            margin: 15px 0;
+            margin: 12px 0;
             text-align: justify;
+            color: #444;
         }
-        ol, ul {
-            margin: 15px 0;
-            padding-left: 20px;
+
+        ol {
+            margin: 12px 0;
+            padding-left: 25px;
         }
+
         li {
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
+
         .note {
-            background-color: #fff3cd;
-            border-left: 5px solid #ffc107;
+            background-color: #FFF9E6;
+            border-left: 5px solid var(--warning-orange);
             padding: 15px;
             margin: 20px 0;
-            border-radius: 5px;
+            border-radius: 8px;
+            font-style: italic;
         }
+
         #content {
             min-height: 200px;
         }
+
         #loading {
             text-align: center;
-            margin-top: 50px;
-            font-style: italic;
+            margin-top: 100px;
+            font-size: 1.2em;
+            color: var(--secondary-color);
+            animation: pulse 1.5s infinite;
         }
+
+        @keyframes pulse {
+            0% {
+                opacity: 0.6;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.6;
+            }
+        }
+
         #error {
-            color: red;
+            background: #FFEBEE;
+            color: #C62828;
+            padding: 20px;
+            border-radius: 8px;
             text-align: center;
             margin-top: 50px;
+            border: 1px solid #FFCDD2;
         }
+
         @media (max-width: 600px) {
             body {
-                margin: 10px;
+                padding: 15px;
             }
-            h2 {
-                font-size: 1.3em;
+
+            .item-name {
+                font-size: 1.6em;
+            }
+
+            .item-meta {
+                display: flex;
+                font-size: 0.95em;
+                justify-content: space-between;
+            }
+
+            .item-card {
+                padding: 18px;
             }
         }
     </style>
 </head>
+
 <body>
     <div id="content">
-        <div id="loading">加载中...</div>
+        <div id="loading">正在为您获取药品信息...</div>
     </div>
 
     <script>
-        // 解析药品信息的函数
+        function formatDate(dateStr) {
+            if (!dateStr) return '无';
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr;
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function checkExpireWarning(dateStr) {
+            if (!dateStr) return false;
+            const expireDate = new Date(dateStr);
+            const today = new Date();
+            const diffTime = expireDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays < 30;
+        }
+
         function parseDrugInfo(text) {
-            // 分割文本为多个部分，以【标题】作为分隔点
-            const sections = text.split(/【([^】]+)】/g).filter(Boolean); // 过滤空字符串
-            let html = '<h1>药品使用说明</h1>'; // 页面主标题
+            if (!text) return '<p>暂无使用说明内容。</p>';
+            const sections = text.split(/【([^】]+)】/g).filter(Boolean);
+            let html = '';
 
             for (let i = 0; i < sections.length; i += 2) {
                 if (i + 1 < sections.length) {
-                    const title = sections[i].trim(); // 标题，如 "急救适应症"
-                    const content = sections[i + 1].trim(); // 对应内容
+                    const title = sections[i].trim();
+                    const content = sections[i + 1].trim();
 
-                    html += `<h2>【${title}】</h2>`;
+                    html += `<h2>${title}</h2>`;
 
-                    // 通用处理：如果内容中有（数字）或(数字)编号，转换为<ol>列表
                     if (content.match(/[\uFF08(]\d+[\uFF09)]/g)) {
-                        // 分割列表项：按；分割，但仅当后面跟着（数字）时
                         const items = content.split(/；\s*(?=[\uFF08(]\d+[\uFF09)])/).map(item => item.trim().replace(/^[\uFF08(]\d+[\uFF09)]/, ''));
                         html += '<ol>';
                         items.forEach(item => {
-                            html += `<li>${item.replace(/；$/, '').replace(/。$/, '')}</li>`; // 移除末尾的；或。
+                            html += `<li>${item.replace(/；$/, '').replace(/。$/, '')}</li>`;
                         });
                         html += '</ol>';
                     } else {
-                        // 否则，按句号分段处理，识别注意事项并用.note样式突出
-                        const paragraphs = content.split(/。/g).filter(Boolean); // 以句号分段
+                        const paragraphs = content.split(/。/g).filter(Boolean);
                         paragraphs.forEach(para => {
-                            const trimmedPara = para.trim() + '。'; // 恢复句号
+                            const trimmedPara = para.trim() + '。';
                             if (trimmedPara.includes('患者对本药的个体差异很大')) {
-                                // 突出注意事项
                                 html += `<div class="note"><p>${trimmedPara}</p></div>`;
                             } else {
                                 html += `<p>${trimmedPara}</p>`;
@@ -111,53 +237,65 @@
                     }
                 }
             }
-
-            return html;
+            return html || `<p>${text}</p>`;
         }
 
-        // 从URL中提取参数
         function getQueryParam(name) {
             const urlParams = new URLSearchParams(window.location.search);
             return urlParams.get(name);
         }
 
-        // 页面加载时执行
-        window.onload = function() {
+        window.onload = function () {
             const code = getQueryParam('code');
-            const loadingDiv = document.getElementById('loading');
             const contentDiv = document.getElementById('content');
-            const errorDiv = document.createElement('div');
-            errorDiv.id = 'error';
 
             if (!code) {
-                loadingDiv.style.display = 'none';
-                errorDiv.textContent = '未提供code参数';
-                contentDiv.appendChild(errorDiv);
+                contentDiv.innerHTML = `<h1 class="page-title">药品使用说明</h1> <div id="error">药品数据为空</div>`;
                 return;
             }
 
-            // 构造后端URL
-            const apiUrl = `https://www.gdssbh.com/cmfv2/api/ssbh/Item/Remark?combinedId=${encodeURIComponent(code)}`;
+            const apiUrl = `https://www.gdssbh.com/cmfv2/api/ssbh/Item/Remark?combinedId=${encodeURIComponent(code.replace('379630044868680', '386908427251781'))}`;
 
-            // 调用后端API
             fetch(apiUrl)
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error('网络响应失败');
-                    }
-                    return response.text(); // 假设返回的是纯文本
+                    if (!response.ok) throw new Error('服务器响应异常 (' + response.status + ')');
+                    return response.json();
                 })
-                .then(data => {
-                    // 解析并渲染数据
-                    const renderedHtml = parseDrugInfo(data);
-                    contentDiv.innerHTML = renderedHtml;
+                .then(res => {
+                    if (!res.status) {
+                        throw new Error(res.message || '获取数据失败');
+                    }
+
+                    const data = res.data;
+                    if (!data || !data.name || data.name === '') {
+                        throw new Error(res.message || '药品数据为空');
+                    }
+                    const stockWarnClass = (data.availableStock <= 0) ? 'warning-orange' : '';
+                    const isExpWarn = checkExpireWarning(data.latestExpirationDate);
+                    const expireWarnClass = isExpWarn ? 'warning-red' : '';
+
+                    const headerHtml = `
+                        <h1 class="page-title">药品使用说明</h1>
+                        <div class="item-card">
+                            <h2 class="item-name">${data.name || '未知药品'}</h2>
+                            <div class="item-meta">
+                                <div class="meta-item">规格：${data.form || '-'}</div>
+                                <div class="meta-item">余量：<span class="${stockWarnClass}">${data.availableStock ?? 0}</span> ${data.unit || '件'}</div>
+                                <div class="meta-item">过期日期：<span class="${expireWarnClass}">${formatDate(data.latestExpirationDate)}</span></div>
+                            </div>
+                            <div class="instruction-body">
+                                ${parseDrugInfo(data.remark)}
+                            </div>
+                        </div>
+                    `;
+
+                    contentDiv.innerHTML = headerHtml;
                 })
                 .catch(error => {
-                    loadingDiv.style.display = 'none';
-                    errorDiv.textContent = '加载数据失败: ' + error.message;
-                    contentDiv.appendChild(errorDiv);
+                    contentDiv.innerHTML = `<h1 class="page-title">药品使用说明</h1> <div id="error">${error.message}</div>`;
                 });
         };
     </script>
 </body>
+
 </html>

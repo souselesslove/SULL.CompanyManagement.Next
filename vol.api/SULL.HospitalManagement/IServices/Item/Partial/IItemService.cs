@@ -11,6 +11,6 @@ namespace SULL.HospitalManagement.IServices
     public partial interface IItemService
     {
         Task<WebResponseContent> CheckItemWarningsAsync(long id);
-        Task<string> GetItemRemarkAsync(string combinedId);
+        Task<WebResponseContent> GetItemRemarkAsync(string combinedId);
     }
  }

@@ -218,7 +218,7 @@ namespace VOL.Entity.DomainModels
         /// </summary>
         [Display(Name = "±¸×¢")]
         [MaxLength(1024)]
-        [Column(TypeName = "nvarchar(1024)")]
+        [Column(TypeName = "nvarchar(4000)")]
         [Editable(true)]
         public string Remark { get; set; }
 

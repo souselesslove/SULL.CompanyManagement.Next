@@ -43,7 +43,7 @@ namespace SULL.HospitalManagement.Controllers
 
         [HttpGet, Route("Remark")]
         [AllowAnonymous]
-        public async Task<string> GetItemRemark(string combinedId)
+        public async Task<WebResponseContent> GetItemRemark(string combinedId)
         {
             return await _service.GetItemRemarkAsync(combinedId);
         }

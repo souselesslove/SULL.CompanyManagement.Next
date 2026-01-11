@@ -1,0 +1,119 @@
+/*
+ *代码由框架生成,任何更改都可能导致被代码生成器覆盖
+ *如果数据库字段发生变化，请在代码生器重新生成此Model
+ */
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using VOL.Entity.SystemModels;
+
+namespace VOL.Entity.DomainModels
+{
+    [Entity(TableCnName = "任务评论",TableName = "IssueComment")]
+    public partial class IssueComment:BaseEntity
+    {
+        /// <summary>
+       ///编号
+       /// </summary>
+       [Key]
+       [Display(Name ="编号")]
+       [Column(TypeName="bigint")]
+       [Editable(true)]
+       [Required(AllowEmptyStrings=false)]
+       public long Id { get; set; }
+
+       /// <summary>
+       ///事项编号
+       /// </summary>
+       [Display(Name ="事项编号")]
+       [Column(TypeName="bigint")]
+       [Editable(true)]
+       [Required(AllowEmptyStrings=false)]
+       public long IssueId { get; set; }
+
+       /// <summary>
+       ///评论内容
+       /// </summary>
+       [Display(Name ="评论内容")]
+       [MaxLength(2048)]
+       [Column(TypeName="nvarchar(2048)")]
+       [Editable(true)]
+       [Required(AllowEmptyStrings=false)]
+       public string Content { get; set; }
+
+       /// <summary>
+       ///创建人编号
+       /// </summary>
+       [Display(Name ="创建人编号")]
+       [Column(TypeName="int")]
+       [Editable(true)]
+       [Required(AllowEmptyStrings=false)]
+       public int CreatorId { get; set; }
+
+       /// <summary>
+       ///创建人
+       /// </summary>
+       [Display(Name ="创建人")]
+       [MaxLength(128)]
+       [Column(TypeName="nvarchar(128)")]
+       [Editable(true)]
+       [Required(AllowEmptyStrings=false)]
+       public string Creator { get; set; }
+
+       /// <summary>
+       ///创建时间
+       /// </summary>
+       [Display(Name ="创建时间")]
+       [Column(TypeName="datetime")]
+       [Editable(true)]
+       [Required(AllowEmptyStrings=false)]
+       public DateTime CreationTime { get; set; }
+
+       /// <summary>
+       ///删除人编号
+       /// </summary>
+       [Display(Name ="删除人编号")]
+       [Column(TypeName="int")]
+       [Editable(true)]
+       public int? DeleterId { get; set; }
+
+       /// <summary>
+       ///删除人
+       /// </summary>
+       [Display(Name ="删除人")]
+       [MaxLength(128)]
+       [Column(TypeName="nvarchar(128)")]
+       [Editable(true)]
+       public string Deleter { get; set; }
+
+       /// <summary>
+       ///删除时间
+       /// </summary>
+       [Display(Name ="删除时间")]
+       [Column(TypeName="datetime")]
+       [Editable(true)]
+       public DateTime? DeletionTime { get; set; }
+
+       /// <summary>
+       ///删除
+       /// </summary>
+       [Display(Name ="删除")]
+       [Column(TypeName="bit")]
+       [Editable(true)]
+       public bool? IsDeleted { get; set; }
+
+       /// <summary>
+       ///系统
+       /// </summary>
+       [Display(Name ="系统")]
+       [Column(TypeName="bit")]
+       [Editable(true)]
+       public bool? IsIsSystem { get; set; }
+
+       
+    }
+}

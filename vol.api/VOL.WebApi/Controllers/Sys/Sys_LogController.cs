@@ -1,22 +1,21 @@
-﻿using Microsoft.AspNetCore.Authorization;
+/*
+ *代码由框架生成,任何更改都可能导致被代码生成器覆盖
+ *如果要增加方法请在当前目录下Partial文件夹Sys_LogController编写
+ */
 using Microsoft.AspNetCore.Mvc;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using VOL.Core.Controllers.Basic;
-using VOL.Core.DBManager;
-using VOL.Entity.DomainModels;
+using VOL.Entity.AttributeManager;
 using VOL.Sys.IServices;
-
 namespace VOL.Sys.Controllers
 {
-    [Route("api/Sys_Log")]
+    [Route("api/ssbh/Sys_Log")]
+    [PermissionTable(Name = "Sys_Log")]
     public partial class Sys_LogController : ApiBaseController<ISys_LogService>
     {
-        public Sys_LogController(ISys_LogService service)
-        : base("System", "System", "Sys_Log", service)
-        {
-        }
+    public Sys_LogController(ISys_LogService service)
+    : base(service)
+    {
     }
-}
+    }
+    }
+

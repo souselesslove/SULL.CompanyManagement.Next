@@ -121,6 +121,34 @@ namespace SULL.HospitalManagement.Services
 
         public override WebResponseContent Add(SaveModel saveModel)
         {
+            // 提取关键字段进行重复性检测
+            if (saveModel.MainData.TryGetValue("UserId", out object userIdObj) &&
+                saveModel.MainData.TryGetValue("ScheduleDate", out object dateObj))
+            {
+                int userId = userIdObj.ToString().GetInt();
+                DateTime scheduleDate = dateObj.ToString().GetDateTime().Value.Date;
+                
+                // 获取机构和部门编号（优先从参数获取，否则使用当前用户信息）
+                long orgId = UserContext.Current.OrganizationId;
+                long deptId = UserContext.Current.DepartmentId;
+
+                // 查找是否已存在该人员在该日期的排班（加入机构和部门过滤）
+                var existingId = _repository.FindAsIQueryable(x => x.UserId == userId
+                                                                  && x.ScheduleDate == scheduleDate
+                                                                  && x.OrganizationId == orgId
+                                                                  && x.DepartmentId == deptId
+                                                                  && x.IsDeleted != true)
+                                           .Select(x => x.Id)
+                                           .FirstOrDefault();
+
+                if (existingId > 0)
+                {
+                    // 如果存在，则将 ID 注入 MainData 并转调 Update 逻辑
+                    saveModel.MainData["Id"] = existingId;
+                    return this.Update(saveModel);
+                }
+            }
+
             AddOnExecuted = (schedule, response) =>
             {
                 if (schedule.UserId > 0)

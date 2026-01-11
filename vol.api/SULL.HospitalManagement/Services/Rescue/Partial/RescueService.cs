@@ -102,13 +102,22 @@ namespace SULL.HospitalManagement.Services
             saveModel.MainData["OrganizationId"] = UserContext.Current.OrganizationId;
             saveModel.MainData["DepartmentId"] = UserContext.Current.DepartmentId;
 
+            long cartId = saveModel.MainData.GetValueOrDefault("CartId").GetLong();
+            if (cartId <= 0)
+            {
+                return new WebResponseContent().Error("抢救车编号不能为空");
+            }
+
+            string lockKey = $"Rescue_Add_{cartId}";
+            WebResponseContent? result = null;
+
             AddOnExecuted = (newEntity, list) =>
             {
                 var db = _repository.DbContext;
                 db.Set<WarningLogs>().Add(new WarningLogs
                 {
                     Id = YitIdHelper.NextId(),
-                    Category = 110, 
+                    Category = 110,
                     Description = $"[{newEntity.CartName}]正在抢救病人[{newEntity.Name}]",
                     OrganizationId = newEntity.OrganizationId,
                     DepartmentId = newEntity.DepartmentId,
@@ -120,7 +129,7 @@ namespace SULL.HospitalManagement.Services
 
                 // 发送通知
                 NotifyDepartmentManagersAsync(newEntity.OrganizationId ?? 0, newEntity.DepartmentId, "抢救开始通知", $"[{newEntity.CartName}]正在抢救病人[{newEntity.Name}]").GetAwaiter().GetResult();
-                
+
                 // 缓存处理：写入新缓存，替换旧的
                 string key = $"Rescue_Cart_{newEntity.CartId}";
                 _hospitalCache.Set(key, newEntity);
@@ -128,7 +137,21 @@ namespace SULL.HospitalManagement.Services
                 return new WebResponseContent(true);
             };
 
-            return base.Add(saveModel);
+            KeyLock.Lock(lockKey, () =>
+            {
+                // 检测是否存在正在抢救中的记录 (Status != 10 && Status != 20 && Status != 100)
+                // 简化判断：Status == 0 为正在抢救
+                bool exists = _repository.Exists(x => x.CartId == cartId && (x.Status == 0 || x.Status == null) && x.IsDeleted != true);
+                if (exists)
+                {
+                    result = new WebResponseContent().Error("该抢救车已有正在进行中的抢救任务，请先结束当前抢救。");
+                    return;
+                }
+
+                result = base.Add(saveModel);
+            });
+
+            return result ?? new WebResponseContent().Error("操作失败");
         }
 
         public override WebResponseContent Update(SaveModel saveModel)

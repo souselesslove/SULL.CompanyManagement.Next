@@ -347,7 +347,7 @@ namespace VOL.Core.ManageUser
         /// 判断是否有权限
         /// </summary>
         /// <param name="tableName"></param>
-        /// <param name="authName"></param>
+        /// <param name="actionPermission"></param>
         /// <param name="roleId"></param>
         /// <returns></returns>
         public bool ExistsPermissions(string tableName, ActionPermissionOptions actionPermission, int roleId = 0)
