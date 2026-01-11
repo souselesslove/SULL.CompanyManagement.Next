@@ -154,6 +154,12 @@
 			}
 		},
 		{
+			"path": "pages/item-manage/item-book",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/webview/webview",
 			"style": {
 				"navigationStyle": "default",

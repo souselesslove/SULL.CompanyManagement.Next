@@ -49,7 +49,7 @@
                     <view class="tab-item" :class="{ active: currentTab === 0 }" @click="currentTab = 0">{{
                         $t('itemManage.field_mapping') }}</view>
                     <view class="tab-item" :class="{ active: currentTab === 1 }" @click="currentTab = 1">
-                        上传结果
+                        {{ $t('itemManage.upload_results') }}
                         <text class="badge" v-if="importResults.length > 0">{{ importResults.length }}</text>
                     </view>
                 </view>
@@ -74,7 +74,7 @@
                             <picker :range="displayExcelHeaders" @change="(e) => onMappingChange(e, key)"
                                 :value="getMappingIndex(key)">
                                 <view class="picker-cell" :class="{ empty: !mapping[key] }">
-                                    {{ mapping[key] || '请选择' }}
+                                    {{ mapping[key] || $t('itemManage.please_select') }}
                                 </view>
                             </picker>
                         </view>
@@ -128,31 +128,8 @@ export default {
             excelHeaders: [], // Array of strings
             excelData: [], // Array of objects
 
-            // System Fields Definition
-            sysFields: {
-                Name: { label: '物品名称', required: false }, // Custom check
-                FullName: { label: '完整名称', required: false }, // Custom check
-                InterfaceCode: { label: '接口代码', required: false }, // Nullable true in schema
-                Category: { label: '类型', required: false }, // Default to 0
-                Specification: { label: '规格', required: false },
-                Unit: { label: '单位', required: false },
-                Form: { label: '剂型', required: false },
-                Price: { label: '价格（分）', required: false },
-                RegisterCode: { label: '批准文号', required: false },
-                Factory: { label: '生产厂家', required: false },
-                Cardinality: { label: '基数', required: false }, // Default to 1
-                Barcode: { label: '条码号', required: false },
-                OrderBy: { label: '排序', required: false }, // Default to (index+1)*10
-                SearchCode: { label: '检索码', required: false },
-                Remark: { label: '备注', required: false },
-                Tag: { label: '标签', required: false },
-                Layer: { label: '层数', required: false },
-                LayerNO: { label: '层号', required: false },
-                ColumnNO: { label: '位置号', required: false }
-            },
 
             mapping: {}, // key (sysField) -> value (excelHeaderName)
-
             uploading: false,
             progress: 0,
             totalRows: 0,
@@ -164,8 +141,31 @@ export default {
         };
     },
     computed: {
+        sysFields() {
+            return {
+                Name: { label: this.$t('itemManage.name'), required: false },
+                FullName: { label: this.$t('itemManage.full_name'), required: false },
+                InterfaceCode: { label: this.$t('itemManage.code'), required: false },
+                Category: { label: this.$t('itemManage.category'), required: false },
+                Specification: { label: this.$t('itemManage.spec'), required: false },
+                Unit: { label: this.$t('itemManage.unit'), required: false },
+                Form: { label: this.$t('itemManage.form'), required: false },
+                Price: { label: this.$t('itemManage.price') || 'Price', required: false },
+                RegisterCode: { label: this.$t('itemManage.register_code'), required: false },
+                Factory: { label: this.$t('itemManage.factory'), required: false },
+                Cardinality: { label: this.$t('itemManage.cardinality'), required: false },
+                Barcode: { label: this.$t('itemManage.barcode'), required: false },
+                OrderBy: { label: this.$t('itemManage.sort'), required: false },
+                SearchCode: { label: this.$t('itemManage.search_code'), required: false },
+                Remark: { label: this.$t('itemManage.remark'), required: false },
+                Tag: { label: 'Tag', required: false },
+                Layer: { label: 'Layer', required: false },
+                LayerNO: { label: 'Layer NO', required: false },
+                ColumnNO: { label: 'Column NO', required: false }
+            };
+        },
         displayExcelHeaders() {
-            return ['请选择', ...this.excelHeaders];
+            return [this.$t('itemManage.please_select'), ...this.excelHeaders];
         },
         cleanSheetIndex() {
             return this.sheetNames.indexOf(this.selectedSheetName);
@@ -257,9 +257,9 @@ export default {
                 });
                 if (!hasPermission) {
                     uni.showModal({
-                        title: '读取权限',
-                        content: '导入文件需要读取存储空间权限，请在设置中开启',
-                        confirmText: '去设置',
+                        title: this.$t('itemManage.permission_request'),
+                        content: this.$t('itemManage.permission_storage_read'),
+                        confirmText: this.$t('itemManage.go_to_settings'),
                         success: (res) => { if (res.confirm) plus.runtime.openAppSettings(); }
                     });
                     return;
@@ -277,7 +277,7 @@ export default {
                 },
                 fail: (err) => {
                     if (err && err.errMsg && err.errMsg.indexOf('cancel') === -1) {
-                        uni.showToast({ title: '选择操作已取消或失败', icon: 'none' });
+                        uni.showToast({ title: this.$t('itemManage.select_cancel_fail'), icon: 'none' });
                     }
                 }
             };
@@ -294,7 +294,7 @@ export default {
             } else if (uni.getSystemInfoSync().platform === 'android') {
                 this.androidFilePicker(options.success);
             } else {
-                uni.showToast({ title: '当前环境不支持文件选择', icon: 'none' });
+                uni.showToast({ title: this.$t('itemManage.env_not_support_file'), icon: 'none' });
             }
             // #endif
 
@@ -324,7 +324,7 @@ export default {
                         });
                     } catch (e) {
                         uni.hideLoading();
-                        uni.showToast({ title: '选取文件失败', icon: 'none' });
+                        uni.showToast({ title: this.$t('itemManage.select_file_fail'), icon: 'none' });
                     }
                 } else {
                     uni.hideLoading();
@@ -336,7 +336,7 @@ export default {
             this.fileName = file.name;
             const filePath = file.path;
 
-            uni.showLoading({ title: '文件读取中...' });
+            uni.showLoading({ title: this.$t('itemManage.file_read_in') });
 
             // #ifdef H5
             const reader = new FileReader();
@@ -351,7 +351,7 @@ export default {
             // #ifdef APP-PLUS || MP-WEIXIN
             const timeout = setTimeout(() => {
                 uni.hideLoading();
-                uni.showToast({ title: '读取超时', icon: 'none' });
+                uni.showToast({ title: this.$t('itemManage.read_timeout'), icon: 'none' });
             }, 15000);
 
             // Special handling for Android Content URIs using native Java
@@ -397,7 +397,7 @@ export default {
                         try {
                             this.parseExcel(new Uint8Array(res.data));
                         } catch (err) {
-                            uni.showToast({ title: 'Excel格式解析失败', icon: 'none' });
+                            uni.showToast({ title: this.$t('itemManage.excel_format_fail'), icon: 'none' });
                         }
                     },
                     fail: (err) => {
@@ -412,17 +412,17 @@ export default {
                                     this.parseExcel(new Uint8Array(e.target.result));
                                 };
                                 reader.readAsArrayBuffer(fileObj);
-                            }, () => { clearTimeout(timeout); uni.hideLoading(); uni.showToast({ title: '访问文件失败', icon: 'none' }); });
+                            }, () => { clearTimeout(timeout); uni.hideLoading(); uni.showToast({ title: this.$t('itemManage.access_file_fail'), icon: 'none' }); });
                         }, () => {
                             clearTimeout(timeout);
                             uni.hideLoading();
-                            uni.showToast({ title: '路径解析失败', icon: 'none' });
+                            uni.showToast({ title: this.$t('itemManage.path_parse_fail'), icon: 'none' });
                         });
                         // #endif
                         // #ifndef APP-PLUS
                         clearTimeout(timeout);
                         uni.hideLoading();
-                        uni.showToast({ title: '读取失败', icon: 'none' });
+                        uni.showToast({ title: this.$t('itemManage.file_read_fail'), icon: 'none' });
                         // #endif
                     }
                 });
@@ -444,7 +444,7 @@ export default {
                 }
             } catch (e) {
                 console.error(e);
-                uni.showToast({ title: 'Excel解析失败', icon: 'none' });
+                uni.showToast({ title: this.$t('itemManage.excel_parse_fail'), icon: 'none' });
             }
         },
         onSheetChange(e) {
@@ -452,7 +452,7 @@ export default {
             this.selectedSheetName = this.sheetNames[index];
 
             if (!this.workbook) {
-                uni.showToast({ title: '请重新选择文件以切换工作表', icon: 'none' });
+                uni.showToast({ title: this.$t('common.tip'), icon: 'none' });
                 return;
             }
 
@@ -606,7 +606,7 @@ export default {
             if (errors.length > 0) {
                 this.importResults = errors;
                 this.currentTab = 1; // Switch to result tab
-                uni.showToast({ title: '数据校验未通过', icon: 'none' });
+                uni.showToast({ title: this.$t('itemManage.data_validation_fail'), icon: 'none' });
                 this.saveCache();
                 return false;
             }
@@ -694,8 +694,8 @@ export default {
                     this.uploading = false;
                     this.clearCache(); // Success clean up
                     uni.showModal({
-                        title: '导入完成',
-                        content: `成功导入 ${importList.length} 条数据`,
+                        title: this.$t('itemManage.import_complete'),
+                        content: this.$t('itemManage.import_count', { count: importList.length }),
                         showCancel: false,
                         success: () => {
                             uni.navigateBack();
@@ -711,7 +711,7 @@ export default {
                     }
                     this.currentTab = 1;
                     this.saveCache(); // Save error state
-                    uni.showToast({ title: '导入出现异常', icon: 'none' });
+                    uni.showToast({ title: this.$t('itemManage.import_exception'), icon: 'none' });
                 }
             } catch (e) {
                 console.error(e);

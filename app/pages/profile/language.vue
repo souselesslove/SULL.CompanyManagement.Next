@@ -3,13 +3,7 @@
         <scroll-view scroll-y class="main-scroll" :scroll-top="scrollTopValue" @scroll="onScroll"
             refresher-enabled="true" :refresher-triggered="isRefreshing" @refresherrefresh="onRefresh"
             refresher-default-style="none" refresher-background="#f0f5ff">
-            <view slot="refresher" class="custom-refresher">
-                <view class="refresher-content">
-                    <view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
-                    <text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
-                    }}</text>
-                </view>
-            </view>
+            <CustomRefresher slot="refresher" :isRefreshing="isRefreshing" :isPulling="isPulling" />
 
             <view class="scroll-content">
                 <!-- Header -->
@@ -46,17 +40,20 @@
 <script>
 import BackToTop from '@/components/BackToTop/BackToTop.vue';
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
+import CustomRefresher from '@/components/CustomRefresher/CustomRefresher.vue';
 
 export default {
     components: {
         BackToTop,
-        FooterInfo
+        FooterInfo,
+        CustomRefresher
     },
     data() {
         return {
             scrollTop: 0,
             scrollTopValue: 0,
             isRefreshing: false,
+            isPulling: false,
             languages: [{
                 code: 'zh-Hans',
                 name: '简体中文'

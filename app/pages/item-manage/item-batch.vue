@@ -23,14 +23,7 @@
             :refresher-triggered="isRefreshing" @refresherrefresh="onRefresh" @refresherpulling="onPulling"
             @refresherrestore="onRestore" @scroll="onScroll" :scroll-top="scrollTop">
 
-            <view slot="refresher" class="custom-refresher"
-                :style="{ transform: (isPulling || isRefreshing) ? 'translateY(120rpx)' : 'translateY(0)' }">
-                <view class="refresher-content">
-                    <view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
-                    <text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
-                    }}</text>
-                </view>
-            </view>
+            <CustomRefresher slot="refresher" :isRefreshing="isRefreshing" :isPulling="isPulling" />
 
             <view class="content">
                 <!-- Search Bar -->
@@ -51,7 +44,7 @@
                             <view class="name-info">
                                 <text class="item-name">{{ batch.ItemName || '-' }}</text>
                                 <text class="batch-no">{{ $t('itemManage.batch_no') }}: {{ batch.RegisterCode || '-'
-                                    }}</text>
+                                }}</text>
                             </view>
                             <view class="status-tag" :class="getExpiryClass(batch.ExpirationDate)">
                                 <text>{{ getExpiryText(batch.ExpirationDate) }}</text>
@@ -144,6 +137,7 @@
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import BackButton from '@/components/BackButton/BackButton.vue';
 import BackToTop from '@/components/BackToTop/BackToTop.vue';
+import CustomRefresher from '@/components/CustomRefresher/CustomRefresher.vue';
 import request from '@/utils/request.js';
 import { storage } from '@/utils/storage.js';
 import dayjs from 'dayjs';
@@ -153,7 +147,8 @@ export default {
     components: {
         FooterInfo,
         BackButton,
-        BackToTop
+        BackToTop,
+        CustomRefresher
     },
     data() {
         return {
@@ -229,10 +224,10 @@ export default {
         },
         getExpiryText(dateStr) {
             const days = this.getDaysUntil(dateStr);
-            if (days < 0) return '已过期';
-            if (days < 30) return `剩${days}天`;
-            if (days <= 90) return `剩${days}天`;
-            return '正常';
+            if (days < 0) return this.$t('itemManage.expired');
+            if (days < 30) return this.$t('itemManage.days_left', { days: days });
+            if (days <= 90) return this.$t('itemManage.days_left', { days: days });
+            return this.$t('itemManage.normal');
         },
         goBack() {
             uni.navigateBack();
@@ -315,7 +310,7 @@ export default {
         },
         async handleExport() {
             if (this.batchList.length === 0) {
-                uni.showToast({ title: '无数据可导出', icon: 'none' });
+                uni.showToast({ title: this.$t('itemManage.no_data_export'), icon: 'none' });
                 return;
             }
 
@@ -331,9 +326,9 @@ export default {
 
                 if (!hasPermission) {
                     uni.showModal({
-                        title: '权限申请',
-                        content: '需要存储空间写入权限才能导出Excel文件，请在设置中开启',
-                        confirmText: '去设置',
+                        title: this.$t('itemManage.permission_request'),
+                        content: this.$t('itemManage.permission_storage_write'),
+                        confirmText: this.$t('itemManage.go_to_settings'),
                         success: (res) => {
                             if (res.confirm) {
                                 plus.runtime.openAppSettings();
@@ -345,13 +340,13 @@ export default {
             }
             // #endif
 
-            uni.showLoading({ title: '正在导出...', mask: true });
+            uni.showLoading({ title: this.$t('itemManage.exporting'), mask: true });
 
             try {
                 const headers = this.systemFields.map(f => f.label.split(' / ')[0]);
                 const keys = this.systemFields.map(f => f.key);
                 // Prepend ItemName for clarity
-                headers.unshift('物品名称');
+                headers.unshift(this.$t('itemManage.name'));
                 keys.unshift('ItemName');
 
                 const data = this.batchList.map(row => keys.map(k => row[k]));
@@ -380,7 +375,7 @@ export default {
                     },
                     fail: () => {
                         uni.hideLoading();
-                        uni.showToast({ title: '写入失败', icon: 'none' });
+                        uni.showToast({ title: this.$t('common.fail'), icon: 'none' });
                     }
                 });
                 // #endif
@@ -430,14 +425,14 @@ export default {
                             success: (modalRes) => {
                                 if (modalRes.confirm) {
                                     plus.runtime.openFile(filePath, {}, (err) => {
-                                        uni.showToast({ title: '无法打开此类型文件', icon: 'none' });
+                                        uni.showToast({ title: this.$t('itemManage.access_file_fail'), icon: 'none' });
                                     });
                                 }
                             }
                         });
                     } catch (e) {
                         uni.hideLoading();
-                        uni.showToast({ title: '导出失败', icon: 'none' });
+                        uni.showToast({ title: this.$t('itemManage.export_fail'), icon: 'none' });
                     }
                 } else {
                     // iOS fallback
@@ -449,15 +444,15 @@ export default {
                         encoding: 'base64',
                         success: () => {
                             uni.hideLoading();
-                            uni.showModal({ title: '导出完成', content: '已保存至应用文档目录', showCancel: false });
+                            uni.showModal({ title: this.$t('itemManage.export_success'), content: this.$t('itemManage.export_to_doc'), showCancel: false });
                         },
-                        fail: () => { uni.hideLoading(); uni.showToast({ title: '保存失败', icon: 'none' }); }
+                        fail: () => { uni.hideLoading(); uni.showToast({ title: this.$t('common.fail'), icon: 'none' }); }
                     });
                 }
                 // #endif
             } catch (e) {
                 uni.hideLoading();
-                uni.showToast({ title: '导出出错', icon: 'none' });
+                uni.showToast({ title: this.$t('itemManage.export_error'), icon: 'none' });
             }
         },
         async handleImportExcel() {
@@ -471,9 +466,9 @@ export default {
                 });
                 if (!hasPermission) {
                     uni.showModal({
-                        title: '读取权限',
-                        content: '导入需要存储读取权限，请开启',
-                        confirmText: '开启',
+                        title: this.$t('itemManage.permission_request'),
+                        content: this.$t('itemManage.permission_storage_read'),
+                        confirmText: this.$t('common.confirm'),
                         success: (res) => { if (res.confirm) plus.runtime.openAppSettings(); }
                     });
                     return;
@@ -489,7 +484,7 @@ export default {
                 },
                 fail: (err) => {
                     if (err && err.errMsg && err.errMsg.indexOf('cancel') === -1) {
-                        uni.showToast({ title: '选择失败', icon: 'none' });
+                        uni.showToast({ title: this.$t('itemManage.select_cancel_fail'), icon: 'none' });
                     }
                 }
             };
@@ -506,7 +501,7 @@ export default {
             } else if (uni.getSystemInfoSync().platform === 'android') {
                 this.androidFilePicker(options.success);
             } else {
-                uni.showToast({ title: '当前环境不支持文件选择', icon: 'none' });
+                uni.showToast({ title: this.$t('itemManage.env_not_support_file'), icon: 'none' });
             }
             // #endif
 
@@ -533,7 +528,7 @@ export default {
                         });
                     } catch (e) {
                         uni.hideLoading();
-                        uni.showToast({ title: '选取文件出错', icon: 'none' });
+                        uni.showToast({ title: this.$t('itemManage.select_file_fail'), icon: 'none' });
                     }
                 } else {
                     uni.hideLoading();
@@ -543,7 +538,7 @@ export default {
         },
         processImportFile(file) {
             const path = file.path;
-            uni.showLoading({ title: '正在提取数据...' });
+            uni.showLoading({ title: this.$t('itemManage.extracting_data') });
 
             // #ifdef H5
             const reader = new FileReader();
@@ -557,7 +552,7 @@ export default {
             // #ifdef APP-PLUS || MP-WEIXIN
             const timeout = setTimeout(() => {
                 uni.hideLoading();
-                uni.showToast({ title: '读取数据超时', icon: 'none' });
+                uni.showToast({ title: this.$t('itemManage.read_timeout'), icon: 'none' });
             }, 15000);
 
             // Native Android ContentResolver reader
@@ -613,25 +608,25 @@ export default {
                                 reader.onerror = () => {
                                     clearTimeout(timeout);
                                     uni.hideLoading();
-                                    uni.showToast({ title: '读取内容失败', icon: 'none' });
+                                    uni.showToast({ title: this.$t('itemManage.read_content_fail'), icon: 'none' });
                                 };
                                 reader.readAsArrayBuffer(fileObj);
                             }, () => {
                                 clearTimeout(timeout);
                                 uni.hideLoading();
-                                uni.showToast({ title: '访问文件失败', icon: 'none' });
+                                uni.showToast({ title: this.$t('itemManage.access_file_fail'), icon: 'none' });
                             });
                         }, (e) => {
                             clearTimeout(timeout);
                             uni.hideLoading();
-                            uni.showToast({ title: '无法解析文件', icon: 'none' });
+                            uni.showToast({ title: this.$t('itemManage.path_parse_fail'), icon: 'none' });
                         });
                         // #endif
 
                         // #ifndef APP-PLUS
                         clearTimeout(timeout);
                         uni.hideLoading();
-                        uni.showToast({ title: '读取失败', icon: 'none' });
+                        uni.showToast({ title: this.$t('itemManage.file_read_fail'), icon: 'none' });
                         // #endif
                     }
                 });
@@ -645,7 +640,7 @@ export default {
                 const workbook = XLSX.read(data, { type: type });
                 this.processWorkbook(workbook);
             } catch (err) {
-                uni.showToast({ title: '解析Excel失败', icon: 'none' });
+                uni.showToast({ title: this.$t('itemManage.excel_parse_fail'), icon: 'none' });
             }
         },
         processWorkbook(workbook) {
@@ -670,7 +665,7 @@ export default {
                 this.validateMappings();
                 this.showMappingModal = true;
             } else {
-                uni.showToast({ title: 'No data found in Excel', icon: 'none' });
+                uni.showToast({ title: this.$t('common.no_data'), icon: 'none' });
             }
         },
         validateMappings() {
@@ -706,11 +701,11 @@ export default {
             // Check if at least one mapping is done
             const activeMappings = Object.values(this.fieldMappings).filter(v => !!v);
             if (activeMappings.length === 0) {
-                uni.showToast({ title: 'Please pair at least one field', icon: 'none' });
+                uni.showToast({ title: this.$t('itemManage.please_pair_field'), icon: 'none' });
                 return;
             }
 
-            uni.showLoading({ title: 'Importing...' });
+            uni.showLoading({ title: this.$t('itemManage.uploading') });
 
             // Map the data
             const mappedData = this.parsedJsonData.map(row => {
@@ -730,7 +725,7 @@ export default {
             setTimeout(() => {
                 uni.hideLoading();
                 this.showMappingModal = false;
-                uni.showToast({ title: `${mappedData.length} rows imported`, icon: 'success' });
+                uni.showToast({ title: this.$t('itemManage.import_count', { count: mappedData.length }), icon: 'success' });
                 this.onRefresh();
             }, 1000);
         }
@@ -977,48 +972,7 @@ export default {
     height: 48rpx;
 }
 
-/* Custom Refresher matching search-results */
-.custom-refresher {
-    height: 120rpx;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: absolute;
-    top: -120rpx;
-    left: 0;
-    width: 100%;
-    transition: transform 0.2s linear;
-}
 
-.refresher-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8rpx;
-}
-
-.refresher-icon {
-    width: 48rpx;
-    height: 48rpx;
-    border: 3rpx solid #ccc;
-    border-top-color: $sull-color-primary;
-    border-radius: 50%;
-
-    &.animating {
-        animation: spin 0.8s linear infinite;
-    }
-}
-
-.refresher-text {
-    font-size: 24rpx;
-    color: #999;
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
 
 .mapping-modal {
     position: fixed;

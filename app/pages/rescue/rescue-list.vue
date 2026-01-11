@@ -36,7 +36,10 @@
 
             <!-- List -->
             <scroll-view class="list-container" scroll-y @scrolltolower="loadMore" :refresher-enabled="true"
-                :refresher-triggered="refreshing" @refresherrefresh="onRefresh">
+                :refresher-triggered="refreshing" :refresher-threshold="60" @refresherrefresh="onRefresh"
+                @refresherpulling="onPulling" @refresherrestore="onRestore" @refresherabort="onRestore"
+                refresher-default-style="none" refresher-background="#f5f7fa">
+                <CustomRefresher slot="refresher" :isRefreshing="refreshing" :isPulling="isPulling" />
                 <view class="list-content">
                     <view class="rescue-card" v-for="(item, index) in list" :key="index" @click="goDetail(item)">
                         <view class="card-header">
@@ -114,6 +117,7 @@
 import BackButton from '@/components/BackButton/BackButton.vue';
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import WarningModal from '@/components/WarningModal/WarningModal.vue';
+import CustomRefresher from '@/components/CustomRefresher/CustomRefresher.vue';
 import request from '@/utils/request.js';
 import { storage } from '@/utils/storage.js';
 import dayjs from 'dayjs';
@@ -122,7 +126,8 @@ export default {
     components: {
         BackButton,
         FooterInfo,
-        WarningModal
+        WarningModal,
+        CustomRefresher
     },
     data() {
         return {
@@ -140,6 +145,7 @@ export default {
             total: 0,
             loading: false,
             refreshing: false,
+            isPulling: false,
             hasMore: true,
             warningModal: {
                 visible: false,
@@ -266,12 +272,14 @@ export default {
                 this.hasMore = this.list.length < this.total;
                 this.loading = false;
                 this.refreshing = false;
+                this.isPulling = false;
 
                 // If stats endpoint fails, maybe update total here
                 if (this.stats.total === 0 && this.total > 0) this.stats.total = this.total;
             }).catch(e => {
                 this.loading = false;
                 this.refreshing = false;
+                this.isPulling = false;
                 uni.showToast({ title: this.$t('common.load_fail'), icon: 'none' });
             });
         },
@@ -284,8 +292,15 @@ export default {
         },
         onRefresh() {
             this.refreshing = true;
+            this.isPulling = true;
             this.fetchStats();
             this.loadList(true);
+        },
+        onPulling() {
+            this.isPulling = true;
+        },
+        onRestore() {
+            this.isPulling = false;
         },
         handleAction(item, type) {
             let title = '';

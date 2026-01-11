@@ -15,7 +15,10 @@
             container-style="padding: 16rpx 32rpx; border-bottom: 2rpx solid #f0f0f0;" />
 
         <scroll-view scroll-y class="content" refresher-enabled="true" :refresher-triggered="isRefreshing"
-            @refresherrefresh="onRefresh">
+            :refresher-threshold="60" @refresherrefresh="onRefresh" @refresherpulling="onPulling"
+            @refresherrestore="onRestore" @refresherabort="onRestore" refresher-default-style="none"
+            refresher-background="#f5f7fa">
+            <CustomRefresher slot="refresher" :isRefreshing="isRefreshing" :isPulling="isPulling" />
 
             <view v-if="filteredNotifications.length === 0" class="empty-state">
                 <image class="empty-img" src="/static/imgs/empty.png" mode="aspectFit"></image>
@@ -60,14 +63,16 @@
 import { storage } from '@/utils/storage.js';
 import BackButton from '@/components/BackButton/BackButton.vue';
 import CapsuleTabs from '@/components/CapsuleTabs/CapsuleTabs.vue';
+import CustomRefresher from '@/components/CustomRefresher/CustomRefresher.vue';
 
 export default {
-    components: { BackButton, CapsuleTabs },
+    components: { BackButton, CapsuleTabs, CustomRefresher },
     data() {
         return {
             statusBarHeight: 20,
             notifications: [],
             isRefreshing: false,
+            isPulling: false,
             currentTab: 'all' // all, unread, read
         }
     },
@@ -124,10 +129,18 @@ export default {
         },
         onRefresh() {
             this.isRefreshing = true;
+            this.isPulling = true;
             this.fetchNotifications();
             setTimeout(() => {
                 this.isRefreshing = false;
+                this.isPulling = false;
             }, 500);
+        },
+        onPulling() {
+            this.isPulling = true;
+        },
+        onRestore() {
+            this.isPulling = false;
         },
         handleItemClick(item) {
             if (!item.isRead) {

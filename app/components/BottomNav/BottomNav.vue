@@ -30,6 +30,7 @@
 </template>
 
 <script>
+import { globalScan } from '@/utils/scan.js';
 import SuccessModal from '@/components/SuccessModal/SuccessModal.vue';
 import { storage } from '@/utils/storage.js';
 
@@ -67,30 +68,35 @@ export default {
 			}
 		},
 		handleScan() {
-			uni.scanCode({
-				success: (res) => {
-					console.log('Scan result:', res);
-					// Check if result is a HTTP URL
-					// item.html?code=379630044868680%2bssa3213221
-					if (res.result && (res.result.indexOf('http') === 0 || res.result.indexOf('item.html') === 0)) {
-						storage.set('TEMP_WEBVIEW_URL', res.result);
+			globalScan((res) => {
+				const scanData = res.data;
+				// Check if result is a medicine instruction link
+				if (scanData && scanData.indexOf('item.html') > -1) {
+					// Extract code from URL
+					let codeValue = '';
+					const matches = scanData.match(/[?&]code=([^&]*)/);
+					if (matches && matches[1]) {
+						codeValue = decodeURIComponent(matches[1]);
+					}
+					if (codeValue) {
 						uni.navigateTo({
-							url: '/pages/webview/webview'
+							url: `/pages/item-manage/item-book?code=${encodeURIComponent(codeValue)}`
 						});
 						return;
 					}
-					this.scanResultModal.message = `${this.$t('index.scan.result')}: ${res.result}\n${this.$t('index.scan.type')}: ${res.scanType}`;
-					this.scanResultModal.visible = true;
-				},
-				fail: (err) => {
-					console.error('Scan failed:', err);
-					if (err.errMsg.indexOf('cancel') === -1) {
-						uni.showToast({
-							title: this.$t('index.scan.cancel'),
-							icon: 'none'
-						});
-					}
 				}
+
+				// Check if result is a general HTTP URL
+				if (scanData && scanData.indexOf('http') === 0) {
+					storage.set('TEMP_WEBVIEW_URL', scanData);
+					uni.navigateTo({
+						url: '/pages/webview/webview'
+					});
+					return;
+				}
+
+				this.scanResultModal.message = `${this.$t('index.scan.result')}: ${scanData}\n${this.$t('index.scan.type')}: ${res.format}`;
+				this.scanResultModal.visible = true;
 			});
 		}
 	}

@@ -6,7 +6,7 @@
 				<view class="nav-left">
 					<BackButton class="nav-back-btn" @click="goBack" />
 				</view>
-				<text class="nav-title">{{ isEdit ? '编辑物品' : $t('itemManage.add') }}</text>
+				<text class="nav-title">{{ isEdit ? $t('itemManage.edit_item') : $t('itemManage.add') }}</text>
 				<view class="nav-right"></view>
 			</view>
 		</view>
@@ -14,7 +14,7 @@
 		<scroll-view class="form-content" scroll-y :style="{ marginTop: (statusBarHeight * 2 + 88) + 'rpx' }">
 			<view class="qr-section" v-if="isEdit && qrCodeValue">
 				<uv-qrcode :value="qrCodeValue" size="200px" ref="qrcode"></uv-qrcode>
-				<text class="qr-hint">物品二维码</text>
+				<text class="qr-hint">{{ $t('itemManage.qr_hint') }}</text>
 			</view>
 			<view class="form-card">
 				<view class="form-item">
@@ -30,10 +30,10 @@
 					<input class="input" v-model="formData.InterfaceCode" :placeholder="$t('itemManage.code')" />
 				</view>
 				<view class="form-item">
-					<text class="label">类型</text>
+					<text class="label">{{ $t('itemManage.category') }}</text>
 					<picker :range="categories" range-key="text" @change="onCategoryChange" :value="categoryIndex">
 						<view class="input">
-							{{ categoryText || '请选择' }}
+							{{ categoryText || $t('itemManage.please_select') }}
 						</view>
 					</picker>
 				</view>
@@ -50,8 +50,9 @@
 					<input class="input" v-model="formData.Form" :placeholder="$t('itemManage.form')" />
 				</view>
 				<view class="form-item">
-					<text class="label">批准文号</text>
-					<input class="input" v-model="formData.RegisterCode" placeholder="批准文号" />
+					<text class="label">{{ $t('itemManage.register_code') }}</text>
+					<input class="input" v-model="formData.RegisterCode"
+						:placeholder="$t('itemManage.register_code')" />
 				</view>
 				<view class="form-item">
 					<text class="label">{{ $t('itemManage.factory') }}</text>
@@ -67,16 +68,17 @@
 					<input class="input" v-model="formData.Barcode" :placeholder="$t('itemManage.barcode')" />
 				</view>
 				<view class="form-item">
-					<text class="label">排序</text>
-					<input class="input" type="number" v-model.number="formData.OrderBy" placeholder="排序" />
+					<text class="label">{{ $t('itemManage.sort') }}</text>
+					<input class="input" type="number" v-model.number="formData.OrderBy"
+						:placeholder="$t('itemManage.sort')" />
 				</view>
 				<view class="form-item">
-					<text class="label">检索码</text>
-					<input class="input" v-model="formData.SearchCode" placeholder="检索码" />
+					<text class="label">{{ $t('itemManage.search_code') }}</text>
+					<input class="input" v-model="formData.SearchCode" :placeholder="$t('itemManage.search_code')" />
 				</view>
 				<view class="form-item">
-					<text class="label">备注</text>
-					<input class="input" v-model="formData.Remark" placeholder="备注" />
+					<text class="label">{{ $t('itemManage.remark') }}</text>
+					<input class="input" v-model="formData.Remark" :placeholder="$t('itemManage.remark')" />
 				</view>
 			</view>
 
@@ -117,17 +119,19 @@ export default {
 				IsDeleted: 0,
 				Status: 1
 			},
-			categories: [
-				{ text: '未分类', value: 0 },
-				{ text: '药品', value: 10 },
-				{ text: '耗材', value: 20 },
-				{ text: '设备', value: 30 }
-			],
 			userInfo: {},
 			isEdit: false
 		};
 	},
 	computed: {
+		categories() {
+			return [
+				{ text: this.$t('itemManage.uncategorized'), value: 0 },
+				{ text: this.$t('itemManage.medicine'), value: 10 },
+				{ text: this.$t('itemManage.consumable'), value: 20 },
+				{ text: this.$t('itemManage.equipment'), value: 30 }
+			];
+		},
 		qrCodeValue() {
 			if (this.formData.DepartmentId && this.formData.InterfaceCode) {
 				return `item.html?code=${this.formData.DepartmentId}%2b${this.formData.InterfaceCode}`;
@@ -204,12 +208,12 @@ export default {
 							uni.navigateBack();
 						}, 1500);
 					} else {
-						uni.showToast({ title: res.msg || '保存失败', icon: 'none' });
+						uni.showToast({ title: res.msg || this.$t('itemManage.save_fail'), icon: 'none' });
 					}
 				})
 				.catch(e => {
 					console.error(e);
-					uni.showToast({ title: '保存失败', icon: 'none' });
+					uni.showToast({ title: this.$t('itemManage.save_fail'), icon: 'none' });
 				});
 		}
 	}

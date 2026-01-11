@@ -16,14 +16,7 @@
             :refresher-threshold="60" refresher-default-style="none" refresher-background="#f0f5ff"
             @refresherrefresh="onRefresh" @refresherpulling="onPulling" @refresherrestore="onRestore">
 
-            <view slot="refresher" class="custom-refresher"
-                :style="{ transform: (isPulling || isRefreshing) ? 'translateY(120rpx)' : 'translateY(0)' }">
-                <view class="refresher-content">
-                    <view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
-                    <text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
-                        }}</text>
-                </view>
-            </view>
+            <CustomRefresher slot="refresher" :isRefreshing="isRefreshing" :isPulling="isPulling" />
             <!-- Tabs -->
             <CapsuleTabs :tabs="tabList" v-model:current="currentTab"
                 containerStyle="padding-left: 32rpx; padding-right: 32rpx; margin-bottom: 24rpx;" />
@@ -125,14 +118,14 @@
                 <view v-if="currentTab === 2" class="tab-content">
                     <view class="action-bar">
                         <button class="btn-primary" @click="showAddLeave = true">{{ $t('schedule.apply_leave')
-                        }}</button>
+                            }}</button>
                     </view>
                     <view class="list-container">
                         <view v-for="(item, index) in leaveList" :key="index" class="card">
                             <view class="card-header">
                                 <view class="header-left">
                                     <text class="user-name">{{ item.Creator || item.UserName || getUserName(item.UserId)
-                                    }}</text>
+                                        }}</text>
                                 </view>
                                 <view class="header-right">
                                     <view class="status-tag" :class="getAuditStatusClass(item.AuditStatus)">
@@ -175,7 +168,7 @@
                                         }}</text>
                                 </view>
                                 <view class="row" v-if="item.Remark"><text class="label">{{ $t('schedule.reason')
-                                }}:</text> <text>{{
+                                        }}:</text> <text>{{
                                             item.Remark
                                         }}</text></view>
                             </view>
@@ -218,9 +211,9 @@
                             </view>
                             <view class="card-body">
                                 <text>{{ $t('schedule.duration') }}: {{ item.Duration }}{{ $t('schedule.duration_unit')
-                                }}</text>
-                                <text>{{ formatTimeString(item.StartTime) }} - {{ formatTimeString(item.EndTime)
                                     }}</text>
+                                <text>{{ formatTimeString(item.StartTime) }} - {{ formatTimeString(item.EndTime)
+                                }}</text>
                                 <text class="desc" v-if="item.Description">{{ item.Description }}</text>
                             </view>
                         </view>
@@ -306,7 +299,7 @@
                             :value="newSchedule.EndDate || currentWeekStart">
                             <view class="input-item small">
                                 <text :class="{ 'placeholder': !newSchedule.EndDate }">{{ newSchedule.EndDate || '结束'
-                                    }}</text>
+                                }}</text>
                                 <text class="arrow">▼</text>
                             </view>
                         </picker>
@@ -336,7 +329,7 @@
             <view class="modal-content" @click.stop>
                 <view class="modal-header">
                     <text class="modal-title">{{ editingType.Id ? $t('schedule.edit_type') : $t('schedule.add_type')
-                    }}</text>
+                        }}</text>
                     <text class="close-btn" @click="showTypeModal = false">✖️</text>
                 </view>
                 <view class="modal-body form">
@@ -372,7 +365,7 @@
                     <button class="modal-btn cancel" v-if="!editingType.Id" @click="generateAPNShifts">{{
                         $t('schedule.apn_button') }}</button>
                     <button class="modal-btn cancel" v-else @click="showTypeModal = false">{{ $t('common.cancel')
-                    }}</button>
+                        }}</button>
                     <button class="modal-btn confirm" @click="submitType">{{ $t('common.save') }}</button>
                 </view>
             </view>
@@ -405,6 +398,40 @@
             </view>
         </view>
 
+        <!-- Conflict Modal -->
+        <view class="modal-overlay" v-if="showConflictModal" @click="showConflictModal = false">
+            <view class="modal-content" @click.stop>
+                <view class="modal-header">
+                    <text class="modal-title">排班冲突确认</text>
+                    <text class="close-btn" @click="showConflictModal = false">✖️</text>
+                </view>
+                <view class="modal-body">
+                    <view class="conflict-tip">以下人员在所选日期已有排班，是否覆盖？</view>
+                    <scroll-view scroll-y class="conflict-list">
+                        <view class="conflict-item" v-for="(item, idx) in conflictList" :key="idx">
+                            <view class="conflict-user">{{ item.userName }} - {{ item.dateStr }}</view>
+                            <view class="conflict-compare">
+                                <view class="compare-box old">
+                                    <text class="label">原：</text>
+                                    <text class="value">{{ item.oldTypeName }}</text>
+                                </view>
+                                <text class="arrow">➔</text>
+                                <view class="compare-box new">
+                                    <text class="label">新：</text>
+                                    <text class="value">{{ item.newTypeName }}</text>
+                                </view>
+                            </view>
+                        </view>
+                    </scroll-view>
+                </view>
+                <view class="modal-footer">
+                    <button class="modal-btn cancel" @click="showConflictModal = false">{{ $t('common.cancel')
+                    }}</button>
+                    <button class="modal-btn confirm" @click="confirmSubmitSchedule">确认覆盖</button>
+                </view>
+            </view>
+        </view>
+
         <!-- Components for Selectors -->
         <MemberSelector v-model:visible="showMemberSelector" @select="onStaffSelect" />
 
@@ -423,13 +450,15 @@ dayjs.extend(isBetween);
 import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import BackButton from '@/components/BackButton/BackButton.vue';
 import MemberSelector from '@/components/MemberSelector/MemberSelector.vue';
+import CustomRefresher from '@/components/CustomRefresher/CustomRefresher.vue';
 
 export default {
     components: {
         CapsuleTabs,
         FooterInfo,
         BackButton,
-        MemberSelector
+        MemberSelector,
+        CustomRefresher
     },
     data() {
         return {
@@ -449,6 +478,10 @@ export default {
             showAddSchedule: false,
             showTypeModal: false,
             showAddLeave: false,
+            showConflictModal: false,
+
+            // Lists
+            conflictList: [],
 
             // Forms
             newSchedule: { UserId: null, UserName: '', ShiftTypeId: null, ShiftTypeName: '', Remark: '', StartDate: '', EndDate: '' },
@@ -806,14 +839,15 @@ export default {
 
             // 2. Fallback to Shift
             const shift = list.find(s => {
-                if (!s.ScheduleDate) return false;
+                if (!s.ScheduleDate || String(s.UserId) !== sid) return false;
                 return dayjs(s.ScheduleDate).startOf('day').isSame(target, 'day');
             });
             if (shift) {
                 const type = this.typeList.find(t => String(t.Id) == String(shift.ShiftTypeId));
+                console.log(shift, type);
                 return {
                     ...shift,
-                    ShiftTypeName: type ? type.Title : (shift.ShiftTypeName || '未知')
+                    ShiftTypeName: type ? type.Title : '未知'
                 };
             }
             return null;
@@ -985,31 +1019,84 @@ export default {
                 });
                 return;
             }
+            // 默认开始时间为今天
+            const today = this.formatDateYMD(new Date());
+            this.newSchedule.StartDate = today;
+            this.newSchedule.EndDate = today;
+
             this.showAddSchedule = true;
         },
-        submitSchedule() {
+        async submitSchedule() {
             if (!this.newSchedule.StartDate || !this.newSchedule.EndDate || (!this.newSchedule.UserId && !this.selectedUsers.length) || !this.newSchedule.ShiftTypeId) {
                 uni.showToast({ title: this.$t('schedule.complete_info'), icon: 'none' });
                 return;
             }
-            const start = new Date(this.newSchedule.StartDate);
-            const end = new Date(this.newSchedule.EndDate);
+            const startStr = this.newSchedule.StartDate;
+            const endStr = this.newSchedule.EndDate;
+            const start = new Date(startStr);
+            const end = new Date(endStr);
             if (start > end) {
                 uni.showToast({ title: this.$t('schedule.date_error'), icon: 'none' });
                 return;
             }
 
-            const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
-            const requests = [];
-            const userIds = this.selectedUsers.length ? this.selectedUsers : [this.newSchedule.UserId];
+            const userIds = this.selectedUsers.length ? this.selectedUsers.map(String) : [String(this.newSchedule.UserId)];
+            const daysCount = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
 
-            for (let i = 0; i < days; i++) {
+            // 1. 检测本地数据是否存在冲突
+            const conflicts = [];
+            for (let i = 0; i < daysCount; i++) {
                 const d = new Date(start);
                 d.setDate(d.getDate() + i);
                 const dateStr = this.formatDateYMD(d);
 
                 userIds.forEach(uid => {
-                    const member = this.members.find(m => m.UserId === uid);
+                    const existing = this.scheduleList.find(s =>
+                        String(s.UserId) === uid &&
+                        dayjs(s.ScheduleDate).format('YYYY-MM-DD') === dateStr
+                    );
+                    if (existing) {
+                        const member = this.members.find(m => String(m.UserId) === uid);
+                        // Get type names
+                        const oldType = this.typeList.find(t => String(t.Id) === String(existing.ShiftTypeId));
+                        conflicts.push({
+                            uid,
+                            userName: member ? member.UserName : existing.UserName,
+                            dateStr,
+                            oldTypeName: oldType ? oldType.Title : (existing.ShiftTypeName || '已排班'),
+                            newTypeName: this.newSchedule.ShiftTypeName,
+                            existingId: existing.Id
+                        });
+                    }
+                });
+            }
+
+            if (conflicts.length > 0) {
+                this.conflictList = conflicts;
+                this.showConflictModal = true;
+                return;
+            }
+
+            this.confirmSubmitSchedule();
+        },
+        confirmSubmitSchedule() {
+            const startStr = this.newSchedule.StartDate;
+            const endStr = this.newSchedule.EndDate;
+            const start = new Date(startStr);
+            const end = new Date(endStr);
+            const userIds = this.selectedUsers.length ? this.selectedUsers.map(String) : [String(this.newSchedule.UserId)];
+            const daysCount = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+            const requests = [];
+            for (let i = 0; i < daysCount; i++) {
+                const d = new Date(start);
+                d.setDate(d.getDate() + i);
+                const dateStr = this.formatDateYMD(d);
+
+                userIds.forEach(uid => {
+                    const member = this.members.find(m => String(m.UserId) === uid);
+                    const conflict = this.conflictList.find(c => c.uid === uid && c.dateStr === dateStr);
+
                     const data = {
                         ...this.newSchedule,
                         UserId: uid,
@@ -1018,23 +1105,32 @@ export default {
                         DepartmentId: this.userOrgInfo.Department?.Id,
                         ScheduleDate: dateStr
                     };
-                    requests.push(request.post('api/ssbh/ShiftSchedule/Add', { mainData: data }));
+
+                    if (conflict) {
+                        data.Id = conflict.existingId;
+                        requests.push(request.post('api/ssbh/ShiftSchedule/Update', { mainData: data }));
+                    } else {
+                        requests.push(request.post('api/ssbh/ShiftSchedule/Add', { mainData: data }));
+                    }
                 });
             }
 
+            uni.showLoading({ title: this.$t('common.submitting') || '提交中...', mask: true });
             Promise.all(requests).then(results => {
+                uni.hideLoading();
                 const allSuccess = results.every(res => res.success || res.status);
                 if (allSuccess) {
                     this.showAddSchedule = false;
+                    this.showConflictModal = false;
+                    this.conflictList = [];
                     this.fetchSchedule();
                     uni.showToast({ title: this.$t('schedule.add_success') });
-                    // Clear selection after batch add if desired
-                    // this.selectedUsers = [];
                 } else {
                     uni.showToast({ title: this.$t('schedule.batch_fail'), icon: 'none' });
-                    this.fetchSchedule(); // Refresh to see what succeeded
+                    this.fetchSchedule();
                 }
             }).catch(() => {
+                uni.hideLoading();
                 uni.showToast({ title: this.$t('schedule.system_error'), icon: 'none' });
             });
         },
@@ -2051,6 +2147,80 @@ export default {
 .calendar-modal {
     width: 95% !important;
     max-height: 90vh;
+}
+
+/* Conflict Modal Styles */
+.conflict-tip {
+    font-size: 28rpx;
+    color: #666;
+    margin-bottom: 24rpx;
+    padding: 0 8rpx;
+}
+
+.conflict-list {
+    max-height: 50vh;
+}
+
+.conflict-item {
+    background: #f8fafc;
+    border-radius: 12rpx;
+    padding: 20rpx;
+    margin-bottom: 16rpx;
+    border: 1rpx solid #edf2f7;
+
+    .conflict-user {
+        font-size: 28rpx;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 12rpx;
+    }
+
+    .conflict-compare {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16rpx;
+
+        .arrow {
+            color: #cbd5e0;
+            font-size: 24rpx;
+        }
+
+        .compare-box {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8rpx;
+            padding: 12rpx;
+            border-radius: 8rpx;
+
+            .label {
+                font-size: 24rpx;
+                color: #718096;
+            }
+
+            .value {
+                font-size: 26rpx;
+                font-weight: 500;
+            }
+
+            &.old {
+                background: #fff5f5;
+
+                .value {
+                    color: #e53e3e;
+                }
+            }
+
+            &.new {
+                background: #f0fff4;
+
+                .value {
+                    color: #38a169;
+                }
+            }
+        }
+    }
 }
 </style>
 

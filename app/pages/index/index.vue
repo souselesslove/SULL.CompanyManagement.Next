@@ -32,14 +32,7 @@
 			@refresherrefresh="onRefresh" @refresherpulling="onPulling" @refresherrestore="onRestore"
 			@refresherabort="onRestore" refresher-default-style="none" refresher-background="#f0f5ff"
 			:style="{ height: `calc(100vh - ${statusBarHeight * 2}rpx - 88rpx)`, marginTop: `calc(${statusBarHeight * 2}rpx + 88rpx)` }">
-			<view slot="refresher" class="custom-refresher"
-				:style="{ transform: (isPulling || isRefreshing) ? 'translateY(120rpx)' : 'translateY(0)' }">
-				<view class="refresher-content">
-					<view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
-					<text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
-					}}</text>
-				</view>
-			</view>
+			<CustomRefresher slot="refresher" :isRefreshing="isRefreshing" :isPulling="isPulling" />
 
 			<view class="scroll-content" style="padding-top: 20rpx;">
 				<!-- Status Overview (Data Big Screen Concept) -->
@@ -244,12 +237,12 @@
 				</scroll-view>
 			</view>
 		</view>
-		<!-- Warning Modal -->
+		<!-- Unified Warning/Choice Modal -->
 		<WarningModal v-model:visible="warningModal.visible" :title="warningModal.title" :message="warningModal.message"
-			:buttonText="warningModal.buttonText" :showCancel="warningModal.showCancel" @confirm="onWarningConfirm"
-			@cancel="onWarningCancel" />
+			:buttonText="warningModal.buttonText" :cancelText="warningModal.cancelText"
+			:showCancel="warningModal.showCancel" :showClose="warningModal.showClose" :icon="warningModal.icon"
+			@confirm="onWarningConfirm" @cancel="onWarningCancel" @close="onWarningClose" />
 	</view>
-
 </template>
 
 <script>
@@ -258,6 +251,7 @@ import FooterInfo from '@/components/FooterInfo/FooterInfo.vue';
 import BottomNav from '@/components/BottomNav/BottomNav.vue';
 import WarningModal from '@/components/WarningModal/WarningModal.vue';
 import CapsuleTabs from '@/components/CapsuleTabs/CapsuleTabs.vue';
+import CustomRefresher from '@/components/CustomRefresher/CustomRefresher.vue';
 import config from '@/config.js';
 import request from '@/utils/request.js';
 import { storage } from '@/utils/storage.js';
@@ -278,7 +272,8 @@ export default {
 		FooterInfo,
 		BottomNav,
 		WarningModal,
-		CapsuleTabs
+		CapsuleTabs,
+		CustomRefresher
 	},
 	data() {
 		return {
@@ -305,8 +300,8 @@ export default {
 						'index.actions.schedule']
 				},
 				{ "title": "医生", "level": 22, "group": 20, menus: ['index.actions.virtualPos', 'index.actions.records', 'index.actions.schedule'] },
-				{ "title": "护士", "level": 20, "group": 20, menus: ['index.actions.handover', 'index.actions.stockIn', 'index.actions.itemOutbound', 'index.actions.virtualPos', 'index.actions.records', 'index.actions.itemManage', 'index.actions.schedule'] },
-				{ "title": "技师", "level": 21, "group": 20, menus: ['index.actions.handover', 'index.actions.stockIn', 'index.actions.itemOutbound', 'index.actions.virtualPos', 'index.actions.records', 'index.actions.itemManage', 'index.actions.schedule'] },
+				{ "title": "护士", "level": 20, "group": 20, menus: ['index.actions.handover', 'index.actions.sealing', 'index.actions.stockIn', 'index.actions.itemOutbound', 'index.actions.virtualPos', 'index.actions.records', 'index.actions.itemManage', 'index.actions.schedule'] },
+				{ "title": "技师", "level": 21, "group": 20, menus: ['index.actions.handover', 'index.actions.sealing', 'index.actions.stockIn', 'index.actions.itemOutbound', 'index.actions.virtualPos', 'index.actions.records', 'index.actions.itemManage', 'index.actions.schedule'] },
 				{ "title": "护工", "level": 11, "group": 10, menus: ['index.actions.cleaning'] },
 				{ "title": "后勤", "level": 10, "group": 10, menus: ['index.actions.cleaning'] },
 				{
@@ -368,7 +363,10 @@ export default {
 				title: '',
 				message: '',
 				buttonText: '',
+				cancelText: '',
 				showCancel: false,
+				showClose: false,
+				icon: '💡',
 				type: ''
 			},
 			currentRescueInfo: null, // Store latest rescue info
@@ -999,16 +997,27 @@ export default {
 			if (this.isRescuing) {
 				this.warningModal = {
 					visible: true,
-					title: '结束抢救',
-					message: '是否确认结束当前抢救？',
-					buttonText: '确认结束',
+					title: this.$t('rescue.end_confirm_title'),
+					message: this.$t('rescue.end_confirm_msg'),
+					buttonText: this.$t('rescue.end_btn'),
 					showCancel: true,
+					showClose: false,
+					cancelText: this.$t('rescue.wait_btn'),
+					icon: '🏥',
 					type: 'endRescue'
 				};
 			} else {
-				uni.navigateTo({
-					url: '/pages/rescue/rescue-record'
-				});
+				this.warningModal = {
+					visible: true,
+					title: this.$t('rescue.start_confirm_title'),
+					message: this.$t('rescue.start_confirm_msg'),
+					buttonText: this.$t('rescue.start_btn'),
+					cancelText: this.$t('rescue.supplement_btn'),
+					showCancel: true,
+					showClose: true,
+					icon: '⚡',
+					type: 'startRescue'
+				};
 			}
 		},
 		onWarningConfirm() {
@@ -1016,17 +1025,59 @@ export default {
 				this.endRescue();
 			} else if (this.warningModal.type === 'addCar') {
 				this.navTo('/pages/position-manage/position-manage');
+			} else if (this.warningModal.type === 'startRescue') {
+				this.startRescueImmediately();
 			}
 			this.warningModal.visible = false;
 		},
 		onWarningCancel() {
-			if (this.warningModal.type === 'endRescue') {
-				// Navigate to edit on cancel?
-				uni.navigateTo({
-					url: '/pages/rescue/rescue-record'
-				});
+			if (this.warningModal.type === 'startRescue') {
+				this.handleSupplementInfo();
 			}
 			this.warningModal.visible = false;
+		},
+		onWarningClose() {
+			this.warningModal.visible = false;
+		},
+		async startRescueImmediately() {
+			if (!this.currentRescueCar) {
+				uni.showToast({ title: this.$t('rescue.select_car_tip'), icon: 'none' });
+				return;
+			}
+
+			uni.showLoading({ title: this.$t('rescue.starting') });
+			const now = dayjs();
+			const payload = {
+				Name: this.$t('rescue.unnamed'),
+				StartTime: now.format('YYYY-MM-DDTHH:mm:ss'),
+				CartId: this.currentRescueCar.Id,
+				CartName: this.currentRescueCar.DisplayName,
+				DepartmentName: (this.userOrgInfo && this.userOrgInfo.Department && this.userOrgInfo.Department.Name) || '',
+				Status: 0 // Ongoing
+			};
+
+			try {
+				const res = await request.post('api/ssbh/Rescue/Add', { mainData: payload });
+				if (res.success || res.status) {
+					uni.showToast({ title: this.$t('rescue.start_success'), icon: 'success' });
+					// 刷新首页数据
+					this.fetchDashboardStats();
+					this.fetchRescueInfo();
+					this.fetchTodoData();
+				} else {
+					uni.showToast({ title: res.msg || this.$t('common.fail'), icon: 'none' });
+				}
+			} catch (e) {
+				console.error("Start Rescue Immediately Failed", e);
+				uni.showToast({ title: this.$t('common.fail'), icon: 'none' });
+			} finally {
+				uni.hideLoading();
+			}
+		},
+		handleSupplementInfo() {
+			uni.navigateTo({
+				url: '/pages/rescue/rescue-record'
+			});
 		},
 		// Old method if used by other calls, redirected to generic handler
 		closeWarningModal() {
@@ -1047,7 +1098,7 @@ export default {
 			// 2. Call Update Interface
 			request.post('api/ssbh/Rescue/Update', { mainData: mainData }).then(res => {
 				if (res.success || res.status) {
-					uni.showToast({ title: '抢救已结束', icon: 'success' });
+					uni.showToast({ title: this.$t('rescue.end_success'), icon: 'success' });
 
 					// 3. Update Local Cache: Clear active task
 					this.currentRescueInfo = null;
@@ -1986,57 +2037,6 @@ page {
 
 .timeline-status {
 	color: $sull-color-primary;
-}
-
-/* Refresher */
-.custom-refresher {
-	height: 120rpx;
-	width: 100%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	position: absolute;
-	top: -120rpx;
-	left: 0;
-	transition: transform 0.2s linear;
-}
-
-.refresher-content {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 8rpx;
-}
-
-.refresher-icon {
-	width: 64rpx;
-	height: 64rpx;
-	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
-	background-size: contain;
-	background-repeat: no-repeat;
-	transition: transform 0.3s ease;
-}
-
-.refresher-icon.animating {
-	animation: ambulance-bounce 0.8s infinite ease-in-out;
-}
-
-.refresher-text {
-	font-size: 20rpx;
-	color: $sull-color-primary;
-	opacity: 0.8;
-}
-
-@keyframes ambulance-bounce {
-
-	0%,
-	100% {
-		transform: translateY(0);
-	}
-
-	50% {
-		transform: translateY(-12rpx);
-	}
 }
 
 /* Icons */

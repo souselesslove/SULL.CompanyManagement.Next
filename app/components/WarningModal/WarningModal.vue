@@ -1,6 +1,9 @@
 <template>
     <view class="modal-mask" v-if="visible" @click.stop="handleMaskClick">
         <view class="modal-content" @click.stop>
+            <!-- Close Button -->
+            <view class="close-icon" v-if="showClose" @click="handleClose">×</view>
+
             <!-- Illustration Area -->
             <view class="illustration-container">
                 <view class="thumb-circle">
@@ -67,9 +70,13 @@ export default {
         cancelText: {
             type: String,
             default: ''
+        },
+        showClose: {
+            type: Boolean,
+            default: false
         }
     },
-    emits: ['update:visible', 'confirm', 'cancel'],
+    emits: ['update:visible', 'confirm', 'cancel', 'close'],
     methods: {
         handleConfirm() {
             this.$emit('confirm');
@@ -77,6 +84,10 @@ export default {
         },
         handleCancel() {
             this.$emit('cancel');
+            this.close();
+        },
+        handleClose() {
+            this.$emit('close');
             this.close();
         },
         handleMaskClick() {
@@ -115,6 +126,18 @@ export default {
     align-items: center;
     animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     box-sizing: border-box;
+    position: relative;
+}
+
+.close-icon {
+    position: absolute;
+    top: 32rpx;
+    right: 32rpx;
+    font-size: 48rpx;
+    color: #999;
+    line-height: 1;
+    padding: 10rpx;
+    z-index: 10;
 }
 
 .illustration-container {

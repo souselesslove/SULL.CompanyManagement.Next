@@ -21,13 +21,7 @@
             refresher-default-style="none" refresher-background="#f0f5ff"
             :style="{ marginTop: (statusBarHeight * 2 + 88) + 'rpx' }">
 
-            <view slot="refresher" class="custom-refresher">
-                <view class="refresher-content">
-                    <view class="refresher-icon" :class="{ 'animating': isRefreshing }"></view>
-                    <text class="refresher-text">{{ isRefreshing ? $t('index.refreshing') : $t('index.pullToRefresh')
-                    }}</text>
-                </view>
-            </view>
+            <CustomRefresher slot="refresher" :isRefreshing="isRefreshing" :isPulling="isPulling" />
 
             <!-- Search Bar -->
             <view class="content">
@@ -57,7 +51,7 @@
                             <view class="name-section">
                                 <text class="item-name">{{ item.Name }}</text>
                                 <text class="item-code text-gray" v-if="item.InterfaceCode">({{ item.InterfaceCode
-                                }})</text>
+                                    }})</text>
                             </view>
                             <view class="card-actions">
                                 <view class="status-tag" :class="getExpiryStatus(item).class"
@@ -91,11 +85,12 @@
 
                         <view class="card-row bot-row">
                             <view class="stock-box">
-                                <text class="label">库存</text>
+                                <text class="label">{{ $t('itemManage.stock_label') }}</text>
                                 <text class="stock-val">{{ item.AvailableStock || 0 }}</text>
                                 <text class="unit" v-if="item.Unit">{{ item.Unit }}</text>
                             </view>
-                            <text class="expiry-date">过期日期: {{ getExpiryDateDisplay(item) }}</text>
+                            <text class="expiry-date">{{ $t('itemManage.expiry_date_label') }}: {{
+                                getExpiryDateDisplay(item) }}</text>
                         </view>
                     </view>
 
@@ -138,7 +133,7 @@
         <!-- Selection Footer -->
         <view class="selection-footer" v-if="selectMode">
             <button class="confirm-btn" :disabled="!selectedItem" @click="confirmSelection">
-                确认选择 {{ selectedItem ? `(${selectedItem.Name})` : '' }}
+                {{ $t('itemManage.confirm_selection') }} {{ selectedItem ? `(${selectedItem.Name})` : '' }}
             </button>
         </view>
 
@@ -154,12 +149,14 @@ import BackToTop from '@/components/BackToTop/BackToTop.vue';
 import request from '@/utils/request.js';
 import { storage } from '@/utils/storage.js';
 import dayjs from 'dayjs';
+import CustomRefresher from '@/components/CustomRefresher/CustomRefresher.vue';
 
 export default {
     components: {
         FooterInfo,
         BackButton,
-        BackToTop
+        BackToTop,
+        CustomRefresher
     },
     data() {
         return {
@@ -180,11 +177,11 @@ export default {
             currentCategory: null,
             activeMenuId: null,
             categories: [
-                { label: '全部', value: null },
-                { label: '药品', value: 10 },
-                { label: '耗材', value: 20 },
-                { label: '设备', value: 30 },
-                { label: '其他', value: 0 }
+                { label: this.$t('itemManage.all'), value: null },
+                { label: this.$t('itemManage.medicine'), value: 10 },
+                { label: this.$t('itemManage.consumable'), value: 20 },
+                { label: this.$t('itemManage.equipment'), value: 30 },
+                { label: this.$t('itemManage.other'), value: 0 }
             ]
         };
     },
@@ -219,9 +216,9 @@ export default {
             const dateStr = item.LatestExpirationDate || item.ExpiryDate;
             if (!dateStr) return null;
             const days = this.getDaysUntil(dateStr);
-            if (days < 0) return { text: '已过期', class: 'tag-expired' };
-            if (days < 30) return { text: `剩${days}天`, class: 'tag-urgent' };
-            if (days <= 90) return { text: `剩${days}天`, class: 'tag-warning' };
+            if (days < 0) return { text: this.$t('itemManage.expired'), class: 'tag-expired' };
+            if (days < 30) return { text: this.$t('itemManage.days_left', { days: days }), class: 'tag-urgent' };
+            if (days <= 90) return { text: this.$t('itemManage.days_left', { days: days }), class: 'tag-warning' };
             return null;
         },
         getExpiryDateDisplay(item) {
@@ -898,57 +895,6 @@ export default {
     }
 }
 
-/* Refresher */
-/* Refresher */
-.custom-refresher {
-    height: 120rpx;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: absolute;
-    top: -120rpx;
-    left: 0;
-    transition: transform 0.2s linear;
-}
-
-.refresher-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8rpx;
-}
-
-.refresher-icon {
-    width: 64rpx;
-    height: 64rpx;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23409EFF'%3E%3Cpath d='M19 14h-1V8h-3V6h-2v2h-2V6H9v2H7v6H6c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h1c0 1.66 1.34 3 3 3s3-1.34 3-3h4c0 1.66 1.34 3 3 3s3-1.34 3-3h1c1.1 0 2-.9 2-2v-3c0-1.1-.9-2-2-2zM8 19c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm10 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 8h2v2H8V8zm0 4h2v2H8v-2zm4 4h-2v-2h2v2zm0-4h-2V8h2v4zm4 4h-2v-2h2v2zm0-4h-2V8h2v4z'/%3E%3Cpath d='M4 8h2v2H4zm0 4h2v2H4z' fill-opacity='.3'/%3E%3C/svg%3E");
-    background-size: contain;
-    background-repeat: no-repeat;
-    transition: transform 0.3s ease;
-}
-
-.refresher-icon.animating {
-    animation: ambulance-bounce 0.8s infinite ease-in-out;
-}
-
-.refresher-text {
-    font-size: 20rpx;
-    color: $sull-color-primary;
-    opacity: 0.8;
-}
-
-@keyframes ambulance-bounce {
-
-    0%,
-    100% {
-        transform: translateY(0);
-    }
-
-    50% {
-        transform: translateY(-12rpx);
-    }
-}
 
 .selection-footer {
     position: fixed;
