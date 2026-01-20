@@ -1,8 +1,9 @@
 <template>
 	<view class="container">
 		<!-- Fixed Header -->
-		<view class="header-fixed" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
-			<view class="header-content">
+		<view class="header-fixed" :style="{ paddingTop: statusBarHeight + 'px' }">
+			<view class="header-content"
+				:style="{ height: navHeight + 'px', paddingRight: menuButtonWidth ? menuButtonWidth + 'px' : '48rpx' }">
 				<view class="header-left">
 					<text class="greeting">{{ greetingText }}</text>
 					<text class="subtitle">{{ userOrgInfo.Department ? userOrgInfo.Department.Name : $t('index.dept')
@@ -31,7 +32,7 @@
 			refresher-enabled="true" :refresher-triggered="isRefreshing" :refresher-threshold="60"
 			@refresherrefresh="onRefresh" @refresherpulling="onPulling" @refresherrestore="onRestore"
 			@refresherabort="onRestore" refresher-default-style="none" refresher-background="#f0f5ff"
-			:style="{ height: `calc(100vh - ${statusBarHeight * 2}rpx - 88rpx)`, marginTop: `calc(${statusBarHeight * 2}rpx + 88rpx)` }">
+			:style="{ height: `calc(100vh - ${statusBarHeight}px - ${navHeight}px)`, marginTop: `${statusBarHeight + navHeight}px` }">
 			<CustomRefresher slot="refresher" :isRefreshing="isRefreshing" :isPulling="isPulling" />
 
 			<view class="scroll-content" style="padding-top: 20rpx;">
@@ -371,7 +372,9 @@ export default {
 			},
 			currentRescueInfo: null, // Store latest rescue info
 			rescueDuration: '', // Formatted duration string
-			rescueTimer: null
+			rescueTimer: null,
+			menuButtonWidth: 0,
+			navHeight: 44 // default in px for header content
 		};
 	},
 	onUnload() {
@@ -380,6 +383,14 @@ export default {
 	onLoad() {
 		const sysInfo = uni.getSystemInfoSync();
 		this.statusBarHeight = sysInfo.statusBarHeight || 20;
+
+		// #ifdef MP-WEIXIN
+		const menuButton = uni.getMenuButtonBoundingClientRect();
+		// The menu button is on the right, so we need to push our icons to the left of it
+		this.menuButtonWidth = menuButton.width + (sysInfo.windowWidth - menuButton.right) + 10;
+		// Set nav height to align with menu button
+		this.navHeight = (menuButton.bottom - sysInfo.statusBarHeight) + 8;
+		// #endif
 	},
 	onShow() {
 		// Check if user is logged in
@@ -1159,11 +1170,19 @@ page {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
+
+	/* #ifdef MP-WEIXIN */
+	padding-left: 24rpx;
+	/* #endif */
 }
 
 .header-right {
 	display: flex;
 	gap: 24rpx;
+
+	/* #ifdef MP-WEIXIN */
+	gap: 12rpx;
+	/* #endif */
 }
 
 .greeting {
@@ -1172,12 +1191,33 @@ page {
 	font-weight: $font-weight-bold;
 	color: #ffffff;
 	display: block;
+
+	/* #ifdef MP-WEIXIN */
+	font-size: 26rpx;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	/* #endif */
+}
+
+.header-left {
+	flex: 1;
+	min-width: 0;
+	margin-right: 12rpx;
 }
 
 .subtitle {
 	font-size: $font-size-body-sm;
 	/* Reduced from md */
 	color: rgba(255, 255, 255, 0.9);
+
+	/* #ifdef MP-WEIXIN */
+	font-size: 20rpx;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	display: block;
+	/* #endif */
 }
 
 .icon-btn {
@@ -1191,6 +1231,11 @@ page {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+
+	/* #ifdef MP-WEIXIN */
+	width: 54rpx;
+	height: 54rpx;
+	/* #endif */
 }
 
 .icon {

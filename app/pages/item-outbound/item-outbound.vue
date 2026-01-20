@@ -312,7 +312,7 @@ export default {
 						{ name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
 						{ name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
 					]),
-					sort: 'OrderBy,SerialId', order: 'asc'
+					sort: 'SerialId,OrderBy', order: 'asc'
 				});
 
 				const allItems = res.rows || [];
@@ -501,35 +501,45 @@ export default {
 
 					// Local Update Logic
 					const qty = this.outQty;
+					const itemId = this.selectedItem.Id;
+					const itemInMap = this.itemsMap[itemId];
 
-					// Update Item Stock & Warning Flags
-					if (this.selectedItem) {
-						const oldStock = Number(this.selectedItem.AvailableStock) || 0;
-						const newStock = oldStock - qty;
+					if (itemInMap) {
+						// 1. Update Overall Stock
+						const newStock = (Number(itemInMap.AvailableStock) || 0) - qty;
+						this.$set(itemInMap, 'AvailableStock', newStock);
 
-						// Update in itemsMap (main source of truth for StorageLayers)
-						const itemInMap = this.itemsMap[this.selectedItem.Id];
-						if (itemInMap) {
-							this.$set(itemInMap, 'AvailableStock', newStock);
-
-							// Recalculate Stock Warning
-							const base = Number(itemInMap.Cardinality || 0);
-							this.$set(itemInMap, 'IsStockInsufficient', newStock <= 0 || (base > 0 && newStock < base));
-
-							// Update selectedItem reference
-							this.selectedItem.AvailableStock = newStock;
-							this.selectedItem.IsStockInsufficient = itemInMap.IsStockInsufficient;
+						// 2. Update current batch stock in memory
+						if (this.selectedBatchId) {
+							const batch = this.itemDetails.find(b => b.Id === this.selectedBatchId);
+							if (batch) {
+								this.$set(batch, 'Stock', (Number(batch.Stock) || 0) - qty);
+							}
 						}
-					}
 
-					// Update Batch Stock
-					if (this.selectedBatchId) {
-						const batch = this.itemDetails.find(b => b.Id === this.selectedBatchId);
-						if (batch) {
-							const oldBatchStock = Number(batch.Stock) || 0;
-							const newBatchStock = oldBatchStock - qty;
-							this.$set(batch, 'Stock', newBatchStock);
+						// 3. Find the new earliest expiration date for the item
+						const batchesWithStock = this.itemDetails.filter(b => (Number(b.Stock) || 0) > 0);
+						if (batchesWithStock.length > 0) {
+							this.$set(itemInMap, 'LatestExpirationDate', batchesWithStock[0].ExpirationDate);
+						} else {
+							this.$set(itemInMap, 'LatestExpirationDate', null);
 						}
+
+						// 4. Refresh display properties and flags in itemsMap
+						const dateToUse = itemInMap.LatestExpirationDate || itemInMap.ExpiryDate;
+						this.$set(itemInMap, 'FormattedDate', this.formatDate(dateToUse));
+						this.$set(itemInMap, 'ExpiryClass', this.getExpiryClass(dateToUse));
+
+						const days = this.getDaysUntil(dateToUse);
+						this.$set(itemInMap, 'IsExpiryWarning', days < 30);
+
+						const base = Number(itemInMap.Cardinality || 0);
+						this.$set(itemInMap, 'IsStockInsufficient', newStock <= 0 || (base > 0 && newStock < base));
+
+						// Also sync back to selectedItem for the current modal view
+						this.$set(this.selectedItem, 'AvailableStock', newStock);
+						this.$set(this.selectedItem, 'LatestExpirationDate', itemInMap.LatestExpirationDate);
+						this.$set(this.selectedItem, 'IsStockInsufficient', itemInMap.IsStockInsufficient);
 					}
 
 					this.closeModal();

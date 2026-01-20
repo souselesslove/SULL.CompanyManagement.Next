@@ -2,8 +2,8 @@
     <view class="container" @click="hideAllMenus">
         <!-- Navigation Bar -->
         <!-- Navigation Bar -->
-        <view class="header-section" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
-            <view class="header-content">
+        <view class="header-section" :style="{ paddingTop: statusBarHeight + 'px' }">
+            <view class="header-content" :style="{ height: navHeight + 'px' }">
                 <view class="nav-left">
                     <BackButton class="header-back-btn" @click="goBack" />
                 </view>
@@ -19,7 +19,7 @@
             :refresher-triggered="isRefreshing" @refresherrefresh="onRefresh" @refresherpulling="onPulling"
             @refresherrestore="onRestore" @scrolltolower="onLoadMore" @scroll="onScroll" :scroll-top="scrollTop"
             refresher-default-style="none" refresher-background="#f0f5ff"
-            :style="{ marginTop: (statusBarHeight * 2 + 88) + 'rpx' }">
+            :style="{ marginTop: (statusBarHeight + navHeight) + 'px', height: `calc(100vh - ${statusBarHeight + navHeight}px)` }">
 
             <CustomRefresher slot="refresher" :isRefreshing="isRefreshing" :isPulling="isPulling" />
 
@@ -51,7 +51,7 @@
                             <view class="name-section">
                                 <text class="item-name">{{ item.Name }}</text>
                                 <text class="item-code text-gray" v-if="item.InterfaceCode">({{ item.InterfaceCode
-                                    }})</text>
+                                }})</text>
                             </view>
                             <view class="card-actions">
                                 <view class="status-tag" :class="getExpiryStatus(item).class"
@@ -73,6 +73,16 @@
                                         <text class="menu-icon-small">📋</text>
                                         <text class="menu-text">{{ $t('itemManage.usage_records') }}</text>
                                     </view>
+                                    <view class="menu-divider"></view>
+                                    <view class="menu-item" @click="handleRefresh(item.Id)">
+                                        <text class="menu-icon-small">🔄</text>
+                                        <text class="menu-text">{{ $t('common.refresh') || '同步刷新' }}</text>
+                                    </view>
+                                    <view class="menu-divider"></view>
+                                    <view class="menu-item delete-item" @click="confirmDeleteItem(item)">
+                                        <text class="menu-icon-small">🗑️</text>
+                                        <text class="menu-text danger">{{ $t('common.delete') }}</text>
+                                    </view>
                                 </view>
                             </view>
                         </view>
@@ -86,7 +96,11 @@
                         <view class="card-row bot-row">
                             <view class="stock-box">
                                 <text class="label">{{ $t('itemManage.stock_label') }}</text>
-                                <text class="stock-val">{{ item.AvailableStock || 0 }}</text>
+                                <text class="stock-val"
+                                    :class="{ 'warning': (item.AvailableStock || 0) < (item.Cardinality || 0) }">{{
+                                        item.AvailableStock || 0 }}</text>
+                                <text class="stock-divider" v-if="item.Cardinality">/</text>
+                                <text class="base-val" v-if="item.Cardinality">{{ item.Cardinality }}</text>
                                 <text class="unit" v-if="item.Unit">{{ item.Unit }}</text>
                             </view>
                             <text class="expiry-date">{{ $t('itemManage.expiry_date_label') }}: {{
@@ -109,15 +123,21 @@
 
         <!-- Expanded Actions -->
         <view class="fab-actions" v-if="showActions" @click.stop>
+            <view class="action-item" @click="handleRefresh" :style="{ animationDelay: '0ms' }">
+                <text class="action-text">{{ $t('common.refresh') || '同步刷新' }}</text>
+                <view class="action-btn refresh-btn">
+                    <text class="action-icon">🔄</text>
+                </view>
+            </view>
             <view class="action-item" @click="goToPage('/pages/item-manage/item-import')"
-                :style="{ animationDelay: '0ms' }">
+                :style="{ animationDelay: '50ms' }">
                 <text class="action-text">{{ $t('itemManage.import') }}</text>
                 <view class="action-btn import-btn">
                     <text class="action-icon">📥</text>
                 </view>
             </view>
             <view class="action-item" @click="goToPage('/pages/item-manage/item-add')"
-                :style="{ animationDelay: '50ms' }">
+                :style="{ animationDelay: '100ms' }">
                 <text class="action-text">{{ $t('itemManage.add') }}</text>
                 <view class="action-btn add-btn">
                     <text class="action-icon">+</text>
@@ -139,6 +159,10 @@
 
         <!-- Back To Top -->
         <BackToTop :scroll-top="scrollTop" @click="goTop" />
+
+        <!-- Confirm Modal -->
+        <ConfirmModal v-model:visible="showDeleteConfirm" :title="$t('common.tip')"
+            :message="`${$t('handover.delete_confirm')} (${itemToDelete?.Name})`" @confirm="handleDeleteConfirm" />
     </view>
 </template>
 
@@ -150,13 +174,15 @@ import request from '@/utils/request.js';
 import { storage } from '@/utils/storage.js';
 import dayjs from 'dayjs';
 import CustomRefresher from '@/components/CustomRefresher/CustomRefresher.vue';
+import ConfirmModal from '@/components/ConfirmModal/ConfirmModal.vue';
 
 export default {
     components: {
         FooterInfo,
         BackButton,
         BackToTop,
-        CustomRefresher
+        CustomRefresher,
+        ConfirmModal
     },
     data() {
         return {
@@ -182,12 +208,20 @@ export default {
                 { label: this.$t('itemManage.consumable'), value: 20 },
                 { label: this.$t('itemManage.equipment'), value: 30 },
                 { label: this.$t('itemManage.other'), value: 0 }
-            ]
+            ],
+            showDeleteConfirm: false,
+            itemToDelete: null,
+            navHeight: 44 // default in px for header content
         };
     },
     onLoad(options) {
         const sysInfo = uni.getSystemInfoSync();
         this.statusBarHeight = sysInfo.statusBarHeight || 20;
+
+        // #ifdef MP-WEIXIN
+        const menuButton = uni.getMenuButtonBoundingClientRect();
+        this.navHeight = (menuButton.bottom - sysInfo.statusBarHeight) + 8;
+        // #endif
 
         if (options && options.mode === 'select') {
             this.selectMode = true;
@@ -351,6 +385,24 @@ export default {
             this.hideAllMenus();
             uni.navigateTo({ url });
         },
+        async handleRefresh(id) {
+            this.hideAllMenus();
+            try {
+                uni.showLoading({ title: this.$t('common.syncing') });
+                let url = 'api/ssbh/Item/Refresh';
+                if (id) {
+                    url += `?id=${id}`;
+                }
+                await request.post(url, {});
+                uni.showToast({ title: this.$t('common.sync_success'), icon: 'success' });
+                this.onRefresh();
+            } catch (e) {
+                console.error("Refresh Failed", e);
+                uni.showToast({ title: this.$t('common.sync_fail'), icon: 'none' });
+            } finally {
+                uni.hideLoading();
+            }
+        },
         goToBatchManage(item) {
             this.hideAllMenus();
             uni.navigateTo({
@@ -362,6 +414,30 @@ export default {
             uni.navigateTo({
                 url: `/pages/statistics/statistics?category=consumption&itemName=${encodeURIComponent(item.Name)}&itemId=${item.Id}`
             });
+        },
+        confirmDeleteItem(item) {
+            this.hideAllMenus();
+            this.itemToDelete = item;
+            this.showDeleteConfirm = true;
+        },
+        handleDeleteConfirm() {
+            if (this.itemToDelete) {
+                this.deleteItem(this.itemToDelete.Id);
+            }
+        },
+        async deleteItem(id) {
+            try {
+                uni.showLoading({ title: this.$t('common.deleting') });
+                await request.post('api/ssbh/Item/Del', [id]);
+                uni.showToast({ title: this.$t('common.success'), icon: 'success' });
+                this.page = 1;
+                this.fetchItems();
+            } catch (e) {
+                console.error("Delete Failed", e);
+                uni.showToast({ title: this.$t('common.fail'), icon: 'none' });
+            } finally {
+                uni.hideLoading();
+            }
         }
     }
 }
@@ -502,6 +578,10 @@ export default {
                 height: 1rpx;
                 background-color: #eee;
                 margin: 0 24rpx;
+            }
+
+            .danger {
+                color: #ff4d4f !important;
             }
         }
     }
@@ -747,6 +827,22 @@ export default {
     font-weight: bold;
     color: $sull-text-main;
     font-family: 'Roboto', sans-serif;
+
+    &.warning {
+        color: #ff4d4f;
+    }
+}
+
+.stock-box .stock-divider {
+    font-size: 24rpx;
+    color: #ccc;
+    margin: 0 4rpx;
+}
+
+.stock-box .base-val {
+    font-size: 28rpx;
+    color: #999;
+    font-weight: 500;
 }
 
 .stock-box .unit {
@@ -847,6 +943,11 @@ export default {
     .action-icon {
         font-size: 48rpx;
     }
+}
+
+.refresh-btn {
+    background: #FF9F0A;
+    color: #fff;
 }
 
 .add-btn {

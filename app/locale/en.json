@@ -16,7 +16,12 @@
         "unknown": "Unknown",
         "load_fail": "Load Failed",
         "file_name_error": "Failed to get filename",
-        "coming_soon": "Coming Soon"
+        "coming_soon": "Coming Soon",
+        "refresh": "Sync Refresh",
+        "syncing": "Syncing...",
+        "sync_success": "Sync Success",
+        "sync_fail": "Sync Failure",
+        "deleting": "Deleting..."
     },
     "index": {
         "home": "Rescue Car Management",

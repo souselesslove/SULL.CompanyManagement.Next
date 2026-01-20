@@ -9,12 +9,6 @@
                 <text class="page-title">{{ itemName ? itemName + ' - ' + $t('itemManage.batch') :
                     $t('itemManage.batch_manage') }}</text>
                 <view class="nav-right">
-                    <view class="header-btn" @click="handleExport">
-                        <text class="header-icon">📤</text>
-                    </view>
-                    <view class="header-btn" @click="handleImportExcel">
-                        <text class="header-icon">📥</text>
-                    </view>
                 </view>
             </view>
         </view>
@@ -36,6 +30,14 @@
                             <text>✖</text>
                         </view>
                     </view>
+                    <view class="action-buttons">
+                        <view class="action-btn" @click="handleImportExcel">
+                            <text class="action-icon">📥</text>
+                        </view>
+                        <view class="action-btn" @click="handleExport">
+                            <text class="action-icon">📤</text>
+                        </view>
+                    </view>
                 </view>
 
                 <view class="list-content">
@@ -44,7 +46,7 @@
                             <view class="name-info">
                                 <text class="item-name">{{ batch.ItemName || '-' }}</text>
                                 <text class="batch-no">{{ $t('itemManage.batch_no') }}: {{ batch.RegisterCode || '-'
-                                }}</text>
+                                    }}</text>
                             </view>
                             <view class="status-tag" :class="getExpiryClass(batch.ExpirationDate)">
                                 <text>{{ getExpiryText(batch.ExpirationDate) }}</text>
@@ -277,6 +279,9 @@ export default {
             if (this.itemId) {
                 wheres.push({ name: 'ItemId', value: this.itemId });
             }
+
+            // Hide expired batches
+            wheres.push({ name: 'ExpirationDate', value: dayjs().format('YYYY-MM-DD'), displayType: '>=' });
 
             return request.post('api/ssbh/ItemDetail/GetPageData', {
                 page: this.page,
@@ -759,32 +764,28 @@ export default {
 
         .nav-left,
         .nav-right {
-            width: 40px;
+            width: 80rpx;
+            display: flex;
+            align-items: center;
+        }
+
+        .nav-right {
+            justify-content: flex-end;
         }
 
         .page-title {
+            flex: 1;
             font-size: $font-size-h6;
             font-weight: $font-weight-semibold;
             color: $sull-text-main;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .header-btn {
-            width: 72rpx;
-            height: 72rpx;
-            background: #f0f7ff;
-            border-radius: 12rpx;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-left: 16rpx;
-
-            .header-icon {
-                font-size: 36rpx;
-            }
-
-            &:active {
-                opacity: 0.7;
-            }
+            display: none;
         }
     }
 }
@@ -800,21 +801,49 @@ export default {
 
 .search-section {
     margin-bottom: 24rpx;
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
 }
 
 .search-box {
+    flex: 1;
     background: #fff;
-    border-radius: 999px;
-    height: 36px;
+    border-radius: 12rpx;
+    height: 72rpx;
     display: flex;
     align-items: center;
-    padding: 0 12px;
+    padding: 0 20rpx;
     box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.02);
 }
 
+.action-buttons {
+    display: flex;
+    gap: 12rpx;
+}
+
+.action-btn {
+    width: 72rpx;
+    height: 72rpx;
+    background: #fff;
+    border-radius: 12rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.02);
+
+    &:active {
+        opacity: 0.7;
+    }
+
+    .action-icon {
+        font-size: 32rpx;
+    }
+}
+
 .search-icon {
-    font-size: 14px;
-    margin-right: 8px;
+    font-size: 28rpx;
+    margin-right: 12rpx;
     color: $sull-text-secondary;
 }
 

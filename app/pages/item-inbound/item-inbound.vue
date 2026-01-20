@@ -391,7 +391,7 @@ export default {
                         { name: 'OrganizationId', value: this.userOrgInfo.Organization.Id },
                         { name: 'DepartmentId', value: this.userOrgInfo.Department.Id }
                     ]),
-                    sort: 'OrderBy,SerialId', order: 'asc'
+                    sort: 'SerialId,OrderBy', order: 'asc'
                 });
 
                 const allItems = res.rows || [];
@@ -503,10 +503,8 @@ export default {
             request.post('api/ssbh/ItemDetail/GetPageData', {
                 page: 1, rows: 100, sort: 'ExpirationDate', order: 'asc',
                 wheres: JSON.stringify([
-                    { name: 'ItemId', value: itemId }
-                    // Do NOT filter by Stock > 0 for inbound, we can add to empty batches? 
-                    // Or usually we assume batches with 0 stock might be hidden?
-                    // Let's show all batches to allow refill.
+                    { name: 'ItemId', value: itemId },
+                    { name: 'ExpirationDate', value: dayjs().format('YYYY-MM-DD'), displayType: '>=' }
                 ])
             }).then(res => {
                 if (res && res.rows) {
@@ -844,7 +842,6 @@ export default {
     border-top-right-radius: 60rpx;
     margin-top: -80rpx;
     padding: 48rpx 32rpx;
-    min-height: 1000rpx;
     position: relative;
     z-index: 10;
 }

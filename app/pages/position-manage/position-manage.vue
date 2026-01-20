@@ -97,6 +97,7 @@
             <view class="action-sheet-panel" @click.stop>
                 <view class="action-item" @click="handleSerialActionItem(0)">扫码绑定</view>
                 <view class="action-item" @click="handleSerialActionItem(1)">手工绑定</view>
+                <view class="action-item" @click="handleSerialActionItem(4)">插入绑定</view>
                 <view class="action-item" @click="handleSerialActionItem(2)">取消绑定</view>
                 <view class="action-item" @click="handleSerialActionItem(3)">说明书</view>
                 <view class="action-cancel-gap"></view>
@@ -409,28 +410,38 @@ export default {
         async fetchRescueCarData(warehouseId) {
             if (!warehouseId) return;
             try {
+                // Background refresh: preserve states
+                const expandedIds = this.floorList.filter(f => f.expanded).map(f => f.Id);
+
                 const res = await request.post('api/ssbh/Position/GetPageData', {
                     page: 1, rows: 1000,
                     wheres: JSON.stringify([
                         { name: 'WarehouseId', value: warehouseId },
                         { name: 'Category', value: '100,110', DisplayType: 'in' }
                     ]),
-                    sort: 'OrderBy,SerialId', order: 'asc'
+                    sort: 'SerialId,OrderBy', order: 'asc'
                 });
 
                 const allItems = res.rows || [];
-                this.floorList = allItems.filter(p => p.Category === 100).sort((a, b) => (a.OrderBy || 0) - (b.OrderBy || 0));
-                this.serialList = allItems.filter(p => p.Category === 110);
+                const nextFloorList = allItems.filter(p => p.Category === 100).sort((a, b) => (a.OrderBy || 0) - (b.OrderBy || 0));
+                const nextSerialList = allItems.filter(p => p.Category === 110);
 
-                if (this.currentFilter) {
-                    this.floorList.forEach(f => this.$set(f, 'expanded', true));
-                }
+                // Restore expanded states
+                nextFloorList.forEach(f => {
+                    if (expandedIds.includes(f.Id) || (this.currentFilter)) {
+                        this.$set(f, 'expanded', true);
+                    }
+                });
 
-                // Batch fetch item details
-                const itemIds = this.serialList.filter(s => s.ItemId > 0).map(s => s.ItemId);
+                // Pre-fetch items BEFORE updating list to avoid "empty slots" flash
+                const itemIds = nextSerialList.filter(s => s.ItemId > 0).map(s => s.ItemId);
                 if (itemIds.length > 0) {
-                    this.fetchItemDetails([...new Set(itemIds)]);
+                    await this.fetchItemDetails([...new Set(itemIds)]);
                 }
+
+                // Atomic update to prevent flashing
+                this.floorList = nextFloorList;
+                this.serialList = nextSerialList;
             } catch (e) {
                 console.error("Fetch Rescue Car Data Error", e);
             }
@@ -672,9 +683,15 @@ export default {
         },
         handleSerialActionItem(index) {
             this.closeSerialActionSheet();
-            if (index === 1) {
+            if (index === 0) {
+                // Scan Bind (Not implemented yet, but keeping structure)
+                uni.showToast({ title: '扫码绑定开发中', icon: 'none' });
+            } else if (index === 1) {
                 // Bind Item
-                this.bindItemToSerial();
+                this.bindItemToSerial(false);
+            } else if (index === 4) {
+                // Insert Bind
+                this.bindItemToSerial(true);
             } else if (index === 2) {
                 // Unbind Item
                 this.unbindItemFromSerial();
@@ -769,7 +786,7 @@ export default {
                 uni.hideLoading();
             }
         },
-        bindItemToSerial() {
+        bindItemToSerial(isInsert = false) {
             // Remove any existing listener to prevent duplicates
             uni.$off('itemSelected');
 
@@ -778,28 +795,39 @@ export default {
                 // Ensure we have a target
                 if (!this.tempSerial) return;
 
+                // Stop if same item selected (Only for non-insert)
+                if (!isInsert && this.tempSerial.ItemId === item.Id) return;
+
                 try {
-                    uni.showLoading({ title: '绑定中...' });
-                    await request.post('api/ssbh/Position/Update', {
-                        mainData: { Id: this.tempSerial.Id, ItemId: item.Id, ItemName: item.Name }
-                    });
-
-                    uni.showToast({ title: '绑定成功', icon: 'success' });
-
-                    // Update Local State
-                    if (this.tempSerial) {
-                        this.tempSerial.ItemId = item.Id;
-                        this.tempSerial.ItemName = item.Name;
-                        // Pre-fetch item details for UI
-                        await this.fetchItemDetails([item.Id]);
+                    uni.showLoading({ title: isInsert ? '插入中...' : '绑定中...' });
+                    const mainData = { Id: this.tempSerial.Id, ItemId: item.Id, ItemName: item.Name };
+                    if (isInsert) {
+                        mainData.INS = 1;
                     }
-                    const floor = this.floorList.find(f => f.Id === this.tempSerial.FloorId);
-                    if (floor) {
-                        this.$set(floor, 'expanded', true);
+
+                    await request.post('api/ssbh/Position/Update', { mainData });
+
+                    uni.showToast({ title: isInsert ? '插入成功' : '绑定成功', icon: 'success' });
+
+                    if (isInsert) {
+                        // Refresh everything on insert as positions might shift
+                        this.fetchRescueCarData(this.selectedRescueCarId);
+                    } else {
+                        // Update Local State for direct bind
+                        if (this.tempSerial) {
+                            this.tempSerial.ItemId = item.Id;
+                            this.tempSerial.ItemName = item.Name;
+                            // Pre-fetch item details for UI
+                            await this.fetchItemDetails([item.Id]);
+                        }
+                        const floor = this.floorList.find(f => f.Id === this.tempSerial.FloorId);
+                        if (floor) {
+                            this.$set(floor, 'expanded', true);
+                        }
                     }
                 } catch (e) {
                     console.error(e);
-                    uni.showToast({ title: '绑定失败', icon: 'none' });
+                    uni.showToast({ title: isInsert ? '插入失败' : '绑定失败', icon: 'none' });
                 } finally {
                     uni.hideLoading();
                     // Clean up
@@ -1052,7 +1080,6 @@ page {
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(5px);
-    min-height: 1000rpx;
     position: relative;
     z-index: 10;
 }

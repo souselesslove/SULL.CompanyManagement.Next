@@ -1,4 +1,6 @@
+// #ifdef APP-PLUS
 import { scan } from '@/uni_modules/sn-e-scankit';
+// #endif
 
 /**
  * 统一扫码工具函数

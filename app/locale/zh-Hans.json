@@ -16,7 +16,12 @@
         "unknown": "未知",
         "load_fail": "加载失败",
         "file_name_error": "文件名获取失败",
-        "coming_soon": "功能开发中"
+        "coming_soon": "功能开发中",
+        "refresh": "同步刷新",
+        "syncing": "正在同步...",
+        "sync_success": "同步成功",
+        "sync_fail": "同步失败",
+        "deleting": "正在删除..."
     },
     "index": {
         "home": "抢救车管理系统",

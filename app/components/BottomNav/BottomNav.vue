@@ -227,8 +227,8 @@ export default {
 }
 
 .icon-scan {
-	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z'/%3E%3C/svg%3E");
-	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Ccircle cx='12' cy='12' r='3.2'/%3E%3Cpath d='M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z'/%3E%3C/svg%3E");
+	-webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 8V6a2 2 0 0 1 2-2h2'/%3E%3Cpath d='M15 4h2a2 2 0 0 1 2 2v2'/%3E%3Cpath d='M19 16v2a2 2 0 0 1-2 2h-2'/%3E%3Cpath d='M9 20H7a2 2 0 0 1-2-2v-2'/%3E%3Cline x1='6' y1='12' x2='18' y2='12'/%3E%3C/svg%3E");
+	mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 8V6a2 2 0 0 1 2-2h2'/%3E%3Cpath d='M15 4h2a2 2 0 0 1 2 2v2'/%3E%3Cpath d='M19 16v2a2 2 0 0 1-2 2h-2'/%3E%3Cpath d='M9 20H7a2 2 0 0 1-2-2v-2'/%3E%3Cline x1='6' y1='12' x2='18' y2='12'/%3E%3C/svg%3E");
 }
 
 .icon-stats {

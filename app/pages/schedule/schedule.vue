@@ -2,8 +2,8 @@
     <view class="container" @click="activeActionItemId = null">
         <!-- Header -->
         <!-- Header (Adapted from Handover Style) -->
-        <view class="custom-nav" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
-            <view class="nav-content">
+        <view class="custom-nav" :style="{ paddingTop: statusBarHeight + 'px' }">
+            <view class="nav-content" :style="{ height: navHeight + 'px' }">
                 <view class="nav-left">
                     <BackButton class="nav-back-btn" @click="goBack" />
                 </view>
@@ -14,7 +14,8 @@
 
         <scroll-view scroll-y class="content" refresher-enabled="true" :refresher-triggered="isRefreshing"
             :refresher-threshold="60" refresher-default-style="none" refresher-background="#f0f5ff"
-            @refresherrefresh="onRefresh" @refresherpulling="onPulling" @refresherrestore="onRestore">
+            @refresherrefresh="onRefresh" @refresherpulling="onPulling" @refresherrestore="onRestore"
+            :style="{ marginTop: (statusBarHeight + navHeight) + 'px', height: `calc(100vh - ${statusBarHeight + navHeight}px)` }">
 
             <CustomRefresher slot="refresher" :isRefreshing="isRefreshing" :isPulling="isPulling" />
             <!-- Tabs -->
@@ -118,14 +119,14 @@
                 <view v-if="currentTab === 2" class="tab-content">
                     <view class="action-bar">
                         <button class="btn-primary" @click="showAddLeave = true">{{ $t('schedule.apply_leave')
-                            }}</button>
+                        }}</button>
                     </view>
                     <view class="list-container">
                         <view v-for="(item, index) in leaveList" :key="index" class="card">
                             <view class="card-header">
                                 <view class="header-left">
                                     <text class="user-name">{{ item.Creator || item.UserName || getUserName(item.UserId)
-                                        }}</text>
+                                    }}</text>
                                 </view>
                                 <view class="header-right">
                                     <view class="status-tag" :class="getAuditStatusClass(item.AuditStatus)">
@@ -168,7 +169,7 @@
                                         }}</text>
                                 </view>
                                 <view class="row" v-if="item.Remark"><text class="label">{{ $t('schedule.reason')
-                                        }}:</text> <text>{{
+                                }}:</text> <text>{{
                                             item.Remark
                                         }}</text></view>
                             </view>
@@ -211,9 +212,9 @@
                             </view>
                             <view class="card-body">
                                 <text>{{ $t('schedule.duration') }}: {{ item.Duration }}{{ $t('schedule.duration_unit')
-                                    }}</text>
-                                <text>{{ formatTimeString(item.StartTime) }} - {{ formatTimeString(item.EndTime)
                                 }}</text>
+                                <text>{{ formatTimeString(item.StartTime) }} - {{ formatTimeString(item.EndTime)
+                                    }}</text>
                                 <text class="desc" v-if="item.Description">{{ item.Description }}</text>
                             </view>
                         </view>
@@ -299,7 +300,7 @@
                             :value="newSchedule.EndDate || currentWeekStart">
                             <view class="input-item small">
                                 <text :class="{ 'placeholder': !newSchedule.EndDate }">{{ newSchedule.EndDate || '结束'
-                                }}</text>
+                                    }}</text>
                                 <text class="arrow">▼</text>
                             </view>
                         </picker>
@@ -329,7 +330,7 @@
             <view class="modal-content" @click.stop>
                 <view class="modal-header">
                     <text class="modal-title">{{ editingType.Id ? $t('schedule.edit_type') : $t('schedule.add_type')
-                        }}</text>
+                    }}</text>
                     <text class="close-btn" @click="showTypeModal = false">✖️</text>
                 </view>
                 <view class="modal-body form">
@@ -365,7 +366,7 @@
                     <button class="modal-btn cancel" v-if="!editingType.Id" @click="generateAPNShifts">{{
                         $t('schedule.apn_button') }}</button>
                     <button class="modal-btn cancel" v-else @click="showTypeModal = false">{{ $t('common.cancel')
-                        }}</button>
+                    }}</button>
                     <button class="modal-btn confirm" @click="submitType">{{ $t('common.save') }}</button>
                 </view>
             </view>
@@ -386,7 +387,7 @@
                     <picker mode="date" @change="e => newLeave.EndDate = e.detail.value">
                         <view class="input-item">{{ $t('schedule.end') }}: {{ newLeave.EndDate ||
                             $t('schedule.please_select')
-                        }}</view>
+                            }}</view>
                     </picker>
                     <textarea class="textarea" :placeholder="$t('schedule.leave_reason')"
                         v-model="newLeave.Remark"></textarea>
@@ -426,7 +427,7 @@
                 </view>
                 <view class="modal-footer">
                     <button class="modal-btn cancel" @click="showConflictModal = false">{{ $t('common.cancel')
-                    }}</button>
+                        }}</button>
                     <button class="modal-btn confirm" @click="confirmSubmitSchedule">确认覆盖</button>
                 </view>
             </view>
@@ -502,7 +503,8 @@ export default {
             showUserPreview: false,
             previewUser: null,
             previewSchedules: [],
-            tabLoadedStatus: { 0: false, 1: false, 2: false, 3: false }
+            tabLoadedStatus: { 0: false, 1: false, 2: false, 3: false },
+            navHeight: 44 // default in px for header content
         }
     },
     onLoad() {
@@ -529,6 +531,11 @@ export default {
     mounted() {
         const sysInfo = uni.getSystemInfoSync();
         this.statusBarHeight = sysInfo.statusBarHeight || 20;
+
+        // #ifdef MP-WEIXIN
+        const menuButton = uni.getMenuButtonBoundingClientRect();
+        this.navHeight = (menuButton.bottom - sysInfo.statusBarHeight) + 8;
+        // #endif
     },
     computed: {
         canManage() {

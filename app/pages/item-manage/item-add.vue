@@ -1,8 +1,8 @@
 <template>
 	<view class="container">
 		<!-- Navigation Bar -->
-		<view class="custom-nav" :style="{ paddingTop: statusBarHeight * 2 + 'rpx' }">
-			<view class="nav-content">
+		<view class="custom-nav" :style="{ paddingTop: statusBarHeight + 'px' }">
+			<view class="nav-content" :style="{ height: navHeight + 'px' }">
 				<view class="nav-left">
 					<BackButton class="nav-back-btn" @click="goBack" />
 				</view>
@@ -11,82 +11,90 @@
 			</view>
 		</view>
 
-		<scroll-view class="form-content" scroll-y :style="{ marginTop: (statusBarHeight * 2 + 88) + 'rpx' }">
-			<view class="qr-section" v-if="isEdit && qrCodeValue">
-				<uv-qrcode :value="qrCodeValue" size="200px" ref="qrcode"></uv-qrcode>
-				<text class="qr-hint">{{ $t('itemManage.qr_hint') }}</text>
-			</view>
-			<view class="form-card">
-				<view class="form-item">
-					<text class="label required">{{ $t('itemManage.name') }}</text>
-					<input class="input" v-model="formData.Name" :placeholder="$t('itemManage.name')" />
+		<view class="form-wrapper" :style="{ marginTop: (statusBarHeight + navHeight) + 'px' }">
+			<scroll-view class="form-content" scroll-y>
+				<view class="qr-section" v-if="isEdit && qrCodeValue">
+					<uv-qrcode :value="qrCodeValue" size="200px" ref="qrcode"></uv-qrcode>
+					<text class="qr-hint">{{ $t('itemManage.qr_hint') }}</text>
 				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.full_name') }}</text>
-					<input class="input" v-model="formData.FullName" :placeholder="$t('itemManage.full_name')" />
-				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.code') }}</text>
-					<input class="input" v-model="formData.InterfaceCode" :placeholder="$t('itemManage.code')" />
-				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.category') }}</text>
-					<picker :range="categories" range-key="text" @change="onCategoryChange" :value="categoryIndex">
-						<view class="input">
-							{{ categoryText || $t('itemManage.please_select') }}
+				<view class="form-card">
+					<view class="form-item">
+						<text class="label required">{{ $t('itemManage.name') }}</text>
+						<input class="input" v-model="formData.Name" :placeholder="$t('itemManage.name')" />
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.full_name') }}</text>
+						<input class="input" v-model="formData.FullName" :placeholder="$t('itemManage.full_name')" />
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.code') }}</text>
+						<input class="input" v-model="formData.InterfaceCode" :placeholder="$t('itemManage.code')" />
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.category') }}</text>
+						<picker :range="categories" range-key="text" @change="onCategoryChange" :value="categoryIndex">
+							<view class="input">
+								{{ categoryText || $t('itemManage.please_select') }}
+							</view>
+						</picker>
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.spec') }}</text>
+						<input class="input" v-model="formData.Specification" :placeholder="$t('itemManage.spec')" />
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.unit') }}</text>
+						<input class="input" v-model="formData.Unit" :placeholder="$t('itemManage.unit')" />
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.form') }}</text>
+						<input class="input" v-model="formData.Form" :placeholder="$t('itemManage.form')" />
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.register_code') }}</text>
+						<input class="input" v-model="formData.RegisterCode"
+							:placeholder="$t('itemManage.register_code')" />
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.factory') }}</text>
+						<input class="input" v-model="formData.Factory" :placeholder="$t('itemManage.factory')" />
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.cardinality') }}</text>
+						<input class="input" type="number" v-model.number="formData.Cardinality"
+							:placeholder="$t('itemManage.cardinality')" />
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.barcode') }}</text>
+						<input class="input" v-model="formData.Barcode" :placeholder="$t('itemManage.barcode')" />
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.sort') }}</text>
+						<input class="input" type="number" v-model.number="formData.OrderBy"
+							:placeholder="$t('itemManage.sort')" />
+					</view>
+					<view class="form-item">
+						<text class="label">{{ $t('itemManage.search_code') }}</text>
+						<input class="input" v-model="formData.SearchCode"
+							:placeholder="$t('itemManage.search_code')" />
+					</view>
+					<view class="form-item remark-item">
+						<text class="label">{{ $t('itemManage.remark') }}</text>
+						<view class="textarea-container">
+							<textarea class="textarea" v-model="formData.Remark" :placeholder="$t('itemManage.remark')"
+								auto-height maxlength="-1" cursor-spacing="100"
+								@input="formData.Remark = $event.detail.value" />
 						</view>
-					</picker>
+					</view>
 				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.spec') }}</text>
-					<input class="input" v-model="formData.Specification" :placeholder="$t('itemManage.spec')" />
-				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.unit') }}</text>
-					<input class="input" v-model="formData.Unit" :placeholder="$t('itemManage.unit')" />
-				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.form') }}</text>
-					<input class="input" v-model="formData.Form" :placeholder="$t('itemManage.form')" />
-				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.register_code') }}</text>
-					<input class="input" v-model="formData.RegisterCode"
-						:placeholder="$t('itemManage.register_code')" />
-				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.factory') }}</text>
-					<input class="input" v-model="formData.Factory" :placeholder="$t('itemManage.factory')" />
-				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.cardinality') }}</text>
-					<input class="input" type="number" v-model.number="formData.Cardinality"
-						:placeholder="$t('itemManage.cardinality')" />
-				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.barcode') }}</text>
-					<input class="input" v-model="formData.Barcode" :placeholder="$t('itemManage.barcode')" />
-				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.sort') }}</text>
-					<input class="input" type="number" v-model.number="formData.OrderBy"
-						:placeholder="$t('itemManage.sort')" />
-				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.search_code') }}</text>
-					<input class="input" v-model="formData.SearchCode" :placeholder="$t('itemManage.search_code')" />
-				</view>
-				<view class="form-item">
-					<text class="label">{{ $t('itemManage.remark') }}</text>
-					<input class="input" v-model="formData.Remark" :placeholder="$t('itemManage.remark')" />
-				</view>
-			</view>
+				<view class="bottom-padding"></view>
+			</scroll-view>
 
 			<view class="submit-section">
 				<button class="submit-btn" :disabled="!isValid" @click="submitForm">{{ $t('handover.confirm')
 				}}</button>
 			</view>
-		</scroll-view>
+		</view>
 	</view>
 </template>
 
@@ -153,6 +161,12 @@ export default {
 	onLoad(options) {
 		const sysInfo = uni.getSystemInfoSync();
 		this.statusBarHeight = sysInfo.statusBarHeight || 20;
+
+		// #ifdef MP-WEIXIN
+		const menuButton = uni.getMenuButtonBoundingClientRect();
+		this.navHeight = (menuButton.bottom - sysInfo.statusBarHeight) + 8;
+		// #endif
+
 		const uInfo = storage.get('userOrgInfo');
 		if (uInfo && uInfo.User) {
 			this.userInfo = uInfo.User;
@@ -259,11 +273,19 @@ export default {
 	}
 }
 
+.form-wrapper {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
 .form-content {
 	flex: 1;
 	padding: 32rpx;
 	width: 100%;
 	box-sizing: border-box;
+	overflow-y: auto;
 }
 
 .form-card {
@@ -302,14 +324,61 @@ export default {
 		text-align: right;
 	}
 
+	.textarea {
+		flex: 1;
+		font-size: 28rpx;
+		color: #333;
+		text-align: right;
+		min-height: 80rpx;
+		padding: 10rpx 0;
+	}
+
 	picker {
 		flex: 1;
 		text-align: right;
 	}
 }
 
+.textarea-container {
+	width: 100%;
+	display: block;
+	position: relative;
+	z-index: 10;
+}
+
+.remark-item {
+	flex-direction: column;
+	align-items: flex-start !important;
+	padding: 32rpx 0 !important;
+
+	.label {
+		width: 100%;
+		margin-bottom: 20rpx;
+		font-weight: 600;
+	}
+
+	.textarea {
+		width: 100%;
+		text-align: left;
+		min-height: 160rpx;
+		padding: 24rpx;
+		background-color: #f7f8fa;
+		border-radius: 12rpx;
+		box-sizing: border-box;
+		font-size: 28rpx;
+		line-height: 1.6;
+		display: block;
+	}
+}
+
+.bottom-padding {
+	height: 48rpx;
+}
+
 .submit-section {
-	padding: 32rpx;
+	padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+	background-color: #fff;
+	box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.05);
 }
 
 .submit-btn {

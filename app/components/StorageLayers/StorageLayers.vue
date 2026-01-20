@@ -144,7 +144,8 @@ export default {
             return '';
         },
         getSerialsByFloor(floorId) {
-            return this.serialsMap[floorId] || [];
+            const list = this.serialsMap[floorId] || [];
+            return [...list].sort((a, b) => (a.SerialId || 0) - (b.SerialId || 0));
         },
         getOccupiedCount(floor) {
             //TODO 默认显示数量错误，点击后显示正常
