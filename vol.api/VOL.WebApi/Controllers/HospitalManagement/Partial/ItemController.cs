@@ -47,5 +47,11 @@ namespace SULL.HospitalManagement.Controllers
         {
             return await _service.GetItemRemarkAsync(combinedId);
         }
+
+        [HttpPost, Route("Refresh")]
+        public WebResponseContent Refresh([FromBody] long? id)
+        {
+            return _service.Refresh(id);
+        }
     }
 }

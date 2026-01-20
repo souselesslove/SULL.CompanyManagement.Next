@@ -49,6 +49,8 @@ namespace VOL.Core.BaseProvider
         }
         private WebResponseContent Response { get; set; }
 
+        protected bool ForceDelete;
+
         protected IRepository<T> repository;
 
         private PropertyInfo[] _propertyInfo { get; set; } = null;
@@ -1339,7 +1341,7 @@ namespace VOL.Core.BaseProvider
                 return Response.Error("没有主键不能删除");
 
             // 2023.12.13 新增：默认只能自己删除自己的记录，无法删除他人的记录，超级管理员除外
-            if (!UserContext.Current.IsSuperAdmin)
+            if (!UserContext.Current.IsSuperAdmin && !ForceDelete)
             {
                 var creatorIdProp = TProperties.FirstOrDefault(x => x.Name == "CreatorId");
                 if (creatorIdProp != null)

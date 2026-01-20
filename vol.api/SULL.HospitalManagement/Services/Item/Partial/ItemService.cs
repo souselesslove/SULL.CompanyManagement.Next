@@ -65,10 +65,27 @@ namespace SULL.HospitalManagement.Services
             }
 
             // 强制设置当前用户的机构和科室
-            saveModel.MainData["OrganizationId"] = UserContext.Current.OrganizationId;
-            saveModel.MainData["DepartmentId"] = UserContext.Current.DepartmentId;
+            var orgId = UserContext.Current.OrganizationId;
+            var deptId = UserContext.Current.DepartmentId;
+            saveModel.MainData["OrganizationId"] = orgId;
+            saveModel.MainData["DepartmentId"] = deptId;
 
-            return base.Add(saveModel);
+            string name = saveModel.MainData.GetValueOrDefault("Name")?.ToString() ?? "";
+            string spec = saveModel.MainData.GetValueOrDefault("Specification")?.ToString() ?? "";
+
+            // 使用细粒度锁防止重复添加
+            string lockKey = $"Item_Add_{orgId}_{deptId}_{name}_{spec}";
+            return KeyLock.Lock(lockKey, () =>
+            {
+                if (_repository.Exists(x => x.OrganizationId == orgId
+                                            && x.DepartmentId == deptId
+                                            && x.Name == name
+                                            && (x.Specification ?? "") == spec))
+                {
+                    return new WebResponseContent().Error($"物品[{name} {spec}]已存在，请勿重复添加");
+                }
+                return base.Add(saveModel);
+            });
         }
 
         private WebResponseContent BatchAdd(SaveModel saveModel)
@@ -604,6 +621,53 @@ namespace SULL.HospitalManagement.Services
                 }
                 db.SaveChanges();
             }
+        }
+        public override WebResponseContent Del(object[] keys, bool delList = true)
+        {
+            ForceDelete = true;
+            return base.Del(keys, delList);
+        }
+
+        public WebResponseContent Refresh(long? id)
+        {
+            var db = _repository.DbContext;
+            List<Item> items = new List<Item>();
+
+            if (id.HasValue && id.Value > 0)
+            {
+                var item = _repository.FindFirst(x => x.Id == id.Value);
+                if (item != null) items.Add(item);
+            }
+            else
+            {
+                long orgId = UserContext.Current.OrganizationId;
+                long deptId = UserContext.Current.DepartmentId;
+                if (orgId <= 0 || deptId <= 0) return new WebResponseContent().Error("用户信息异常");
+
+                items = _repository.Find(x => x.OrganizationId == orgId && x.DepartmentId == deptId && x.IsDeleted != true).ToList();
+            }
+
+            if (items.Count == 0) return new WebResponseContent().OK("未找到需要刷新的数据");
+
+            int count = 0;
+            var now = DateTime.Now;
+            foreach (var item in items)
+            {
+                var details = db.Set<ItemDetail>().Where(x => x.ItemId == item.Id && x.IsDeleted != true).ToList();
+                
+                item.AvailableStock = details.Sum(x => x.Stock ?? 0);
+                item.KindCounter = details.Count;
+                item.LatestExpirationDate = details.Where(x => x.ExpirationDate > now).Min(x => (DateTime?)x.ExpirationDate);
+                
+                item.LastModificationTime = now;
+                item.LastModifier = UserContext.Current.UserTrueName;
+
+                db.Entry(item).State = EntityState.Modified;
+                count++;
+            }
+
+            db.SaveChanges();
+            return new WebResponseContent().OK($"刷新完成，共处理 {count} 条数据");
         }
     }
 }

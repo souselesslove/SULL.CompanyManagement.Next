@@ -122,10 +122,68 @@ namespace SULL.HospitalManagement.Services
 
         public override WebResponseContent Update(SaveModel saveModel)
         {
-            // 当更新的内容是分层时Category=100，需要检测SerialId(分隔数量)的变化
-            if (saveModel.MainData.TryGetValue("Id", out object? idObj) && saveModel.MainData.TryGetValue("SerialId", out object? serialIdObj))
+            // 如果传入的参数包含INS，则表示是插入绑定
+            if (saveModel.MainData.ContainsKey("INS"))
             {
-                if (long.TryParse(idObj.ToString(), out long id))
+                saveModel.MainData.Remove("INS");
+                if (saveModel.MainData.TryGetValue("Id", out object? idObj) && saveModel.MainData.TryGetValue("ItemId", out object? newItemIdObj))
+                {
+                    long id = idObj.ToString().GetLong();
+                    long? newItemId = newItemIdObj?.ToString().GetLong();
+                    if (newItemId == 0) newItemId = null;
+
+                    var currentPos = _repository.FindFirst(x => x.Id == id);
+                    if (currentPos != null)
+                    {
+                        // 首先将当前位置绑定的物品与新绑定的物品进行比较，如果编号一样，则跳过
+                        if (currentPos.ItemId != newItemId)
+                        {
+                            // 确保 ItemName 同步更新（如果 MainData 中没有则从数据库查询）
+                            if (newItemId.HasValue && !saveModel.MainData.ContainsKey("ItemName"))
+                            {
+                                var itemEntity = _repository.DbContext.Set<Item>().FirstOrDefault(x => x.Id == newItemId);
+                                if (itemEntity != null) saveModel.MainData["ItemName"] = itemEntity.Name;
+                            }
+                            else if (!newItemId.HasValue)
+                            {
+                                saveModel.MainData["ItemName"] = null;
+                            }
+
+                            // 逻辑：将当前位置之后的绑定的物品依次进行交换（后移）
+                            var subsequent = _repository.Find(x => x.FloorId == currentPos.FloorId
+                                                                && x.Category == 110
+                                                                && x.SerialId > currentPos.SerialId
+                                                                && x.IsDeleted != true)
+                                                         .OrderBy(x => x.SerialId)
+                                                         .ToList();
+
+                            if (subsequent.Count > 0)
+                            {
+                                long? carryId = currentPos.ItemId;
+                                string? carryName = currentPos.ItemName;
+
+                                foreach (var p in subsequent)
+                                {
+                                    long? tempId = p.ItemId;
+                                    string? tempName = p.ItemName;
+
+                                    p.ItemId = carryId;
+                                    p.ItemName = carryName;
+
+                                    carryId = tempId;
+                                    carryName = tempName;
+                                }
+                                _repository.UpdateRange(subsequent);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 当更新的内容是分层时Category=100，需要检测SerialId(分隔数量)的变化
+            if (saveModel.MainData.TryGetValue("Id", out object? idObj2) && saveModel.MainData.TryGetValue("SerialId", out object? serialIdObj))
+            {
+                if (long.TryParse(idObj2.ToString(), out long id))
                 {
                     var entity = _repository.FindFirst(x => x.Id == id);
                     // 只有当Category=100且SerialId确实发生变化时才处理

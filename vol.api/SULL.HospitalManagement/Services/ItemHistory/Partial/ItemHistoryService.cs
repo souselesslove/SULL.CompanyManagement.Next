@@ -102,6 +102,17 @@ namespace SULL.HospitalManagement.Services
                         {
                             item.LatestExpirationDate = itemDetail.ExpirationDate;
                         }
+
+                        // 如果该itemDetail已经过期，且item的LatestExpirationDate也已经过期，那么出入库后，需要重新获取有效的LatestExpirationDate，如果不存在则应该设置为null
+                        DateTime now = DateTime.Now;
+                        if (item.LatestExpirationDate < now)
+                        {
+                            item.LatestExpirationDate = db.Set<ItemDetail>()
+                                .Where(x => x.ItemId == item.Id && x.ExpirationDate > now && x.IsDeleted != true)
+                                .OrderBy(x => x.ExpirationDate)
+                                .Select(x => (DateTime?)x.ExpirationDate)
+                                .FirstOrDefault();
+                        }
                     }
                     
                     // 更新修改信息

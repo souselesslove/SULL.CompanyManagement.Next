@@ -12,5 +12,6 @@ namespace SULL.HospitalManagement.IServices
     {
         Task<WebResponseContent> CheckItemWarningsAsync(long id);
         Task<WebResponseContent> GetItemRemarkAsync(string combinedId);
+        WebResponseContent Refresh(long? id);
     }
  }
