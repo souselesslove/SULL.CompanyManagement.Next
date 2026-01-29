@@ -21,7 +21,8 @@
         "syncing": "Syncing...",
         "sync_success": "Sync Success",
         "sync_fail": "Sync Failure",
-        "deleting": "Deleting..."
+        "deleting": "Deleting...",
+        "loading": "Loading..."
     },
     "index": {
         "home": "Rescue Car Management",
@@ -211,8 +212,12 @@
         "title_create": "Create Organization",
         "title_update": "Update Organization",
         "title_info": "Organization Info",
+        "tab_info": "Info",
+        "tab_members": "Members",
+        "tab_all_orgs": "All Orgs",
         "name": "Organization Name",
         "name_placeholder": "Enter Organization Name",
+        "search_placeholder": "Search Org Name",
         "level": "Hospital Level",
         "level_placeholder": "Please select the hospital level",
         "status": "Status",
@@ -238,7 +243,10 @@
         "quit_confirm": "Are you sure to quit this organization?",
         "invite_qr_tip": "Scan QR to join organization",
         "scan_to_join": "Scan to Join Organization",
-        "or_create": "Or fill form to create"
+        "or_create": "Or fill form to create",
+        "action_approve": "Approve",
+        "action_delete": "Delete",
+        "action_switch": "Switch"
     },
     "department": {
         "title": "Dept Management",

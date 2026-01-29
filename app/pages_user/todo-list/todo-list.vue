@@ -132,7 +132,7 @@
                                 <view class="timeline-header">
                                     <text class="timeline-time">{{ formatTime(item.CreationTime) }}</text>
                                     <text class="timeline-creator">{{ item.Creator || $t('index.timeline.unknown')
-                                    }}</text>
+                                        }}</text>
                                 </view>
                                 <view class="timeline-desc">{{ item.Description }}</view>
                                 <view class="timeline-footer">
@@ -441,13 +441,13 @@ export default {
                 case 10:
                 case 20:
                     uni.reLaunch({
-                        url: `/pages/bigscreen/rescue-car?type=${category}&id=${relatedId}`
+                        url: `/pages_rescue/bigscreen/rescue-car?type=${category}&id=${relatedId}`
                     });
                     break;
                 case 30:
                 case 40:
                     uni.navigateTo({
-                        url: `/pages/handover-check/handover-item-check?id=${relatedId}&todoListId=${item.Id}`
+                        url: `/pages_handover/handover-check/handover-item-check?id=${relatedId}&todoListId=${item.Id}`
                     });
                     break;
                 default:

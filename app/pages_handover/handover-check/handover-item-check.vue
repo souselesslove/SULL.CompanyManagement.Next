@@ -387,7 +387,7 @@ export default {
 		},
 		onConfirmCheck() {
 			uni.navigateTo({
-				url: '/pages/handover-check/handover-check?id=' + this.handoverId + '&status=' + (this.handoverData?.AuditStatus || 0),
+				url: '/pages_handover/handover-check/handover-check?id=' + this.handoverId + '&status=' + (this.handoverData?.AuditStatus || 0),
 				success: (res) => {
 					res.eventChannel.emit('acceptHandoverData', {
 						data: this.handoverData
@@ -397,7 +397,7 @@ export default {
 		},
 		onAuditNext() {
 			uni.navigateTo({
-				url: `/pages/handover-check/handover-check?id=${this.handoverId}&todoListId=${this.todoListId}&status=${this.handoverData?.AuditStatus || 0}`,
+				url: `/pages_handover/handover-check/handover-check?id=${this.handoverId}&todoListId=${this.todoListId}&status=${this.handoverData?.AuditStatus || 0}`,
 				success: (res) => {
 					if (this.handoverData) {
 						res.eventChannel.emit('acceptHandoverData', {

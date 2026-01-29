@@ -612,7 +612,7 @@ export default {
 		},
 		navTo(page) {
 			let url = '';
-			if (page === 'statistics') url = '/pages/statistics/statistics';
+			if (page === 'statistics') url = '/pages_user/statistics/statistics';
 			if (page === 'profile') url = '/pages/profile/profile';
 
 			if (url) {

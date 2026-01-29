@@ -15,7 +15,7 @@
             <!-- Header Info -->
             <view class="header-info">
                 <text class="car-name">{{ $t('rescue.current_car') }}: {{ rescueCarName || $t('common.unknown')
-                    }}</text>
+                }}</text>
             </view>
 
             <!-- Statistics Card -->
@@ -70,7 +70,7 @@
                                 <view class="info-row">
                                     <text class="label">{{ $t('rescue.participants_count') }}:</text>
                                     <text class="value">{{ item.Participants ? item.Participants.split(',').length : 0
-                                        }}{{ $t('rescue.person_unit') }}</text>
+                                    }}{{ $t('rescue.person_unit') }}</text>
                                 </view>
                                 <view class="info-row">
                                     <text class="label">{{ $t('rescue.creator') }}:</text>
@@ -359,7 +359,7 @@ export default {
         goDetail(item) {
             storage.set('currentRescueTask', item);
             uni.navigateTo({
-                url: `/pages/rescue/rescue-record?id=${item.Id}`
+                url: `/pages_rescue/rescue/rescue-record?id=${item.Id}`
             });
         }
     }

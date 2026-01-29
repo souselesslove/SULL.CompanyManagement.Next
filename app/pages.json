@@ -8,179 +8,9 @@
 			}
 		},
 		{
-			"path": "pages/bigscreen/rescue-car",
-			"style": {
-				"navigationBarTitleText": "%bigScreen.rescueCar.title%",
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/handover/handover",
-			"style": {
-				"navigationBarTitleText": "%handover.title%",
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/sealing/sealing",
-			"style": {
-				"navigationBarTitleText": "%registerCode.title%",
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/handover-check/handover-check",
-			"style": {
-				"navigationBarTitleText": "%handoverCheck.title%",
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/handover-check/handover-item-check",
-			"style": {
-				"navigationBarTitleText": "%handoverCheck.itemTitle%",
-				"navigationStyle": "custom"
-			}
-		},
-		{
 			"path": "pages/profile/profile",
 			"style": {
 				"navigationBarTitleText": "Profile",
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/profile/language",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/profile/personal-info",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/profile/config-manage",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/statistics/statistics",
-			"style": {
-				"navigationBarTitleText": "Statistics",
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/todo-list/todo-list",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/register/register",
-			"style": {
-				"navigationBarTitleText": "Register",
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/organization/organization",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/schedule/schedule",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/department/department",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/item-outbound/item-outbound",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/item-inbound/item-inbound",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/position-manage/position-manage",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/position-manage/position-add-car",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/item-manage/item-manage",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/item-manage/item-add",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/item-manage/item-import",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/item-manage/item-batch",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/item-manage/item-book",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/webview/webview",
-			"style": {
-				"navigationStyle": "default",
-				"navigationBarTitleText": "详情"
-			}
-		},
-		{
-			"path": "pages/rescue/rescue-record",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/rescue/rescue-list",
-			"style": {
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/profile/notification-list",
-			"style": {
 				"navigationStyle": "custom"
 			}
 		},
@@ -197,6 +27,198 @@
 			}
 		}
 	],
+	"subPackages": [
+		{
+			"root": "pages_inventory",
+			"pages": [
+				{
+					"path": "item-manage/item-manage",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "item-manage/item-add",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "item-manage/item-import",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "item-manage/item-batch",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "item-manage/item-book",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "item-inbound/item-inbound",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "item-outbound/item-outbound",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "position-manage/position-manage",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "position-manage/position-add-car",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "sealing/sealing",
+					"style": {
+						"navigationBarTitleText": "%registerCode.title%",
+						"navigationStyle": "custom"
+					}
+				}
+			]
+		},
+		{
+			"root": "pages_handover",
+			"pages": [
+				{
+					"path": "handover/handover",
+					"style": {
+						"navigationBarTitleText": "%handover.title%",
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "handover-check/handover-check",
+					"style": {
+						"navigationBarTitleText": "%handoverCheck.title%",
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "handover-check/handover-item-check",
+					"style": {
+						"navigationBarTitleText": "%handoverCheck.itemTitle%",
+						"navigationStyle": "custom"
+					}
+				}
+			]
+		},
+		{
+			"root": "pages_rescue",
+			"pages": [
+				{
+					"path": "rescue/rescue-record",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "rescue/rescue-list",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "bigscreen/rescue-car",
+					"style": {
+						"navigationBarTitleText": "%bigScreen.rescueCar.title%",
+						"navigationStyle": "custom"
+					}
+				}
+			]
+		},
+		{
+			"root": "pages_user",
+			"pages": [
+				{
+					"path": "profile/language",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "profile/personal-info",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "profile/config-manage",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "profile/notification-list",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "statistics/statistics",
+					"style": {
+						"navigationBarTitleText": "Statistics",
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "todo-list/todo-list",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "register/register",
+					"style": {
+						"navigationBarTitleText": "Register",
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "organization/organization",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "schedule/schedule",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "department/department",
+					"style": {
+						"navigationStyle": "custom"
+					}
+				},
+				{
+					"path": "webview/webview",
+					"style": {
+						"navigationStyle": "default",
+						"navigationBarTitleText": "详情"
+					}
+				}
+			]
+		}
+	],
 	"globalStyle": {
 		"navigationBarTextStyle": "white",
 		"navigationBarTitleText": "-",
@@ -204,5 +226,17 @@
 		"backgroundColor": "#F0F2F5"
 	},
 	"uniIdRouter": {},
-	"navigationStyle": "custom"
+	"navigationStyle": "custom",
+	"mp-weixin": {
+		"appid": "wxff200228e97befae",
+		"setting": {
+			"urlCheck": false,
+			"es6": true,
+			"postcss": true,
+			"minified": true
+		},
+		"optimization": {
+			"subPackages": true
+		}
+	}
 }

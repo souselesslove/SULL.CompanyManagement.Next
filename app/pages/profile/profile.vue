@@ -343,6 +343,15 @@ export default {
 				}
 			}
 		} catch (e) { }
+
+		uni.$on('refreshUserOrgInfo', () => {
+			if (this.isLoggedIn) {
+				this.getUserOrganization();
+			}
+		});
+	},
+	onUnload() {
+		uni.$off('refreshUserOrgInfo');
 	},
 	onShow() {
 		// #ifdef APP-PLUS
@@ -391,10 +400,10 @@ export default {
 			const dept = this.userOrgInfo.Department && this.userOrgInfo.Department.Name;
 			const org = this.userOrgInfo.Organization && this.userOrgInfo.Organization.Name;
 
-			if (dept && org) {
-				return `${dept} · ${org}`;
+			if (dept) {
+				return dept;
 			} else if (org) {
-				return `${this.$t('profile.dept_placeholder')} · ${org}`;
+				return org;
 			} else {
 				return this.$t('profile.org_placeholder');
 			}
@@ -559,8 +568,8 @@ export default {
 			});
 		},
 
-		navToRegister() { uni.navigateTo({ url: '/pages/register/register' }); },
-		navToOrgInfo() { uni.navigateTo({ url: '/pages/organization/organization' }); },
+		navToRegister() { uni.navigateTo({ url: '/pages_user/register/register' }); },
+		navToOrgInfo() { uni.navigateTo({ url: '/pages_user/organization/organization' }); },
 		navToDeptInfo() {
 			if (!this.userOrgInfo.Organization || !this.userOrgInfo.Organization.Id) {
 				this.warningModal = {
@@ -571,14 +580,14 @@ export default {
 				};
 				return;
 			}
-			uni.navigateTo({ url: '/pages/department/department' });
+			uni.navigateTo({ url: '/pages_user/department/department' });
 		},
-		navToLanguage() { uni.navigateTo({ url: '/pages/profile/language' }); },
-		navToPersonalInfo() { uni.navigateTo({ url: '/pages/profile/personal-info' }); },
-		navToConfigManage() { uni.navigateTo({ url: '/pages/profile/config-manage' }); },
+		navToLanguage() { uni.navigateTo({ url: '/pages_user/profile/language' }); },
+		navToPersonalInfo() { uni.navigateTo({ url: '/pages_user/profile/personal-info' }); },
+		navToConfigManage() { uni.navigateTo({ url: '/pages_user/profile/config-manage' }); },
 		navToNotification() {
 			uni.navigateTo({
-				url: '/pages/profile/notification-list',
+				url: '/pages_user/profile/notification-list',
 				events: {
 					refreshUnread: () => {
 						this.updateUnreadCount();

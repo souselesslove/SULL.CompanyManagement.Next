@@ -24,11 +24,15 @@
 			<view v-else-if="hasOrg" class="form-container">
 				<!-- Tabs -->
 				<view class="tabs">
-					<view class="tab-item" :class="{ active: currentTab === 0 }" @click="currentTab = 0">
+					<view class="tab-item" :class="{ active: currentTab === 0 }" @click="handleTabChange(0)">
 						<text>{{ $t('organization.tab_info') || '机构信息' }}</text>
 					</view>
 					<view class="tab-item" :class="{ active: currentTab === 1 }" @click="handleTabChange(1)">
 						<text>{{ $t('organization.tab_members') || '人员列表' }}</text>
+					</view>
+					<view v-if="isSuperAdmin" class="tab-item" :class="{ active: currentTab === 2 }"
+						@click="handleTabChange(2)">
+						<text>{{ $t('organization.tab_all_orgs') || '所有机构' }}</text>
 					</view>
 				</view>
 
@@ -184,6 +188,55 @@
 						</view>
 					</view>
 				</view>
+
+				<!-- Tab 2: All Organizations List -->
+				<view v-if="currentTab === 2" class="members-container">
+					<!-- Search -->
+					<view class="search-box">
+						<view class="icon-search"></view>
+						<input class="search-input" type="text" v-model="allOrgSearchKey"
+							:placeholder="$t('organization.search_placeholder') || '搜索机构名称'" />
+					</view>
+					<!-- List -->
+					<view class="member-list">
+						<view v-for="(org, index) in filteredAllOrganizations" :key="index" class="member-card">
+							<view class="member-info">
+								<view class="member-main">
+									<text class="member-name">{{ org.Name }}</text>
+									<text class="member-tag dept">{{ org.Level }}</text>
+								</view>
+								<view class="member-sub" style="margin-top: 8rpx;">
+									<view class="status-badge-small" :class="getStatusClass(org.AuditStatus)"
+										style="margin-right: 16rpx; transform: scale(0.9); transform-origin: left center;">
+										<text>{{ getStatusText(org.AuditStatus) }}</text>
+									</view>
+									<view class="value-with-copy">
+										<text class="member-time">{{ $t('organization.invite_code') }}: {{ org.Id
+										}}</text>
+										<view class="icon-copy" style="width: 28rpx; height: 28rpx;"
+											@click="copyToClipboard(org.Id)"></view>
+									</view>
+								</view>
+								<view class="member-sub" style="margin-top: 4rpx;">
+									<text class="member-time">{{ $t('organization.creator') }}: {{ org.Creator }}</text>
+									<text class="member-time" style="margin-left: 20rpx;">{{
+										$t('organization.create_time') }}: {{ (org.CreationTime ||
+											'').substring(0, 10) }}</text>
+								</view>
+							</view>
+							<view class="member-action">
+								<view class="dots-btn" @click="openOrgMenu(org)">
+									<view class="dot"></view>
+									<view class="dot"></view>
+									<view class="dot"></view>
+								</view>
+							</view>
+						</view>
+						<view v-if="filteredAllOrganizations.length === 0" class="empty-state">
+							<text>{{ $t('common.no_data') }}</text>
+						</view>
+					</view>
+				</view>
 			</view>
 
 			<!-- No Organization: Create Mode -->
@@ -242,14 +295,29 @@
 		<view class="action-sheet-mask" v-if="showActionSheet" @click="showActionSheet = false">
 			<view class="action-sheet" @click.stop>
 				<view class="action-header">
-					<text class="action-title">{{ selectedMember?.UserTrueName || selectedMember?.UserName }}</text>
+					<text class="action-title">{{ menuType === 'member' ? (selectedMember?.UserTrueName ||
+						selectedMember?.UserName) : selectedOrg?.Name }}</text>
 				</view>
 				<view class="action-list">
-					<!-- Organization level actions can be added here if needed -->
-					<view class="action-item" v-if="currentUserLevel >= 40"
-						@click="handleActionSelection('setPosition')">
-						<text>设置职别</text>
-					</view>
+					<!-- Member Actions -->
+					<template v-if="menuType === 'member'">
+						<view class="action-item" v-if="currentUserLevel >= 40"
+							@click="handleActionSelection('setPosition')">
+							<text>设置职别</text>
+						</view>
+					</template>
+					<!-- Organization Actions -->
+					<template v-else-if="menuType === 'org'">
+						<view class="action-item" @click="handleOrgAction('approve')">
+							<text>{{ $t('organization.action_approve') }}</text>
+						</view>
+						<view class="action-item" @click="handleOrgAction('switch')">
+							<text>{{ $t('organization.action_switch') }}</text>
+						</view>
+						<view class="action-item" style="color: #FF4D4F;" @click="handleOrgAction('delete')">
+							<text>{{ $t('organization.action_delete') }}</text>
+						</view>
+					</template>
 				</view>
 				<view class="action-cancel" @click="showActionSheet = false">
 					<text>{{ $t('common.cancel') }}</text>
@@ -332,8 +400,10 @@ export default {
 			memberSearchKey: '',
 			memberStatusFilter: 'all',
 			showActionSheet: false,
+			menuType: 'member', // 'member' or 'org'
 			showPositionModal: false,
 			selectedMember: null,
+			selectedOrg: null,
 			selectedPositions: [],
 			positionData: [
 				{ "title": "分管院长", "level": 50, "group": 50 },
@@ -345,7 +415,10 @@ export default {
 				{ "title": "技师", "level": 21, "group": 20 },
 				{ "title": "护工", "level": 11, "group": 10 },
 				{ "title": "后勤", "level": 10, "group": 10 }
-			]
+			],
+			// All Orgs Logic
+			allOrganizations: [],
+			allOrgSearchKey: ''
 		}
 	},
 	onLoad() {
@@ -361,10 +434,6 @@ export default {
 		isCreator() {
 			if (!this.orgInfo || !this.userInfo) return false;
 			// Check CreatorId if available, otherwise check Creator name
-			if (this.orgInfo.CreatorId && this.userInfo.UserId) {
-				return this.orgInfo.CreatorId == this.userInfo.UserId;
-			}
-			return this.orgInfo.Creator === this.userInfo.UserName;
 			if (this.orgInfo.CreatorId && this.userInfo.UserId) {
 				return this.orgInfo.CreatorId == this.userInfo.UserId;
 			}
@@ -392,12 +461,25 @@ export default {
 			}
 			return res;
 		},
+		filteredAllOrganizations() {
+			let res = this.allOrganizations || [];
+			if (this.allOrgSearchKey) {
+				const low = this.allOrgSearchKey.toLowerCase();
+				res = res.filter(org => (org.Name && org.Name.toLowerCase().includes(low)) || (org.Id && org.Id.toLowerCase().includes(low)));
+			}
+			return res;
+		},
 		currentUserLevel() {
 			const userOrgInfo = storage.get('userOrgInfo');
 			return userOrgInfo?.User?.Level || 0;
 		},
+		isSuperAdmin() {
+			const userInfo = storage.get('userInfo');
+			// Check if User object has RoleName or if it's in the top level of userOrgInfo
+			return userInfo?.roleName === '超级管理员';
+		},
 		sortedGroups() {
-			const visiblePositions = this.positionData.filter(p => p.level < this.currentUserLevel);
+			const visiblePositions = this.positionData.filter(p => p.level < this.currentUserLevel || this.isSuperAdmin);
 			const groups = [...new Set(visiblePositions.map(p => p.group))];
 			return groups.sort((a, b) => b - a);
 		}
@@ -473,6 +555,8 @@ export default {
 			this.currentTab = index;
 			if (index === 1 && this.members.length === 0) {
 				this.fetchMembers();
+			} else if (index === 2 && this.allOrganizations.length === 0) {
+				this.fetchAllOrganizations();
 			}
 		},
 		fetchMembers() {
@@ -493,6 +577,25 @@ export default {
 					console.error("Fetch members failed", err);
 				});
 		},
+		fetchAllOrganizations() {
+			const form = {
+				page: 1,
+				rows: 1000,
+				sort: 'CreationTime',
+				order: 'desc'
+			};
+			uni.showLoading({ title: this.$t('common.loading') || 'Loading...' });
+			request.post('api/ssbh/Organization/GetPageData', form)
+				.then(res => {
+					this.allOrganizations = res.rows || [];
+				})
+				.catch(err => {
+					console.error("Fetch all organizations failed", err);
+				})
+				.finally(() => {
+					uni.hideLoading();
+				});
+		},
 		getMemberStatusText(member) {
 			// Placeholder logic, adjust if API provides status
 			const s = member.WorkStatus;
@@ -511,7 +614,83 @@ export default {
 		// Menu & Position Methods
 		openMemberMenu(member) {
 			this.selectedMember = member;
+			this.menuType = 'member';
 			this.showActionSheet = true;
+		},
+		openOrgMenu(org) {
+			this.selectedOrg = org;
+			this.menuType = 'org';
+			this.showActionSheet = true;
+		},
+		handleOrgAction(type) {
+			this.showActionSheet = false;
+			const org = this.selectedOrg;
+			if (!org) return;
+
+			if (type === 'switch') {
+				uni.showLoading({ title: this.$t('common.syncing') });
+				request.post('api/ssbh/OrganizationDepartment/SetUserInfo', { mainData: { OrganizationId: org.Id } })
+					.then(res => {
+						if (res.status || res.success) {
+							uni.showToast({ title: this.$t('common.success'), icon: 'success' });
+							// Emit global event to refresh other pages
+							uni.$emit('refreshUserOrgInfo');
+							this.refreshUserOrgInfo().then(() => {
+								this.fetchOrgInfo();
+							});
+						} else {
+							uni.showToast({ title: res.message || this.$t('common.fail'), icon: 'none' });
+						}
+					})
+					.catch(err => {
+						console.error(err);
+						uni.showToast({ title: 'Network Error', icon: 'none' });
+					})
+					.finally(() => {
+						uni.hideLoading();
+					});
+			} else if (type === 'approve') {
+				// Approved logic could be a status update
+				uni.showModal({
+					title: this.$t('organization.action_approve'),
+					content: `确定审批通过机构: ${org.Name} 吗？`,
+					success: (res) => {
+						if (res.confirm) {
+							uni.showLoading({ title: this.$t('common.syncing') });
+							request.post('api/ssbh/Organization/update', { mainData: { ...org, AuditStatus: 1 } })
+								.then(res => {
+									if (res.status || res.success) {
+										uni.showToast({ title: this.$t('common.success'), icon: 'success' });
+										this.fetchAllOrganizations();
+									} else {
+										uni.showToast({ title: res.message || this.$t('common.fail'), icon: 'none' });
+									}
+								})
+								.finally(() => uni.hideLoading());
+						}
+					}
+				});
+			} else if (type === 'delete') {
+				uni.showModal({
+					title: this.$t('common.confirm'),
+					content: `确定要删除机构: ${org.Name} 吗？`,
+					success: (res) => {
+						if (res.confirm) {
+							uni.showLoading({ title: this.$t('common.deleting') });
+							request.post('api/ssbh/Organization/Del', [org.Id])
+								.then(res => {
+									if (res.status || res.success) {
+										uni.showToast({ title: this.$t('common.success'), icon: 'success' });
+										this.fetchAllOrganizations();
+									} else {
+										uni.showToast({ title: res.message || this.$t('common.fail'), icon: 'none' });
+									}
+								})
+								.finally(() => uni.hideLoading());
+						}
+					}
+				});
+			}
 		},
 		handleActionSelection(action) {
 			this.showActionSheet = false;
@@ -550,16 +729,16 @@ export default {
 				Level: highestLevel
 			};
 
-			uni.showLoading({ title: 'Updating...' });
+			uni.showLoading({ title: this.$t('common.syncing') || 'Updating...' });
 			request.post('api/ssbh/OrganizationUser/Update', { mainData: updateData })
 				.then(res => {
 					uni.hideLoading();
 					if (res.status || res.success) {
-						uni.showToast({ title: '设置成功', icon: 'success' });
+						uni.showToast({ title: this.$t('common.success'), icon: 'success' });
 						this.showPositionModal = false;
 						this.fetchMembers();
 					} else {
-						uni.showToast({ title: res.message || '设置失败', icon: 'none' });
+						uni.showToast({ title: res.message || this.$t('common.fail'), icon: 'none' });
 					}
 				})
 				.catch(err => {
@@ -697,10 +876,9 @@ export default {
 		handleScan() {
 			globalScan((res) => {
 				if (res.data) {
-					this.createForm.Name = ''; // Clear name if scanning since it's a join
 					this.createForm.Level = ''; // Clear level if scanning
 					this.createForm.InvitationCode = res.data;
-					uni.showLoading({ title: 'Joining...' });
+					uni.showLoading({ title: this.$t('common.syncing') || 'Joining...' });
 					this.handleCreate();
 				}
 			});

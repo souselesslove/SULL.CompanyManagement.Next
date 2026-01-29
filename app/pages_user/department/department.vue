@@ -31,7 +31,8 @@
                     <view class="dept-grid-scroll">
                         <view class="dept-grid">
                             <view v-for="(dept, index) in filteredDeptList" :key="index" class="dept-grid-item"
-                                :class="{ 'joined-item': isJoined(dept.Id) }">
+                                :class="{ 'joined-item': isJoined(dept.Id), 'selected-item': selectedDeptId === dept.Id }"
+                                @click="handleDeptSelect(dept)">
                                 <view class="dept-info-center">
                                     <text class="dept-name-small">{{ dept.Name }}</text>
                                     <view class="dept-duty-row-center">
@@ -40,12 +41,14 @@
                                     </view>
                                 </view>
                                 <view class="dept-action-center" v-if="!isJoined(dept.Id)">
-                                    <button class="btn-join-small" @click="handleJoin(dept)">
+                                    <button class="btn-join-small" @click.stop="handleJoin(dept)">
                                         {{ $t('department.join') }}
                                     </button>
                                 </view>
                                 <view class="dept-action-center" v-else>
-                                    <text class="joined-text">{{ $t('department.joined') }}</text>
+                                    <view class="joined-badge">
+                                        <text class="joined-text">{{ $t('department.joined') }}</text>
+                                    </view>
                                 </view>
                             </view>
                             <view v-if="filteredDeptList.length === 0" class="empty-state">
@@ -61,7 +64,7 @@
 
                 <!-- User Joined Departments (Direct Display) -->
                 <!-- User Joined Departments (Tabs: Info & Members) -->
-                <view v-if="userDeptList.length > 0" class="my-dept-section">
+                <view v-if="selectedDeptId" class="my-dept-section">
 
                     <!-- Tabs -->
                     <view class="tabs">
@@ -69,8 +72,7 @@
                             <text>{{ $t('department.tab_info') }}</text>
                         </view>
                         <view class="tab-item" :class="{ active: currentTab === 1 }" @click="handleTabChange(1)">
-                            <text>{{ $t('department.tab_members') }}{{ deptMembers.length > 0 ? ' (' +
-                                deptMembers.length + ')' : '' }}</text>
+                            <text>{{ $t('department.tab_members') }}</text>
                         </view>
                     </view>
 
@@ -78,35 +80,41 @@
                     <view v-if="currentTab === 0" class="info-card">
                         <view class="info-row">
                             <text class="info-label">{{ $t('department.name') }}</text>
-                            <text class="info-value">{{ userDeptList[0].Name }}</text>
+                            <view class="value-with-action">
+                                <text class="info-value">{{ selectedDept?.Name }}</text>
+                                <view class="dots-btn" @click="openDeptMenu(selectedDept)">
+                                    <view class="dot"></view>
+                                    <view class="dot"></view>
+                                    <view class="dot"></view>
+                                </view>
+                            </view>
                         </view>
                         <view class="info-row">
                             <text class="info-label">{{ $t('department.status') }}</text>
-                            <view class="status-badge-small" :class="getStatusClass(userDeptList[0].AuditStatus)">
-                                <text>{{ getStatusText(userDeptList[0].AuditStatus) }}</text>
+                            <view class="status-badge-small" :class="getStatusClass(selectedDept?.AuditStatus)">
+                                <text>{{ getStatusText(selectedDept?.AuditStatus) }}</text>
                             </view>
                         </view>
                         <view class="info-row">
                             <text class="info-label">{{ $t('department.creator') }}</text>
-                            <text class="info-value">{{ userDeptList[0].Creator }}</text>
+                            <text class="info-value">{{ selectedDept?.Creator }}</text>
                         </view>
                         <view class="info-row">
                             <text class="info-label">{{ $t('department.duty_user') }}</text>
-                            <text class="info-value">{{ userDeptList[0].DutyUser || '-' }}</text>
+                            <text class="info-value">{{ selectedDept?.DutyUser || '-' }}</text>
                         </view>
                         <view class="info-row">
                             <text class="info-label">{{ $t('department.create_time') }}</text>
-                            <text class="info-value">{{ userDeptList[0].CreationTime }}</text>
+                            <text class="info-value">{{ selectedDept?.CreationTime }}</text>
                         </view>
-                        <view class="info-col" v-if="userDeptList[0].Remark" style="margin-top: 16rpx;">
+                        <view class="info-col" v-if="selectedDept?.Remark" style="margin-top: 16rpx;">
                             <text class="info-label">{{ $t('department.remark') }}</text>
-                            <text class="info-value remark-text">{{ userDeptList[0].Remark }}</text>
+                            <text class="info-value remark-text">{{ selectedDept?.Remark }}</text>
                         </view>
-                        <view class="btn-container" style="margin-top: 32rpx; margin-bottom: 0;">
-                            <button class="btn-primary" @click="openDetail(userDeptList[0], true)">{{
+                        <view class="btn-container" v-if="isCreator(selectedDept)"
+                            style="margin-top: 32rpx; margin-bottom: 0;">
+                            <button class="btn-primary" @click="openDetail(selectedDept, true)">{{
                                 $t('department.edit') }}</button>
-                            <button v-if="isJoined(userDeptList[0].Id)" class="btn-danger"
-                                @click="handleQuit(userDeptList[0])">{{ $t('department.quit') }}</button>
                         </view>
                     </view>
 
@@ -205,21 +213,35 @@
             </view>
         </scroll-view>
 
-        <!-- Member Action Sheet -->
+        <!-- Action Sheet -->
         <view class="action-sheet-mask" v-if="showActionSheet" @click="showActionSheet = false">
             <view class="action-sheet" @click.stop>
                 <view class="action-header">
-                    <text class="action-title">{{ selectedMember?.UserTrueName || selectedMember?.UserName }}</text>
+                    <text class="action-title">{{ menuType === 'member' ? (selectedMember?.UserTrueName ||
+                        selectedMember?.UserName) : selectedDept?.Name }}</text>
                 </view>
                 <view class="action-list">
-                    <view class="action-item" v-if="currentUserLevel >= 40 && !isDutyUser(selectedMember)"
-                        @click="handleActionSelection('setDuty')">
-                        <text>设置责任人</text>
-                    </view>
-                    <view class="action-item" v-if="currentUserLevel >= 30"
-                        @click="handleActionSelection('setPosition')">
-                        <text>设置职别</text>
-                    </view>
+                    <!-- Member Actions -->
+                    <template v-if="menuType === 'member'">
+                        <view class="action-item" v-if="currentUserLevel >= 40 && !isDutyUser(selectedMember)"
+                            @click="handleActionSelection('setDuty')">
+                            <text>设置责任人</text>
+                        </view>
+                        <view class="action-item" v-if="currentUserLevel >= 30"
+                            @click="handleActionSelection('setPosition')">
+                            <text>设置职别</text>
+                        </view>
+                    </template>
+                    <!-- Department Actions -->
+                    <template v-else-if="menuType === 'dept'">
+                        <view class="action-item" @click="handleActionSelection('switch')">
+                            <text>切换到此部门</text>
+                        </view>
+                        <view class="action-item" style="color: #FF4D4F;" v-if="isJoined(selectedDept.Id)"
+                            @click="handleActionSelection('quit')">
+                            <text>{{ $t('department.quit') }}</text>
+                        </view>
+                    </template>
                 </view>
                 <view class="action-cancel" @click="showActionSheet = false">
                     <text>{{ $t('common.cancel') }}</text>
@@ -291,8 +313,10 @@ export default {
 
             // New Menu & Position Logic
             showActionSheet: false,
+            menuType: 'member', // 'member' or 'dept'
             showPositionModal: false,
             selectedMember: null,
+            selectedDeptId: null,
             selectedPositions: [],
             positionData: [
                 {
@@ -331,14 +355,23 @@ export default {
         }
     },
     computed: {
+        isSuperAdmin() {
+            const userInfo = storage.get('userInfo');
+            return userInfo?.roleName === '超级管理员';
+        },
         currentUserLevel() {
+            if (this.isSuperAdmin) return 999;
             const userOrgInfo = storage.get('userOrgInfo');
             return userOrgInfo?.User?.Level || 0;
         },
         sortedGroups() {
-            const visiblePositions = this.positionData.filter(p => p.level < this.currentUserLevel);
+            const visiblePositions = this.positionData.filter(p => p.level < this.currentUserLevel || this.isSuperAdmin);
             const groups = [...new Set(visiblePositions.map(p => p.group))];
             return groups.sort((a, b) => b - a);
+        },
+        selectedDept() {
+            if (!this.selectedDeptId) return null;
+            return this.orgDeptList.find(d => d.Id === this.selectedDeptId);
         },
         deptTitle() {
             return this.currentDept ? this.currentDept.Name : this.$t('department.title_info');
@@ -354,8 +387,8 @@ export default {
         },
         canSetDuty() {
             const userOrgInfo = storage.get('userOrgInfo');
-            if (!this.userDeptList.length || !userOrgInfo || !userOrgInfo.User) return false;
-            const dept = this.userDeptList[0];
+            if (!this.selectedDept || !userOrgInfo || !userOrgInfo.User) return false;
+            const dept = this.selectedDept;
             const userId = userOrgInfo.User.UserId;
 
             const hasDutyUser = dept.DutyUserId && dept.DutyUser;
@@ -450,7 +483,14 @@ export default {
             const p2 = this.fetchUserDepts();
             const p3 = this.refreshUserOrgInfo();
 
-            return Promise.all([p1, p2, p3]).finally(() => {
+            return Promise.all([p1, p2, p3]).then(() => {
+                // Default select own department - Removed as per request to hide info by default
+                /*
+                if (!this.selectedDeptId && this.userOrgInfo?.User?.DepartmentId) {
+                    this.selectedDeptId = this.userOrgInfo.User.DepartmentId;
+                }
+                */
+            }).finally(() => {
                 if (showLoading) t.isLoading = false;
             });
         },
@@ -469,9 +509,6 @@ export default {
             return request.get('api/ssbh/OrganizationDepartment/UserDepartment')
                 .then(res => {
                     this.userDeptList = res.rows || [];
-                    if (this.userDeptList.length > 0) {
-                        this.fetchDeptMembers();
-                    }
                 })
                 .catch(err => {
                     console.error("Failed to fetch user depts", err);
@@ -495,14 +532,13 @@ export default {
             request.post('api/ssbh/OrganizationUser/update', { "mainData": updateData, "detailData": null, "delKeys": null })
                 .then(res => {
                     uni.hideLoading();
-                    if (res.status) {
+                    if (res.status || res.success) {
                         uni.showToast({ title: this.$t('department.success_join'), icon: 'success' });
                         this.refreshUserOrgInfo().then(() => {
+                            this.selectedDeptId = dept.Id;
                             this.fetchAllData(false);
                         });
                     } else {
-                        // Fallback: maybe specific API isn't 'join'.
-                        // If 404, valid. For now, implement UI.
                         uni.showToast({ title: res.message || this.$t('department.fail_join'), icon: 'none' });
                     }
                 })
@@ -510,6 +546,19 @@ export default {
                     uni.hideLoading();
                     uni.showToast({ title: 'Error', icon: 'none' });
                 });
+        },
+        handleDeptSelect(dept) {
+            if (this.selectedDeptId === dept.Id) {
+                this.selectedDeptId = null;
+            } else {
+                this.selectedDeptId = dept.Id;
+                this.currentTab = 0; // Reset to info tab
+                this.deptMembers = []; // Clear members to force refresh 
+            }
+        },
+        isCreator(dept) {
+            if (!dept || !this.userOrgInfo?.User) return false;
+            return dept.CreatorId == this.userOrgInfo.User.UserId;
         },
 
         openDetail(dept, edit = false) {
@@ -636,8 +685,18 @@ export default {
             }
         },
         fetchDeptMembers() {
-            if (!this.userDeptList.length) return;
-            request.get('api/ssbh/OrganizationUser/DepartmentUser')
+            if (!this.selectedDeptId) return;
+            // Get members for the SELECTED department
+            const form = {
+                page: 1,
+                rows: 1000,
+                sort: 'CreationTime',
+                order: 'desc',
+                wheres: JSON.stringify([
+                    { name: 'DepartmentId', value: this.selectedDeptId }
+                ])
+            };
+            request.post('api/ssbh/OrganizationUser/GetPageData', form)
                 .then(res => {
                     this.deptMembers = res.rows || [];
                 })
@@ -646,8 +705,8 @@ export default {
                 });
         },
         isDutyUser(member) {
-            if (!this.userDeptList.length) return false;
-            return this.userDeptList[0].DutyUserId == member.UserId;
+            if (!this.selectedDept) return false;
+            return this.selectedDept.DutyUserId == member.UserId;
         },
         handleSetDuty(member) {
             const updatedName = member.UserTrueName || member.UserName;
@@ -678,11 +737,13 @@ export default {
 
             request.post('api/ssbh/OrganizationDepartment/update', { "mainData": updateData, "detailData": null, "delKeys": null })
                 .then(res => {
-                    if (res.status) {
+                    if (res.status || res.success) {
                         uni.showToast({ title: this.$t('department.success_set_duty'), icon: 'success' });
                         // Update local data
-                        this.userDeptList[0].DutyUserId = member.UserId;
-                        this.userDeptList[0].DutyUser = member.UserTrueName || member.UserName;
+                        if (this.selectedDept) {
+                            this.selectedDept.DutyUserId = member.UserId;
+                            this.selectedDept.DutyUser = member.UserTrueName || member.UserName;
+                        }
                     } else {
                         uni.showToast({ title: res.message || this.$t('department.fail_set_duty'), icon: 'none' });
                     }
@@ -696,6 +757,11 @@ export default {
         // Menu & Position Methods
         openMemberMenu(member) {
             this.selectedMember = member;
+            this.menuType = 'member';
+            this.showActionSheet = true;
+        },
+        openDeptMenu(dept) {
+            this.menuType = 'dept';
             this.showActionSheet = true;
         },
         handleActionSelection(action) {
@@ -706,10 +772,41 @@ export default {
                 // Initialize selection from member title if possible
                 this.selectedPositions = this.selectedMember.Title ? this.selectedMember.Title.split(',') : [];
                 this.showPositionModal = true;
+            } else if (action === 'switch') {
+                this.handleSwitchDept();
+            } else if (action === 'quit') {
+                this.handleQuit(this.selectedDept);
             }
         },
+        handleSwitchDept() {
+            if (!this.selectedDeptId) return;
+            uni.showLoading({ title: 'Switching...' });
+
+            // Call SetUserInfo just like organization switching
+            request.post('api/ssbh/OrganizationDepartment/SetUserInfo', {
+                mainData: {
+                    OrganizationId: this.selectedDept?.OrganizationId,
+                    DepartmentId: this.selectedDeptId
+                }
+            })
+                .then(res => {
+                    uni.hideLoading();
+                    if (res.status || res.success) {
+                        uni.showToast({ title: '切换成功', icon: 'success' });
+                        // Notify other pages
+                        uni.$emit('refreshUserOrgInfo');
+                        this.refreshUserOrgInfo();
+                    } else {
+                        uni.showToast({ title: res.message || '切换失败', icon: 'none' });
+                    }
+                })
+                .catch(err => {
+                    uni.hideLoading();
+                    uni.showToast({ title: 'Error', icon: 'none' });
+                });
+        },
         getPositionsByGroup(group) {
-            return this.positionData.filter(p => p.group === group && p.level < this.currentUserLevel);
+            return this.positionData.filter(p => p.group === group && (p.level < this.currentUserLevel || this.isSuperAdmin));
         },
         isPositionSelected(title) {
             return this.selectedPositions.includes(title);
@@ -1136,6 +1233,35 @@ export default {
     align-items: center;
     gap: 16rpx;
     box-sizing: border-box;
+    border: 2rpx solid transparent;
+    transition: all 0.3s ease;
+}
+
+.dept-grid-item.selected-item {
+    background: #EBF3FF;
+    border-color: $sull-color-primary;
+}
+
+.dept-grid-item.joined-item {
+    /* Optional: subtle hint for joined dept */
+}
+
+.value-with-action {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+}
+
+.joined-badge {
+    background: rgba(82, 196, 26, 0.1);
+    padding: 4rpx 12rpx;
+    border-radius: 8rpx;
+}
+
+.joined-text {
+    font-size: 20rpx;
+    color: #52C41A;
+    font-weight: bold;
 }
 
 .dept-info-center {

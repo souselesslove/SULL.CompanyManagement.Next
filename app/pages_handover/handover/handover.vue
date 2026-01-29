@@ -612,7 +612,7 @@ export default {
 						// Success - Navigate to Check Page
 						const newItem = JSON.parse(res.data).data;
 						uni.navigateTo({
-							url: '/pages/handover-check/handover-item-check?id=' + newItem.Id,
+							url: '/pages_handover/handover-check/handover-item-check?id=' + newItem.Id,
 							events: {
 								handoverFinished: (data) => {
 									this.handoverList.unshift(data);
@@ -653,14 +653,14 @@ export default {
 		},
 		confirmReceive(item) {
 			uni.navigateTo({
-				url: `/pages/handover-check/handover-item-check?id=${item.id}&todoListId=${this.relatedId}`
+				url: `/pages_handover/handover-check/handover-item-check?id=${item.id}&todoListId=${this.relatedId}`
 			});
 		},
 		toCheckPage(item) {
 			console.log(item);
 			// Navigate to Check Page with ID and Status
 			uni.navigateTo({
-				url: `/pages/handover-check/handover-item-check?id=${item.id}&status=${item.status}`,
+				url: `/pages_handover/handover-check/handover-item-check?id=${item.id}&status=${item.status}`,
 				events: {
 					handoverFinished: (data) => {
 						// Update local list if needed

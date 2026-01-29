@@ -21,7 +21,8 @@
         "syncing": "正在同步...",
         "sync_success": "同步成功",
         "sync_fail": "同步失败",
-        "deleting": "正在删除..."
+        "deleting": "正在删除...",
+        "loading": "加载中..."
     },
     "index": {
         "home": "抢救车管理系统",
@@ -216,8 +217,10 @@
         "title_info": "机构信息",
         "tab_info": "机构信息",
         "tab_members": "人员列表",
+        "tab_all_orgs": "所有机构",
         "name": "机构名称",
         "name_placeholder": "请输入机构名称",
+        "search_placeholder": "搜索机构名称",
         "level": "医院等级",
         "level_placeholder": "请选择医院的等级",
         "status": "状态",
@@ -243,7 +246,10 @@
         "quit_confirm": "确定要退出该机构吗？",
         "invite_qr_tip": "扫描二维码加入机构",
         "scan_to_join": "扫码快速加入机构",
-        "or_create": "或填表创建"
+        "or_create": "或填表创建",
+        "action_approve": "审批",
+        "action_delete": "删除",
+        "action_switch": "切换"
     },
     "department": {
         "title": "部门管理",

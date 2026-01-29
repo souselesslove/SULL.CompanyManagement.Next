@@ -497,7 +497,7 @@ export default {
                     return;
                 }
                 uni.navigateTo({
-                    url: `/pages/position-manage/position-add-car`
+                    url: `/pages_inventory/position-manage/position-add-car`
                 });
             }
         },

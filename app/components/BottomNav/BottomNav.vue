@@ -59,8 +59,8 @@ export default {
 
 			let url = '';
 			if (page === 'home') url = '/pages/index/index';
-			if (page === 'bigscreen') url = '/pages/bigscreen/rescue-car';
-			if (page === 'statistics') url = '/pages/statistics/statistics';
+			if (page === 'bigscreen') url = '/pages_rescue/bigscreen/rescue-car';
+			if (page === 'statistics') url = '/pages_user/statistics/statistics';
 			if (page === 'profile') url = '/pages/profile/profile';
 
 			if (url) {
@@ -80,7 +80,7 @@ export default {
 					}
 					if (codeValue) {
 						uni.navigateTo({
-							url: `/pages/item-manage/item-book?code=${encodeURIComponent(codeValue)}`
+							url: `/pages_inventory/item-manage/item-book?code=${encodeURIComponent(codeValue)}`
 						});
 						return;
 					}
@@ -90,7 +90,7 @@ export default {
 				if (scanData && scanData.indexOf('http') === 0) {
 					storage.set('TEMP_WEBVIEW_URL', scanData);
 					uni.navigateTo({
-						url: '/pages/webview/webview'
+						url: '/pages_user/webview/webview'
 					});
 					return;
 				}

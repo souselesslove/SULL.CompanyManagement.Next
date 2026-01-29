@@ -51,7 +51,7 @@
                             <view class="name-section">
                                 <text class="item-name">{{ item.Name }}</text>
                                 <text class="item-code text-gray" v-if="item.InterfaceCode">({{ item.InterfaceCode
-                                }})</text>
+                                    }})</text>
                             </view>
                             <view class="card-actions">
                                 <view class="status-tag" :class="getExpiryStatus(item).class"
@@ -129,14 +129,14 @@
                     <text class="action-icon">🔄</text>
                 </view>
             </view>
-            <view class="action-item" @click="goToPage('/pages/item-manage/item-import')"
+            <view class="action-item" @click="goToPage('/pages_inventory/item-manage/item-import')"
                 :style="{ animationDelay: '50ms' }">
                 <text class="action-text">{{ $t('itemManage.import') }}</text>
                 <view class="action-btn import-btn">
                     <text class="action-icon">📥</text>
                 </view>
             </view>
-            <view class="action-item" @click="goToPage('/pages/item-manage/item-add')"
+            <view class="action-item" @click="goToPage('/pages_inventory/item-manage/item-add')"
                 :style="{ animationDelay: '100ms' }">
                 <text class="action-text">{{ $t('itemManage.add') }}</text>
                 <view class="action-btn add-btn">
@@ -298,7 +298,7 @@ export default {
         },
         editItem(item) {
             uni.navigateTo({
-                url: `/pages/item-manage/item-add?item=${encodeURIComponent(JSON.stringify(item))}`
+                url: `/pages_inventory/item-manage/item-add?item=${encodeURIComponent(JSON.stringify(item))}`
             });
         },
         toggleMoreMenu(item) {
@@ -406,13 +406,13 @@ export default {
         goToBatchManage(item) {
             this.hideAllMenus();
             uni.navigateTo({
-                url: `/pages/item-manage/item-batch?itemId=${item.Id}&itemName=${encodeURIComponent(item.Name)}`
+                url: `/pages_inventory/item-manage/item-batch?itemId=${item.Id}&itemName=${encodeURIComponent(item.Name)}`
             });
         },
         goToUsageRecords(item) {
             this.hideAllMenus();
             uni.navigateTo({
-                url: `/pages/statistics/statistics?category=consumption&itemName=${encodeURIComponent(item.Name)}&itemId=${item.Id}`
+                url: `/pages_user/statistics/statistics?category=consumption&itemName=${encodeURIComponent(item.Name)}&itemId=${item.Id}`
             });
         },
         confirmDeleteItem(item) {

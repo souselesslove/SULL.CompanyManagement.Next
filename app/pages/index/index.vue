@@ -14,7 +14,7 @@
 						<image class="icon-img" src="/static/imgs/search.png" mode="aspectFit"></image>
 					</view>
 					<!-- Message Icon -->
-					<view class="icon-btn" @click="navTo('/pages/todo-list/todo-list')">
+					<view class="icon-btn" @click="navTo('/pages_user/todo-list/todo-list')">
 						<text class="icon">🔔</text>
 						<view class="badge" v-if="dashboardStats.TotalPending > 0">{{ dashboardStats.TotalPending > 99
 							? '99+' : dashboardStats.TotalPending }}</view>
@@ -561,12 +561,12 @@ export default {
 		},
 		navToTodoList() {
 			uni.navigateTo({
-				url: '/pages/todo-list/todo-list'
+				url: '/pages_user/todo-list/todo-list'
 			});
 		},
 		navToBigScreen() {
 			uni.reLaunch({
-				url: '/pages/bigscreen/rescue-car'
+				url: '/pages_rescue/bigscreen/rescue-car'
 			});
 		},
 		navTo(page) {
@@ -584,7 +584,7 @@ export default {
 					relatedName = car.DisplayName;
 				}
 				uni.navigateTo({
-					url: `/pages/handover/handover?relatedId=${relatedId}&relatedName=${relatedName}`
+					url: `/pages_handover/handover/handover?relatedId=${relatedId}&relatedName=${relatedName}`
 				});
 			} else if (action.labelKey === 'index.actions.sealing') {
 				let relatedId = '';
@@ -595,27 +595,27 @@ export default {
 					relatedName = car.DisplayName;
 				}
 				uni.navigateTo({
-					url: `/pages/sealing/sealing?relatedId=${relatedId}&relatedName=${relatedName}`
+					url: `/pages_inventory/sealing/sealing?relatedId=${relatedId}&relatedName=${relatedName}`
 				});
 			} else if (action.labelKey === 'index.actions.itemOutbound') {
 				uni.navigateTo({
-					url: '/pages/item-outbound/item-outbound'
+					url: '/pages_inventory/item-outbound/item-outbound'
 				});
 			} else if (action.labelKey === 'index.actions.stockIn') {
 				uni.navigateTo({
-					url: '/pages/item-inbound/item-inbound'
+					url: '/pages_inventory/item-inbound/item-inbound'
 				});
 			} else if (action.labelKey === 'index.actions.itemManage') {
 				uni.navigateTo({
-					url: '/pages/item-manage/item-manage'
+					url: '/pages_inventory/item-manage/item-manage'
 				});
 			} else if (action.labelKey === 'index.actions.virtualPos') {
 				uni.navigateTo({
-					url: '/pages/position-manage/position-manage'
+					url: '/pages_inventory/position-manage/position-manage'
 				});
 			} else if (action.labelKey === 'index.actions.schedule') {
 				uni.navigateTo({
-					url: '/pages/schedule/schedule'
+					url: '/pages_user/schedule/schedule'
 				});
 			} else if (action.labelKey === 'index.actions.records') {
 				let carId = '';
@@ -624,7 +624,7 @@ export default {
 					carId = car.Id;
 				}
 				uni.navigateTo({
-					url: `/pages/rescue/rescue-list?carId=${carId}`
+					url: `/pages_rescue/rescue/rescue-list?carId=${carId}`
 				});
 			} else {
 				uni.showToast({
@@ -744,7 +744,7 @@ export default {
 				return;
 			}
 			uni.navigateTo({
-				url: '/pages/position-manage/position-add-car'
+				url: '/pages_inventory/position-manage/position-add-car'
 			});
 		},
 		showFullDescription(alert) {
@@ -765,23 +765,23 @@ export default {
 					// Navigate to Rescue Car Big Screen (reLaunch as it is a main tab/screen)
 					// Passing params in url. Note: rescue-car need to handle onLoad options
 					uni.reLaunch({
-						url: `/pages/bigscreen/rescue-car?type=${category}&id=${relatedId}`
+						url: `/pages_rescue/bigscreen/rescue-car?type=${category}&id=${relatedId}`
 					});
 					break;
 				case 30: // Abnormal
 					// Using navigateTo to allow back navigation
 					uni.navigateTo({
-						url: `/pages/handover-check/handover-item-check?id=${relatedId}&todoListId=${item.Id}`
+						url: `/pages_handover/handover-check/handover-item-check?id=${relatedId}&todoListId=${item.Id}`
 					});
 					break;
 				case 40: // Notification
 					if (item.Kind === 1) {
 						uni.navigateTo({
-							url: `/pages/handover-check/handover-item-check?id=${relatedId}&todoListId=${item.Id}`
+							url: `/pages_handover/handover-check/handover-item-check?id=${relatedId}&todoListId=${item.Id}`
 						});
 					} else if (item.Kind === 2) {
 						uni.navigateTo({
-							url: `/pages/sealing/sealing?relatedId=${relatedId}&todoListId=${item.Id}&relatedName=${item.Title}`
+							url: `/pages_inventory/sealing/sealing?relatedId=${relatedId}&todoListId=${item.Id}&relatedName=${item.Title}`
 						});
 					}
 					break;
